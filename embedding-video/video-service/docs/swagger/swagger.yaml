@@ -1,0 +1,1477 @@
+basePath: /
+definitions:
+  dto.ChunkedUploadData:
+    properties:
+      chunk_size:
+        type: integer
+      completed:
+        type: boolean
+      file_name:
+        type: string
+      file_size:
+        type: integer
+      total_chunks:
+        type: integer
+      upload_id:
+        type: string
+      uploaded_chunks:
+        items:
+          type: integer
+        type: array
+    type: object
+  dto.ChunkedUploadResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.ChunkedUploadData'
+      success:
+        type: boolean
+    type: object
+  dto.DeleteVideoData:
+    properties:
+      deleted:
+        type: boolean
+      video_id:
+        type: integer
+    type: object
+  dto.DeleteVideoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.DeleteVideoData'
+      success:
+        type: boolean
+    type: object
+  dto.ErrorBody:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  dto.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/dto.ErrorBody'
+      success:
+        type: boolean
+    type: object
+  dto.InitiateChunkedUploadRequest:
+    properties:
+      chunk_size:
+        type: integer
+      content_type:
+        type: string
+      description:
+        type: string
+      file_name:
+        type: string
+      file_size:
+        type: integer
+      title:
+        type: string
+      total_chunks:
+        type: integer
+    type: object
+  dto.PlayVideoData:
+    properties:
+      play_url:
+        type: string
+      video:
+        $ref: '#/definitions/dto.VideoItem'
+    type: object
+  dto.PlayVideoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.PlayVideoData'
+      success:
+        type: boolean
+    type: object
+  dto.PublishVideoData:
+    properties:
+      is_published:
+        type: boolean
+      updated:
+        type: boolean
+      video_id:
+        type: integer
+    type: object
+  dto.PublishVideoRequest:
+    properties:
+      is_published:
+        type: boolean
+    type: object
+  dto.PublishVideoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.PublishVideoData'
+      success:
+        type: boolean
+    type: object
+  dto.QuestionDetailData:
+    properties:
+      question:
+        $ref: '#/definitions/dto.QuestionItem'
+    type: object
+  dto.QuestionDetailResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.QuestionDetailData'
+      success:
+        type: boolean
+    type: object
+  dto.QuestionItem:
+    properties:
+      analysis:
+        type: string
+      answer:
+        type: string
+      content:
+        type: string
+      create_time:
+        type: integer
+      id:
+        type: integer
+      knowledge:
+        type: string
+      source:
+        type: string
+      source_question_id:
+        type: string
+      status:
+        type: integer
+      subject:
+        type: string
+      type:
+        type: string
+      update_time:
+        type: integer
+    type: object
+  dto.QuestionListData:
+    properties:
+      list:
+        items:
+          $ref: '#/definitions/dto.QuestionItem'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  dto.QuestionListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.QuestionListData'
+      success:
+        type: boolean
+    type: object
+  dto.RandomVideoSegmentData:
+    properties:
+      cover_url:
+        type: string
+      end_time_sec:
+        type: integer
+      play_url:
+        type: string
+      start_time_sec:
+        type: integer
+      title:
+        type: string
+      video_id:
+        type: integer
+      video_segment_id:
+        type: integer
+    type: object
+  dto.RandomVideoSegmentResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RandomVideoSegmentData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendByQuestionRequest:
+    properties:
+      limit:
+        type: integer
+      question_id:
+        type: integer
+      question_text:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  dto.RecommendVideoData:
+    properties:
+      is_recommend:
+        type: boolean
+      updated:
+        type: boolean
+      video_id:
+        type: integer
+    type: object
+  dto.RecommendVideoRequest:
+    properties:
+      is_recommend:
+        type: boolean
+      recommend_level:
+        type: integer
+      recommend_score:
+        type: number
+      user_id:
+        type: integer
+    type: object
+  dto.RecommendVideoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendVideoData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationItem:
+    properties:
+      cover_url:
+        type: string
+      end_time_sec:
+        type: integer
+      is_watched:
+        type: boolean
+      play_url:
+        type: string
+      question_id:
+        type: integer
+      recommend_score:
+        type: number
+      start_time_sec:
+        type: integer
+      title:
+        type: string
+      video_id:
+        type: integer
+      video_segment_id:
+        type: integer
+      watch_duration:
+        type: integer
+    type: object
+  dto.RecommendationListData:
+    properties:
+      degraded:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/dto.RecommendationItem'
+        type: array
+      message:
+        type: string
+      total:
+        type: integer
+    type: object
+  dto.RecommendationListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationListData'
+      success:
+        type: boolean
+    type: object
+  dto.ReportWatchRequest:
+    properties:
+      is_watched:
+        type: boolean
+      question_id:
+        type: integer
+      user_id:
+        type: integer
+      video_segment_id:
+        type: integer
+      watch_duration:
+        type: integer
+    type: object
+  dto.SegmentReactionCountsData:
+    properties:
+      double_like_count:
+        type: integer
+      like_count:
+        type: integer
+      segment_id:
+        type: integer
+    type: object
+  dto.SegmentReactionCountsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.SegmentReactionCountsData'
+      success:
+        type: boolean
+    type: object
+  dto.SegmentReactionData:
+    properties:
+      active:
+        type: boolean
+      double_like_count:
+        type: integer
+      like_count:
+        type: integer
+      reaction_type:
+        type: string
+      segment_id:
+        type: integer
+      updated:
+        type: boolean
+      user_id:
+        type: integer
+    type: object
+  dto.SegmentReactionResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.SegmentReactionData'
+      success:
+        type: boolean
+    type: object
+  dto.SimilarVideosData:
+    properties:
+      total:
+        type: integer
+      videos:
+        items:
+          $ref: '#/definitions/dto.VideoItem'
+        type: array
+    type: object
+  dto.SimilarVideosResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.SimilarVideosData'
+      success:
+        type: boolean
+    type: object
+  dto.TranscodeStatusData:
+    properties:
+      hls_url:
+        type: string
+      status:
+        type: string
+      task_id:
+        type: string
+    type: object
+  dto.TranscodeStatusResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.TranscodeStatusData'
+      success:
+        type: boolean
+    type: object
+  dto.UpdateVideoData:
+    properties:
+      description:
+        type: string
+      title:
+        type: string
+      updated:
+        type: boolean
+      video_id:
+        type: integer
+    type: object
+  dto.UpdateVideoRequest:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      title:
+        maxLength: 200
+        type: string
+    required:
+    - title
+    type: object
+  dto.UpdateVideoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.UpdateVideoData'
+      success:
+        type: boolean
+    type: object
+  dto.UploadArchiveError:
+    properties:
+      error:
+        type: string
+      file_name:
+        type: string
+    type: object
+  dto.UploadCoverData:
+    properties:
+      cover_url:
+        type: string
+      video_id:
+        type: integer
+    type: object
+  dto.UploadCoverResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.UploadCoverData'
+      success:
+        type: boolean
+    type: object
+  dto.UploadVideoArchiveData:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/dto.UploadArchiveError'
+        type: array
+      failed:
+        type: integer
+      skipped:
+        type: integer
+      skipped_files:
+        items:
+          type: string
+        type: array
+      total:
+        type: integer
+      uploaded:
+        type: integer
+      videos:
+        items:
+          $ref: '#/definitions/dto.UploadVideoData'
+        type: array
+    type: object
+  dto.UploadVideoArchiveResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.UploadVideoArchiveData'
+      success:
+        type: boolean
+    type: object
+  dto.UploadVideoData:
+    properties:
+      file_name:
+        type: string
+      hls_url:
+        type: string
+      raw_url:
+        type: string
+      task_id:
+        type: string
+      video_id:
+        type: integer
+    type: object
+  dto.UploadVideoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.UploadVideoData'
+      success:
+        type: boolean
+    type: object
+  dto.VideoItem:
+    properties:
+      cover_url:
+        type: string
+      created_at_unix:
+        type: integer
+      description:
+        type: string
+      hls_url:
+        type: string
+      is_published:
+        type: boolean
+      is_recommend:
+        type: boolean
+      raw_url:
+        type: string
+      title:
+        type: string
+      updated_at_unix:
+        type: integer
+      video_id:
+        type: integer
+      view_count:
+        type: integer
+    type: object
+  dto.VideoListData:
+    properties:
+      total:
+        type: integer
+      type:
+        type: string
+      videos:
+        items:
+          $ref: '#/definitions/dto.VideoItem'
+        type: array
+    type: object
+  dto.VideoListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.VideoListData'
+      success:
+        type: boolean
+    type: object
+  dto.VideoReactionCountsData:
+    properties:
+      double_like_count:
+        type: integer
+      like_count:
+        type: integer
+      video_id:
+        type: integer
+    type: object
+  dto.VideoReactionCountsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.VideoReactionCountsData'
+      success:
+        type: boolean
+    type: object
+  dto.VideoReactionData:
+    properties:
+      active:
+        type: boolean
+      double_like_count:
+        type: integer
+      like_count:
+        type: integer
+      reaction_type:
+        type: string
+      updated:
+        type: boolean
+      user_id:
+        type: integer
+      video_id:
+        type: integer
+    type: object
+  dto.VideoReactionRequest:
+    properties:
+      reaction_type:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  dto.VideoReactionResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.VideoReactionData'
+      success:
+        type: boolean
+    type: object
+  dto.ViewCountData:
+    properties:
+      video_id:
+        type: integer
+      view_count:
+        type: integer
+    type: object
+  dto.ViewCountResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.ViewCountData'
+      success:
+        type: boolean
+    type: object
+  dto.WatchRecordData:
+    properties:
+      recorded:
+        type: boolean
+    type: object
+  dto.WatchRecordResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.WatchRecordData'
+      success:
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: Standalone REST API for video upload, playback, recommendation, and
+    question lookup.
+  title: Intelligent Teaching Video Analysis and Recommendation API
+  version: "1.0"
+paths:
+  /api/questions:
+    get:
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.QuestionListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List questions
+      tags:
+      - questions
+  /api/questions/{id}:
+    get:
+      parameters:
+      - description: Question ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.QuestionDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get question detail
+      tags:
+      - questions
+  /api/recommendations:
+    get:
+      parameters:
+      - description: Question ID
+        in: query
+        name: question_id
+        required: true
+        type: integer
+      - description: User ID
+        in: query
+        name: user_id
+        type: integer
+      - description: Result limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List recommendations
+      tags:
+      - recommendations
+  /api/recommendations/by-question:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Recommendation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RecommendByQuestionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Recommend videos by question
+      tags:
+      - recommendations
+  /api/transcode-tasks/{taskId}:
+    get:
+      parameters:
+      - description: Transcode task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.TranscodeStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get transcode task status
+      tags:
+      - videos
+  /api/video-segments/{id}/reaction-counts:
+    get:
+      parameters:
+      - description: Video segment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SegmentReactionCountsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get a video segment's like and double-like counts
+      tags:
+      - videos
+  /api/video-segments/{id}/reactions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Video segment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Reaction request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.VideoReactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SegmentReactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Submit or cancel a video segment reaction
+      tags:
+      - videos
+  /api/video-segments/random-play:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RandomVideoSegmentResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Random play video segment
+      tags:
+      - videos
+  /api/videos:
+    get:
+      parameters:
+      - default: ALL
+        description: Filter type
+        enum:
+        - ALL
+        - RAW
+        - HLS
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.VideoListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List videos
+      tags:
+      - videos
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Video file
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Video title
+        in: formData
+        name: title
+        type: string
+      - description: Video description
+        in: formData
+        name: description
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UploadVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Upload a video
+      tags:
+      - videos
+  /api/videos/{id}:
+    delete:
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DeleteVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete a video
+      tags:
+      - videos
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated metadata
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update video metadata
+      tags:
+      - videos
+  /api/videos/{id}/cover:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Cover file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UploadCoverResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Upload a video cover
+      tags:
+      - videos
+  /api/videos/{id}/play:
+    get:
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.PlayVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Resolve a video's playback URL
+      tags:
+      - videos
+  /api/videos/{id}/publish:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Publish request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.PublishVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.PublishVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Set video published status
+      tags:
+      - videos
+  /api/videos/{id}/reaction-counts:
+    get:
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.VideoReactionCountsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get a video's like and double-like counts
+      tags:
+      - videos
+  /api/videos/{id}/reactions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Reaction request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.VideoReactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.VideoReactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Submit or cancel a video reaction
+      tags:
+      - videos
+  /api/videos/{id}/recommend:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Recommendation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RecommendVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Set video recommendation status
+      tags:
+      - videos
+  /api/videos/{id}/similar:
+    get:
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 6
+        description: Result limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SimilarVideosResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List similar videos
+      tags:
+      - videos
+  /api/videos/{id}/view-count:
+    get:
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ViewCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get a video's view count
+      tags:
+      - videos
+  /api/videos/archive:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Zip archive
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Video description
+        in: formData
+        name: description
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UploadVideoArchiveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Upload a zip archive containing videos
+      tags:
+      - videos
+  /api/videos/archive/uploads:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Chunked archive upload metadata
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.InitiateChunkedUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ChunkedUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Initiate a chunked zip archive upload
+      tags:
+      - videos
+  /api/videos/archive/uploads/{uploadId}/complete:
+    post:
+      parameters:
+      - description: Upload ID
+        in: path
+        name: uploadId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UploadVideoArchiveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Complete a chunked zip archive upload
+      tags:
+      - videos
+  /api/videos/uploads:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Chunked upload metadata
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.InitiateChunkedUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ChunkedUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Initiate a chunked video upload
+      tags:
+      - videos
+  /api/videos/uploads/{uploadId}:
+    get:
+      parameters:
+      - description: Upload ID
+        in: path
+        name: uploadId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ChunkedUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get chunked upload status
+      tags:
+      - videos
+  /api/videos/uploads/{uploadId}/chunks/{chunkIndex}:
+    put:
+      consumes:
+      - application/octet-stream
+      parameters:
+      - description: Upload ID
+        in: path
+        name: uploadId
+        required: true
+        type: string
+      - description: Zero-based chunk index
+        in: path
+        name: chunkIndex
+        required: true
+        type: integer
+      - description: Raw chunk bytes
+        in: body
+        name: chunk
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ChunkedUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Upload one video chunk
+      tags:
+      - videos
+  /api/videos/uploads/{uploadId}/complete:
+    post:
+      parameters:
+      - description: Upload ID
+        in: path
+        name: uploadId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UploadVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Complete a chunked video upload
+      tags:
+      - videos
+  /api/watch-records:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Watch report request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReportWatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.WatchRecordResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Report watch progress
+      tags:
+      - recommendations
+swagger: "2.0"

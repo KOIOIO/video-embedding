@@ -1,0 +1,153 @@
+Name: video-rpc
+Host: localhost
+Port: 9090
+HTTP:
+  Addr: ":8081"
+  ShutdownTimeoutSec: 30
+  LogDir: "logs"
+  SlowRequestMs: 1000
+  CORS:
+    AllowOrigin: "*"
+    AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Requested-With"
+    ExposeHeaders: "Content-Length, Content-Type"
+    MaxAge: "86400"
+GRPC:
+  MaxMsgSize: 104857600
+  KeepaliveTime: 30
+  KeepaliveTimeout: 10
+  MaxConnectionAge: 3600
+  MaxConnectionAgeGrace: 60
+
+Video:
+  RawPath: "./storage/videos/raw"
+  HlsPath: "./storage/videos/hls"
+Storage:
+  RawObjectPrefix: "raw"
+  HLSObjectPrefix: "hls"
+  MediaRoutePrefix: "/videos"
+  RawURLPrefix: "/videos/raw"
+  HLSURLPrefix: "/videos/hls"
+  CoverURLPrefix: "/videos"
+  VectorTempPath: "./storage/tmp/video_vectorize"
+
+FFmpeg:
+  UseDocker: true
+  DockerImage: "jrottenberg/ffmpeg"
+  HLS:
+    Time: 6
+    ListSize: 0
+    MasterName: "master.m3u8"
+    SegmentPattern: "v0_%03d.ts"
+  Fast:
+    ScaleW: 1280
+    ScaleH: 720
+    Preset: "ultrafast"
+    Crf: 28
+    PixFmt: "yuv420p"
+    AudioBitrate: "96k"
+    AudioChannels: 2
+    PadToFit: true
+  Cover:
+    SeekSec: 2
+    FallbackSeekSec: 0
+    Quality: 2
+  Audio:
+    SampleRate: 16000
+    Channels: 1
+
+Redis:
+  Addr: "localhost:6379"
+  Password: ""
+  DB: 0
+RedisKeys:
+  TranscodeQueue: "video:transcode:queue"
+  VectorizeQueue: "video:vectorize:queue"
+  VectorPrepareQueue: "video:vector:prepare"
+  VectorCoarseQueue: "video:vector:coarse"
+  VectorRefineQueue: "video:vector:refine"
+  VectorFinalizeQueue: "video:vector:finalize"
+  VideoReactionQueue: "video:reaction:queue"
+  VideoReactionCounts: "video:reaction:counts:"
+  VideoReactionUser: "video:reaction:user:"
+  SegmentReactionQueue: "segment:reaction:queue"
+  SegmentReactionCounts: "segment:reaction:counts:"
+  SegmentReactionUser: "segment:reaction:user:"
+  TranscodeStatus: "video:transcode:status:"
+  RuntimeActiveCounter: "video:runtime:active:"
+
+Postgres:
+  DSN: "host=localhost user=postgres password=postgres dbname=hengshui-tablet port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+  MaxOpenConns: 20
+  MaxIdleConns: 10
+  ConnMaxLifetime: 300
+  ConnMaxIdleTime: 60
+
+RustFS:
+  Endpoint: "localhost:9000"
+  AccessKey: "minioadmin"
+  SecretKey: "minioadmin"
+  Bucket: "hengshui-tablet-cloud-drive"
+  UseSSL: false
+
+
+Transcode:
+  WorkerCount: 2
+  QueueSize: 50
+  Mode: "fast"
+  TaskTimeoutMinutes: 30
+  ShutdownTimeoutSec: 120
+
+VectorWorker:
+  Mode: "hierarchical"
+  CoarseSegmentSec: 40          # 拉大粗切基础分片，减少硬性切分点
+  RefineMinSegmentSec: 12
+  RefineMaxSegmentSec: 90       # 放宽上限，允许连贯内容更长
+  LLMModel: "qwen3.6-plus"
+  LLMTimeoutMinutes: 5
+  TailAlignmentConfigured: true
+  TailAlignmentEnabled: true
+  TailAlignmentMaxExtendSec: 6  # 结尾顺延6秒收全语句
+  TailAlignmentProbeStepSec: 0.5
+  TailAlignmentMaxOverlapSec: 8 # 适度重叠，承接上一片段末尾内容
+  SegmentWindowSec: 30
+  SegmentStepSec: 20            # 核心改点：窗口步长 < 窗口大小，产生重叠分析区
+  ASRWorkers: 30
+  CoarseWorkers: 60
+  EmbedBatch: 10
+  SampleCount: 6
+  SampleDurSec: 30
+  TaskTimeoutMinutes: 30
+  ShutdownTimeoutSec: 120
+
+VectorStageWorkers:
+  Prepare: 1
+  Coarse: 2
+  Refine: 2
+  Finalize: 1
+
+WorkerPools:
+  vector.coarse:
+    Size: 60
+  vector.sample_asr:
+    Size: 30
+  vector.refine_asr:
+    Size: 30
+
+asr:
+  options:
+    ws-model: fun-asr-realtime-2026-02-28
+    ws-model-fallbacks:
+      - fun-asr-realtime-2025-11-07
+      - fun-asr-realtime-2025-09-15
+  base-url: "https://dashscope.aliyuncs.com/compatible-mode"
+  ws-url: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
+  api-key: "sk-3eb4190dab584fed99bee42ca2e5f8b1"
+
+embedding:
+  options:
+    model: text-embedding-v4
+  base-url: "https://dashscope.aliyuncs.com/compatible-mode"
+  api-key: "sk-3eb4190dab584fed99bee42ca2e5f8b1"
+AI:
+  EmbeddingDim: 1536

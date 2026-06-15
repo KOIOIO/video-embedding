@@ -1,0 +1,109 @@
+
+Name: video-rpc
+Host: 10.200.10.12
+Port: 9090
+GRPC:
+  MaxMsgSize: 104857600
+  KeepaliveTime: 30
+  KeepaliveTimeout: 10
+  MaxConnectionAge: 3600
+  MaxConnectionAgeGrace: 60
+
+Video:
+  RawPath: "./storage/videos/raw"
+  HlsPath: "./storage/videos/hls"
+
+FFmpeg:
+  UseDocker: true
+  DockerImage: "jrottenberg/ffmpeg"
+  HLS:
+    Time: 6
+    ListSize: 0
+    MasterName: "master.m3u8"
+    SegmentPattern: "v0_%03d.ts"
+  Fast:
+    ScaleW: 1280
+    ScaleH: 720
+    Preset: "ultrafast"
+    Crf: 28
+    PixFmt: "yuv420p"
+    AudioBitrate: "96k"
+    AudioChannels: 2
+    PadToFit: true
+  Cover:
+    SeekSec: 2
+    FallbackSeekSec: 0
+    Quality: 2
+  Audio:
+    SampleRate: 16000
+    Channels: 1
+
+Redis:
+  Addr: "10.200.10.12:16379"
+  Password: ""
+  DB: 0
+
+Postgres:
+  DSN: "host=10.200.10.12 user=postgres password=postgres dbname=hengshui-tablet port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+  MaxOpenConns: 20
+  MaxIdleConns: 10
+  ConnMaxLifetime: 300
+  ConnMaxIdleTime: 60
+
+RustFS:
+  Endpoint: "10.200.10.12:9000"
+  AccessKey: "minioadmin"
+  SecretKey: "minioadmin"
+  Bucket: "hengshui-tablet-cloud-drive"
+  UseSSL: false
+
+
+Transcode:
+  WorkerCount: 2
+  QueueSize: 50
+  Mode: "fast"
+  TaskTimeoutMinutes: 30
+  ShutdownTimeoutSec: 120
+
+VectorWorker:
+  Mode: "hierarchical"
+  CoarseSegmentSec: 30
+  RefineMinSegmentSec: 10
+  RefineMaxSegmentSec: 60
+  LLMModel: "qwen-plus"
+  LLMTimeoutMinutes: 2
+  TailAlignmentConfigured: true
+  TailAlignmentEnabled: true
+  TailAlignmentMaxExtendSec: 3
+  TailAlignmentProbeStepSec: 1
+  TailAlignmentMaxOverlapSec: 6
+  SegmentWindowSec: 30
+  SegmentStepSec: 30
+  ASRWorkers: 30
+  CoarseWorkers: 60
+  EmbedBatch: 10
+  SampleCount: 6
+  SampleDurSec: 30
+  TaskTimeoutMinutes: 30
+  ShutdownTimeoutSec: 120
+
+WorkerPools:
+  vector.coarse:
+    Size: 60
+  vector.sample_asr:
+    Size: 30
+  vector.refine_asr:
+    Size: 30
+
+asr:
+  options:
+    model: paraformer-v2
+    ws-model: fun-asr-realtime
+  base-url: "https://dashscope.aliyuncs.com/compatible-mode"
+  api-key: "sk-3eb4190dab584fed99bee42ca2e5f8b1"
+
+embedding:
+  options:
+    model: text-embedding-v4
+  base-url: "https://dashscope.aliyuncs.com/compatible-mode"
+  api-key: "sk-85c3ccc7c63747c485f9699c90f1972f"

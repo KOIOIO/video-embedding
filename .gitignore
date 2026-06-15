@@ -1,0 +1,68 @@
+# macOS / editor metadata
+.DS_Store
+.idea/
+.vscode/
+
+# Local assistant / workspace metadata
+.agents/
+.claude/
+.codex/
+.docs/
+.opencode/
+.worktrees/
+AGENTS.md
+opencode.json
+opencode.md
+project-highlights-for-interview.md
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and runtime output
+*.log
+logs/
+**/logs/
+
+# Local storage / object-store data
+storage/
+**/storage/
+minio_data/
+**/minio_data/
+/tmp/
+
+# Go build/test artifacts
+*.test
+*.prof
+coverage.out
+coverage.html
+/embedding-video/video-service/httpapi
+/embedding-video/video-service/worker
+/embedding-video/video-service/http-worker
+/embedding-video/video-service/transcodeworker
+
+# Node / frontend artifacts
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+**/coverage/
+.vite/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Generated archives and media scratch files
+*.tmp
+*.temp
+*.part
+*.pid
+*.zip
+*.tar
+*.tar.gz
+*.tgz
