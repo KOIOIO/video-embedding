@@ -1,0 +1,255 @@
+syntax = "proto3";
+
+package video;
+
+option go_package = "./video;video";
+
+// 视频服务
+service VideoService {
+  rpc UploadVideo(stream UploadVideoRequest) returns (UploadVideoResponse);
+  rpc ListVideos(ListVideosRequest) returns (ListVideosResponse);
+  rpc UpdateVideoMetadata(UpdateVideoMetadataRequest) returns (UpdateVideoMetadataResponse);
+  rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
+  rpc PlayVideo(PlayVideoRequest) returns (PlayVideoResponse);
+  rpc GetSimilarVideos(GetSimilarVideosRequest) returns (GetSimilarVideosResponse);
+  rpc GetViewCount(GetViewCountRequest) returns (GetViewCountResponse);
+  rpc ListRecommendPoolVideos(ListRecommendPoolVideosRequest) returns (ListVideosResponse);
+  rpc SetVideoPublished(SetVideoPublishedRequest) returns (SetVideoPublishedResponse);
+  rpc SetVideoRecommend(SetVideoRecommendRequest) returns (SetVideoRecommendResponse);
+  rpc SetVideoCover(SetVideoCoverRequest) returns (SetVideoCoverResponse);
+  rpc GetTranscodeStatus(GetTranscodeStatusRequest) returns (GetTranscodeStatusResponse);
+
+  rpc RecommendByQuestion(RecommendByQuestionRequest) returns (RecommendByQuestionResponse);
+  rpc ListRecommendations(ListRecommendationsRequest) returns (ListRecommendationsResponse);
+  rpc ReportWatch(ReportWatchRequest) returns (ReportWatchResponse);
+}
+
+// 上传视频请求（流式）
+message UploadVideoRequest {
+  oneof data {
+    VideoMeta meta = 1;
+    bytes chunk_data = 2;
+  }
+}
+
+message VideoMeta {
+  string file_name = 1;
+  string content_type = 2;
+  string title = 5;
+  string description = 6;
+}
+
+message UploadVideoResponse {
+  bool success = 1;
+  string message = 2;
+  string file_name = 3;
+  string raw_url = 4;
+  string hls_url = 5;
+  string task_id = 6;
+  uint64 video_id = 7;
+}
+
+// 视频列表
+message ListVideosRequest {
+  VideoType filter_type = 1;
+}
+
+enum VideoType {
+  ALL = 0;
+  RAW = 1;
+  HLS = 2;
+}
+
+message VideoInfo {
+  string name = 1;
+  string raw_url = 2;
+  string hls_url = 3;
+  bool is_hls = 4;
+  string download_url = 5;
+  string task_id = 6;
+  uint64 id = 7;
+  int64 view_count = 8;
+  bool is_published = 9;
+  bool is_recommend = 10;
+  int64 created_at_unix = 11;
+  int64 updated_at_unix = 12;
+  string cover_url = 13;
+  string title = 14;
+  string description = 15;
+}
+
+message ListVideosResponse {
+  repeated VideoInfo videos = 1;
+  int32 total = 2;
+}
+
+message UpdateVideoMetadataRequest {
+  uint64 video_id = 1;
+  string title = 2;
+  string description = 3;
+}
+
+message UpdateVideoMetadataResponse {
+  bool success = 1;
+  string message = 2;
+  uint64 video_id = 3;
+  string title = 4;
+  string description = 5;
+}
+
+// 删除视频
+message DeleteVideoRequest {
+  uint64 video_id = 1;
+  string task_id = 2;
+}
+
+message DeleteVideoResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 播放视频（服务端可用于 view_count + 1）
+message PlayVideoRequest {
+  uint64 video_id = 1;
+  string student_id = 2;
+}
+
+message PlayVideoResponse {
+  string play_url = 1;
+  VideoInfo video = 2;
+}
+
+// 相近视频
+message GetSimilarVideosRequest {
+  uint64 video_id = 1;
+  int32 limit = 2;
+}
+
+message GetSimilarVideosResponse {
+  repeated VideoInfo videos = 1;
+  int32 total = 2;
+}
+
+// 查看观看次数
+message GetViewCountRequest {
+  uint64 video_id = 1;
+}
+
+message GetViewCountResponse {
+  uint64 video_id = 1;
+  int64 view_count = 2;
+}
+
+// 推荐池列表
+message ListRecommendPoolVideosRequest {
+}
+
+// 发布视频
+message SetVideoPublishedRequest {
+  uint64 video_id = 1;
+  bool is_published = 2;
+}
+
+message SetVideoPublishedResponse {
+  bool success = 1;
+  string message = 2;
+  uint64 video_id = 3;
+  bool is_published = 4;
+}
+
+// 加入/移出推荐池
+message SetVideoRecommendRequest {
+  uint64 video_id = 1;
+  bool is_recommend = 2;
+  uint64 user_id = 3;
+  int32 recommend_level = 4;
+  double recommend_score = 5;
+}
+
+message SetVideoRecommendResponse {
+  bool success = 1;
+  string message = 2;
+  uint64 video_id = 3;
+  bool is_recommend = 4;
+}
+
+// 设置视频封面（由 API 上传到对象存储后，调用此接口写入 cover_url）
+message SetVideoCoverRequest {
+  uint64 video_id = 1;
+  string cover_url = 2;
+}
+
+message SetVideoCoverResponse {
+  bool success = 1;
+  string message = 2;
+  uint64 video_id = 3;
+  string cover_url = 4;
+}
+
+// 转码状态
+message GetTranscodeStatusRequest {
+  string task_id = 1;
+}
+
+enum TranscodeStatus {
+  PENDING = 0;
+  PROCESSING = 1;
+  SUCCESS = 2;
+  FAILED = 3;
+}
+
+message GetTranscodeStatusResponse {
+  string task_id = 1;
+  TranscodeStatus status = 2;
+  string message = 3;
+  string hls_url = 4;
+}
+
+message RecommendByQuestionRequest {
+  uint64 question_id = 1;
+  string question_text = 2;
+  uint64 user_id = 3;
+  int32 limit = 4;
+}
+
+message RecommendItem {
+  uint64 question_id = 1;
+  uint64 video_id = 2;
+  uint64 video_segment_id = 3;
+  double recommend_score = 4;
+  bool is_watched = 5;
+  int32 watch_duration = 6;
+  VideoInfo video = 7;
+
+  int32 start_time_sec = 8;
+  int32 end_time_sec = 9;
+}
+
+message RecommendByQuestionResponse {
+  repeated RecommendItem items = 1;
+  int32 total = 2;
+}
+
+message ListRecommendationsRequest {
+  uint64 question_id = 1;
+  uint64 user_id = 2;
+  int32 limit = 3;
+}
+
+message ListRecommendationsResponse {
+  repeated RecommendItem items = 1;
+  int32 total = 2;
+}
+
+message ReportWatchRequest {
+  uint64 question_id = 1;
+  uint64 user_id = 2;
+  uint64 video_segment_id = 3;
+  bool is_watched = 4;
+  int32 watch_duration = 5;
+}
+
+message ReportWatchResponse {
+  bool success = 1;
+  string message = 2;
+}

@@ -1,0 +1,81 @@
+services:
+  backend_http:
+    image: golang:1.26.1-bookworm
+    container_name: nlp-video-project
+    working_dir: ${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}/video-service
+    volumes:
+      # Keep the project path identical inside the service container and on the host.
+      # The Go process calls the host Docker daemon for ffmpeg/ffprobe, and docker
+      # bind mounts are resolved on the host side.
+      - ${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}:${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}
+      - /tmp/nlp-video-project:/tmp/nlp-video-project
+      - hstv_gomodcache:/go/pkg/mod
+      - hstv_gobuildcache:/root/.cache/go-build
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 👇 核心：直接挂载宿主机docker命令，零安装、零报错
+      - /usr/bin/docker:/usr/bin/docker
+      - /usr/bin/containerd:/usr/bin/containerd
+    environment:
+      TZ: Asia/Shanghai
+      GOPROXY: https://goproxy.cn,direct
+      CONFIG_FILE: ${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}/video-service/configs/video_prod.yml
+      HTTP_ADDR: "0.0.0.0:8083"
+    command:
+      - "bash"
+      - "-c"
+      - |
+        set -eux
+
+        # 只修复权限，不安装任何东西！超快、不报错
+        chmod 666 /var/run/docker.sock
+
+        # 编译Go代码（路径完全正确）
+        go build -o /tmp/httpapi ./cmd/httpapi
+        go build -o /tmp/http-worker ./cmd/worker
+
+        # 同容器启动 HTTP 和 worker；任一进程退出都让容器退出，避免 worker 崩溃被 HTTP 掩盖
+        /tmp/http-worker &
+        worker_pid=$$!
+        /tmp/httpapi &
+        http_pid=$$!
+
+        trap 'kill -TERM "$$worker_pid" "$$http_pid" 2>/dev/null || true' INT TERM
+        wait -n "$$worker_pid" "$$http_pid"
+        status=$$?
+        kill -TERM "$$worker_pid" "$$http_pid" 2>/dev/null || true
+        wait "$$worker_pid" "$$http_pid" 2>/dev/null || true
+        exit "$$status"
+    ports:
+      - "8083:8083"
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+
+  frontend_web:
+    image: node:22
+    container_name: nlp-video-project-web
+    working_dir: ${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}/hls-web
+    volumes:
+      - ${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}:${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}
+      - hstv_hlsweb_node_modules:${NLP_PROJECT_ROOT:-/home/debian/dev-ops/nlp-video-project}/hls-web/node_modules
+    environment:
+      TZ: Asia/Shanghai
+      VITE_PROXY_TARGET: http://backend_http:8083
+    command:
+      - "bash"
+      - "-c"
+      - |
+        set -eux
+
+        npm install
+        exec node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port 1325
+    ports:
+      - "1325:1325"
+    depends_on:
+      - backend_http
+    restart: unless-stopped
+
+volumes:
+  hstv_gomodcache:
+  hstv_gobuildcache:
+  hstv_hlsweb_node_modules:
