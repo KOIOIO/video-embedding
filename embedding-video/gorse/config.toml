@@ -1,6 +1,6 @@
 [database]
-cache_store = "postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
-data_store = "postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
+cache_store = "postgres://postgres:postgres@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
+data_store = "postgres://postgres:postgres@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
 vector_store = "sqlite:///var/lib/gorse/blob/vector.db"
 table_prefix = "video_gorse_"
 cache_table_prefix = "video_gorse_cache_"

@@ -59,8 +59,20 @@ services:
   # Gorse Recommendation Engine
   # =========================================================================
   gorse_master:
-    image: zhenghaoz/gorse-master:v0.5.10
+    image: hstv/gorse-local:${GORSE_VERSION:-v0.5.10}
+    build:
+      context: ./gorse
+      dockerfile: Dockerfile.local
+    platform: linux/arm64
     container_name: video-gorse-master
+    entrypoint: ["/usr/local/bin/gorse-master"]
+    command:
+      - "-c"
+      - "/etc/gorse/config.toml"
+      - "--log-path"
+      - "/var/log/gorse/master.log"
+      - "--cache-path"
+      - "/var/lib/gorse/master"
     environment:
       TZ: Asia/Shanghai
     volumes:
@@ -68,6 +80,8 @@ services:
       - video_gorse_master_data:/var/lib/gorse/master
       - video_gorse_blob_data:/var/lib/gorse/blob
       - video_gorse_log:/var/log/gorse
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${GORSE_MASTER_GRPC_PORT:-8086}:8086"
       - "${GORSE_DASHBOARD_PORT:-8088}:8088"
@@ -82,8 +96,13 @@ services:
       retries: 3
 
   gorse_server:
-    image: zhenghaoz/gorse-server:v0.5.10
+    image: hstv/gorse-local:${GORSE_VERSION:-v0.5.10}
+    build:
+      context: ./gorse
+      dockerfile: Dockerfile.local
+    platform: linux/arm64
     container_name: video-gorse-server
+    entrypoint: ["/usr/local/bin/gorse-server"]
     command:
       - "--master-host"
       - "gorse_master"
@@ -109,8 +128,13 @@ services:
       - gorse_master
 
   gorse_worker:
-    image: zhenghaoz/gorse-worker:v0.5.10
+    image: hstv/gorse-local:${GORSE_VERSION:-v0.5.10}
+    build:
+      context: ./gorse
+      dockerfile: Dockerfile.local
+    platform: linux/arm64
     container_name: video-gorse-worker
+    entrypoint: ["/usr/local/bin/gorse-worker"]
     command:
       - "--master-host"
       - "gorse_master"
