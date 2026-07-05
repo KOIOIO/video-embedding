@@ -1,10 +1,10 @@
 [database]
-cache_store = "postgres://postgres:postgres@host.docker.internal:5432/video-embedding?sslmode=disable&search_path=gorse,public"
-data_store = "postgres://postgres:postgres@host.docker.internal:5432/video-embedding?sslmode=disable&search_path=gorse,public"
+cache_store = "postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
+data_store = "postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
 vector_store = "sqlite:///var/lib/gorse/blob/vector.db"
-table_prefix = "hstv_gorse_"
-cache_table_prefix = "hstv_gorse_cache_"
-data_table_prefix = "hstv_gorse_data_"
+table_prefix = "video_gorse_"
+cache_table_prefix = "video_gorse_cache_"
+data_table_prefix = "video_gorse_data_"
 
 [database.postgres]
 max_open_conns = 16
@@ -67,9 +67,7 @@ function pull(url) {
 }
 
 var path = "/api/internal/recommendations/external/two-tower?user_id=" + user_id + "&n=100";
-pull("http://backend_http:8083" + path) ||
-  pull("http://host.docker.internal:8083" + path) ||
-  pull("http://host.docker.internal:8081" + path) ||
+pull("http://backend:8083" + path) ||
   "[]";
 """
 

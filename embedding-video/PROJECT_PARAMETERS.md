@@ -249,7 +249,7 @@
 | `Endpoint` | `string` | `localhost:9000` | 对象存储地址 |
 | `AccessKey` | `string` | `minioadmin` | AccessKey |
 | `SecretKey` | `string` | `minioadmin` | SecretKey |
-| `Bucket` | `string` | `hengshui-tablet-cloud-drive` | 存储桶名称 |
+| `Bucket` | `string` | `video-embedding-storage` | 存储桶名称 |
 | `UseSSL` | `bool` | `false` | 是否走 HTTPS |
 
 ### 3.12 TransConfig

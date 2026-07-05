@@ -1,25 +1,25 @@
 services:
   backend_http:
     env_file:
-      - ${HSTV_ENV_FILE:-.env.deploy}
+      - ${VIDEO_ENV_FILE:-.env.deploy}
     image: golang:1.26.1-bookworm
     container_name: embedding-video
-    working_dir: ${HSTV_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/video-service
+    working_dir: ${VIDEO_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/video-service
     volumes:
       # Keep the project path identical inside the service container and on the host.
       # FFmpeg.UseDocker runs ffmpeg/ffprobe through the host Docker daemon, so
       # docker bind mounts must resolve to the same absolute path on the host.
-      - ${HSTV_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}:${HSTV_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}
+      - ${VIDEO_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}:${VIDEO_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}
       - /tmp/embedding-video:/tmp/embedding-video
-      - hstv_cloud_gomodcache:/go/pkg/mod
-      - hstv_cloud_gobuildcache:/root/.cache/go-build
+      - video_cloud_gomodcache:/go/pkg/mod
+      - video_cloud_gobuildcache:/root/.cache/go-build
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker:ro
     environment:
       TZ: Asia/Shanghai
       GOPROXY: https://goproxy.cn,direct
-      CONFIG_FILE: ${HSTV_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/video-service/configs/video_prod.yml
-      VIDEO_CONFIG_FILE: ${HSTV_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/video-service/configs/video_prod.yml
+      CONFIG_FILE: ${VIDEO_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/video-service/configs/video_prod.yml
+      VIDEO_CONFIG_FILE: ${VIDEO_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/video-service/configs/video_prod.yml
       HTTP_ADDR: ${HTTP_ADDR:-0.0.0.0:8083}
       TWO_TOWER_TRAINER_ENABLED: "false"
     command:
@@ -47,20 +47,20 @@ services:
         wait "$$worker_pid" "$$http_pid" 2>/dev/null || true
         exit "$$status"
     ports:
-      - "${HSTV_HTTP_PORT:-8083}:8083"
+      - "${VIDEO_HTTP_PORT:-8083}:8083"
     restart: unless-stopped
     healthcheck:
       disable: true
 
   frontend_web:
     env_file:
-      - ${HSTV_ENV_FILE:-.env.deploy}
+      - ${VIDEO_ENV_FILE:-.env.deploy}
     image: node:22
     container_name: embedding-video-web
     working_dir: /app
     volumes:
-      - ${HSTV_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/hls-web:/app
-      - hstv_cloud_hlsweb_node_modules:/app/node_modules
+      - ${VIDEO_PROJECT_ROOT:-/home/debian/dev-ops/embedding-video}/hls-web:/app
+      - video_cloud_hlsweb_node_modules:/app/node_modules
     environment:
       TZ: Asia/Shanghai
       VITE_PROXY_TARGET: http://backend_http:8083
@@ -78,12 +78,12 @@ services:
         fi
         exec node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port 1325
     ports:
-      - "${HSTV_WEB_PORT:-1325}:1325"
+      - "${VIDEO_WEB_PORT:-1325}:1325"
     depends_on:
       - backend_http
     restart: unless-stopped
 
 volumes:
-  hstv_cloud_gomodcache:
-  hstv_cloud_gobuildcache:
-  hstv_cloud_hlsweb_node_modules:
+  video_cloud_gomodcache:
+  video_cloud_gobuildcache:
+  video_cloud_hlsweb_node_modules:

@@ -1,6 +1,6 @@
 # hls-web - 视频服务调试前端
 
-基于 Vue 3 + Vite 构建的视频服务前端调试/测试工程，用于联调和验证 `hengshui-tablet-video-http/` 后端服务。
+基于 Vue 3 + Vite 构建的视频服务前端调试/测试工程，用于联调和验证 `video-service/` 后端服务。
 
 ## 技术栈
 

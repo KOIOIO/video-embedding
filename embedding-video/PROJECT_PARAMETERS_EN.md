@@ -249,7 +249,7 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 | `Endpoint` | `string` | `localhost:9000` | Object storage endpoint |
 | `AccessKey` | `string` | `minioadmin` | Access key |
 | `SecretKey` | `string` | `minioadmin` | Secret key |
-| `Bucket` | `string` | `hengshui-tablet-cloud-drive` | Bucket name |
+| `Bucket` | `string` | `video-embedding-storage` | Bucket name |
 | `UseSSL` | `bool` | `false` | Whether HTTPS is used |
 
 ### 3.12 TransConfig

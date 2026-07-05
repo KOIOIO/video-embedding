@@ -57,7 +57,7 @@ FFmpeg:
     Channels: 1
 
 Redis:
-  Addr: "127.0.0.1:16379"
+  Addr: "redis:6379"
   Password: ""
   DB: 0
 RedisKeys:
@@ -78,20 +78,20 @@ RedisKeys:
   RandomPlayRecent: "video:random_play:recent:"
 
 Postgres:
-  DSN: ""
+  DSN: "host=postgres user=postgres password=postgres dbname=video_embedding port=5432 sslmode=disable TimeZone=Asia/Shanghai"
   MaxOpenConns: 20
   MaxIdleConns: 10
   ConnMaxLifetime: 300
   ConnMaxIdleTime: 60
 
 RustFS:
-  Endpoint: "https://video-embedding-storage.cos.ap-beijing.myqcloud.com"
+  Endpoint: "minio:9000"
   AccessKey: ""
   SecretKey: ""
   Bucket: "video-embedding-storage"
-  UseSSL: true
-  Region: "ap-beijing"
-  BucketLookup: "dns"
+  UseSSL: false
+  Region: "us-east-1"
+  BucketLookup: "path"
 
 
 Transcode:
@@ -142,7 +142,7 @@ Recommendation:
   RandomPlayDedupeWindowSec: 1800
 
 Gorse:
-  Endpoint: "http://gorse:8087"
+  Endpoint: "http://gorse_server:8087"
   APIKey: ""
   TimeoutSeconds: 2
   ShadowMode: false
