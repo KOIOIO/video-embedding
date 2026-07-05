@@ -1,178 +1,115 @@
-# 基于大语言模型与向量检索的智能教学视频分析与推荐系统
+# 视频向量化视频服务仓库
 
-## 项目简介
+## 项目总览
 
-本项目是《自然语言处理》课程大作业，实现了一个基于大语言模型（LLM）、自动语音识别（ASR）与向量检索技术的智能教学视频内容分析与推荐系统。系统能够对教学视频进行自动语音转写、智能内容分段、语义向量化存储，并基于题目内容实现视频片段的精准推荐。
+这个仓库是一个多项目容器，不是单一可运行应用。后续部署和 Java 系统对接时，推荐使用 `video-service/` 作为对外提供能力的后端服务。
 
-核心技术栈包括：Go 语言 HTTP 后端服务、PostgreSQL + pgvector 向量数据库、Redis Streams 消息队列、FFmpeg 视频处理、大语言模型与 Embedding 服务。
+当前主要项目：
 
-## 系统架构
+- `video-service/`：推荐部署的 Go HTTP 视频服务，提供上传、转码、播放、推荐、观看记录、题库查询和异步 worker。
+- `two-tower-training/`：双塔推荐离线训练代码、样本导出流水线和模型产物目录。
+- `hls-web/`：Vue 3 + Vite 视频服务调试前端，用于本地联调上传、播放、反馈和推荐接口。
+- `embedding-video/`：历史 Go 后端工程，当前不作为后续 Java 对接入口。
+- `docs/`：仓库级设计文档、演示文稿等材料。
 
-```
-┌─────────────┐     ┌──────────────────────────────────────┐
-│  前端/Vue3  │────▶│  HTTP API 服务 (Gin Router)          │
-│  用户界面   │     │  /api/videos  /api/questions         │
-└─────────────┘     │  /api/recommendations  /api/watch     │
-                    └──────────┬───────────────────────────┘
-                               │
-            ┌──────────────────┼──────────────────┐
-            ▼                  ▼                  ▼
-    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-    │ PostgreSQL   │  │   Redis      │  │ 对象存储(S3) │
-    │ + pgvector   │  │   Streams    │  │ 视频/HLS文件 │
-    └──────────────┘  └──────────────┘  └──────────────┘
-            │                  │                  │
-            └──────────────────┼──────────────────┘
-                               │
-                    ┌──────────▼───────────┐
-                    │     Worker 服务      │
-                    │  ┌────────────────┐  │
-                    │  │ 转码 Worker    │  │
-                    │  │ (FFmpeg HLS)   │  │
-                    │  └────────────────┘  │
-                    │  ┌────────────────┐  │
-                    │  │ 向量化 Worker  │  │
-                    │  │ (ASR/LLM/Emb)  │  │
-                    │  └────────────────┘  │
-                    └──────────┬───────────┘
-                               │
-                    ┌──────────▼───────────┐
-                    │    外部 AI 服务      │
-                    │  ASR | Embedding     │
-                    │  LLM (Qwen)          │
-                    └──────────────────────┘
-```
+> Go 命令需要在 `video-service/` 目录下执行；仓库根目录没有 `go.mod`。
 
-## 核心功能模块
+## 推荐部署目标
 
-### 1. 视频管理与处理
-- **视频上传**：支持普通上传与分片断点续传
-- **HLS 转码**：自动将上传视频转为 HLS 流媒体格式
-- **封面生成**：基于 FFmpeg 自动提取视频封面
+- 对外服务工程：`video-service/`
+- Java 对接方式：HTTP REST API
+- 标准对接入口：`video-service/cmd/httpapi`
+- 异步处理入口：`video-service/cmd/worker`
+- 双塔训练入口：`video-service/cmd/twotowertrainer`
+- 本地默认监听地址：`:8081`
+- 当前 `docker-compose.yml` 服务器部署端口：`8083`
+- 健康检查接口：`GET /healthz`
+- Swagger 文档入口：`GET /swagger/index.html`
 
-### 2. 视频内容智能分析（NLP 核心）
-- **语音转写 (ASR)**：自动将视频音频转为文本
-- **智能分段**：基于 LLM 对转写文本进行语义分段，划分知识点片段
-- **向量化存储**：使用 Embedding 模型将文本片段转为向量，存入 pgvector
-- **分层级处理链路**：Prepare → Coarse → Refine → Finalize 四阶段向量化
-
-### 3. 智能推荐与检索
-- **题目关联推荐**：根据题目内容检索相关视频片段
-- **语义相似检索**：基于向量相似度匹配最相关教学片段
-- **降级保障**：AI 服务不可用时自动降级，返回本地 embedding 结果
-
-### 4. 学习行为追踪
-- **观看记录上报**：记录用户观看行为
-- **视频反馈**：支持点赞/踩等交互反馈
-- **题库管理**：题目 CRUD 与分页查询
-
-## REST API 接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/healthz` | 健康检查 |
-| `POST` | `/api/videos` | 上传视频 |
-| `GET` | `/api/videos` | 获取视频列表 |
-| `DELETE` | `/api/videos/:id` | 删除视频 |
-| `GET` | `/api/videos/:id/play` | 获取播放地址 |
-| `GET` | `/api/videos/:id/similar` | 获取相似视频 |
-| `POST` | `/api/recommendations/by-question` | 根据题目推荐视频片段 |
-| `POST` | `/api/watch-records` | 上报观看记录 |
-| `GET` | `/api/questions` | 查询题库 |
-
-## 快速开始
-
-### 环境要求
-- Go 1.21+
-- PostgreSQL 13+（需启用 pgvector 扩展）
-- Redis 6+
-- FFmpeg
-- S3 兼容对象存储（MinIO 等）
-
-### 启动 HTTP 服务
-
-```bash
-cd video-service
-go run ./cmd/httpapi
-```
-
-服务默认监听 `:8081`，可通过环境变量 `HTTP_ADDR` 覆盖：
-```bash
-HTTP_ADDR=:8081 go run ./cmd/httpapi
-```
-
-### 启动 Worker 服务
-
-```bash
-cd video-service
-go run ./cmd/worker
-```
-
-Worker 统一启动转码和向量化两条异步处理链路。
-
-### 环境变量配置
-
-| 环境变量 | 作用 |
-|------|------|
-| `HTTP_ADDR` | HTTP 监听地址 |
-| `CONFIG_FILE` | 配置文件路径 |
-| `DASHSCOPE_API_KEY` | LLM/Embedding API Key |
-| `ASR_API_KEY` | ASR 服务 API Key |
-| `EMBEDDING_API_KEY` | Embedding 服务 API Key |
-
-## 项目结构
+## 仓库结构
 
 ```text
 .
 ├── README.md
-├── video-service/      # HTTP 后端服务
-│   ├── cmd/
-│   │   ├── httpapi/                 # HTTP API 入口
-│   │   └── worker/                  # Worker 入口
-│   ├── configs/                     # 配置文件
-│   ├── internal/
-│   │   ├── http/handler/            # HTTP 请求处理
-│   │   ├── http/router/             # 路由配置
-│   │   ├── application/videoapp/    # 业务逻辑
-│   │   ├── infrastructure/          # 基础设施层
-│   │   └── worker/                  # Worker 实现
-│   └── docs/swagger/                # API 文档
-├── legacy-video/           # 历史遗留工程
-└── hls-web/                         # Vue 3 + Vite 前端调试界面
+├── PROJECT_PARAMETERS.md            # 中文参数总览文档
+├── PROJECT_PARAMETERS_EN.md         # 英文参数总览文档
+├── AGENTS.md                        # AI agent 行为准则
+├── docker-compose.yml               # 根目录便捷部署编排
+├── hls-web.zip                      # 前端预构建压缩包
+├── video-vectorization-cost-report.md
+├── docs/                            # 仓库级设计文档、演示文稿等
+├── video-service/      # 推荐部署的 HTTP 后端，供 Java 调用
+├── two-tower-training/              # 双塔推荐训练代码、样本与模型产物
+├── embedding-video/           # 历史 Go 后端主工程
+└── hls-web/                         # Vue 3 + Vite 前端调试工程
 ```
 
-## NLP 技术实现要点
+## 文档导航
 
-### 视频向量化流程
+- HTTP 后端服务说明：[`video-service/README.md`](video-service/README.md)
+- 双塔训练说明：[`two-tower-training/README.md`](two-tower-training/README.md)
+- 前端调试工程说明：[`hls-web/README.md`](hls-web/README.md)
+- 历史后端工程说明：[`embedding-video/README.md`](embedding-video/README.md)
+- 仓库级文档说明：[`docs/README.md`](docs/README.md)
+- 接口契约：[`video-service/docs/swagger/swagger.yaml`](video-service/docs/swagger/swagger.yaml)
+- 双塔算法交接：[`two-tower-training/ALGORITHM_HANDOFF.md`](two-tower-training/ALGORITHM_HANDOFF.md)
 
-1. **Prepare 阶段**：校验视频元数据，探测时长，生成粗分段计划
-2. **Coarse 阶段**：按计划粗切分视频片段 → 上传片段 → 执行 coarse ASR
-3. **Refine 阶段**：基于 coarse 文本调用 LLM 生成细分段 → refine ASR → 生成 Embedding 向量
-4. **Finalize 阶段**：标记向量化完成，写入最终状态
+## 根目录部署
 
-### 推荐链路
+根目录 `docker-compose.yml` 当前提供便捷部署形态：
 
-- **正常模式**：题目文本 → Embedding 向量 → pgvector 相似检索 → 返回相关视频片段
-- **降级模式**：外部 AI 服务不可用时，使用本地 embedding 兜底，返回降级结果
+- `backend_http`：从 `${VIDEO_PROJECT_ROOT}/video-service` 构建并运行 HTTP API 和统一 worker。
+- `two_tower_trainer`：独立训练容器，镜像内包含 Go、Python 和 CPU PyTorch，按调度执行双塔训练发布流水线。
+- `frontend_web`：`hls-web` 调试前端，默认代理到 `backend_http:8083`。
 
-### 可靠性设计
+常用环境变量：
 
-- Redis Streams 消费者组 + ACK 机制确保任务不丢失
-- 失败任务写入 DLQ（死信队列）便于排查
-- 上传链路一致性补偿：对象上传后若记录失败则清理已上传对象
-- AI 服务故障时自动降级，保证推荐接口可用
+| 环境变量 | 作用 |
+| --- | --- |
+| `VIDEO_ENV_FILE` | compose 和直接 `go run` 加载的私有环境文件；本地 `.env` 可指向 `.env.local` |
+| `VIDEO_PROJECT_ROOT` | 服务器上的仓库绝对路径，默认 `/home/debian/dev-ops/embedding-video` |
+| `VIDEO_HTTP_PORT` | 宿主机暴露的后端 HTTP 端口，默认 `8083` |
+| `VIDEO_WEB_PORT` | 宿主机暴露的调试前端端口，默认 `1325` |
 
-## 实验数据与评估
+启动示例：
 
-本系统在以下维度对推荐效果进行评估：
-- 推荐准确率（Top-K 命中率）
-- 推荐召回率
-- 向量检索效率（查询延迟）
-- 降级模式下的推荐质量对比
+```bash
+cp .env.deploy.example .env.deploy
+# 编辑 .env.deploy，填入服务器路径、数据库 DSN、对象存储、Gorse 和 AI API key
+docker compose up -d
+```
 
-## 参考技术
+如果需要同时启动双塔训练容器：
 
-- PostgreSQL pgvector: https://github.com/pgvector/pgvector
-- FFmpeg: https://ffmpeg.org/
-- Gin Web Framework: https://github.com/gin-gonic/gin
-- Redis Streams: https://redis.io/docs/data-types/streams/
+```bash
+docker compose --profile two_tower up -d
+```
+
+如果需要单独启动 Gorse 推荐引擎：
+
+```bash
+docker compose -f docker-compose.gorse.yml up -d
+```
+
+Gorse 默认使用宿主机 Redis 和主服务 PostgreSQL 的独立 schema，具体初始化、同步和回滚见
+`video-service/docs/gorse-recommendation-runbook.md`。
+
+当 `FFmpeg.UseDocker=true` 时，服务容器会通过宿主机 Docker daemon 启动 ffmpeg/ffprobe 子容器。`docker run -v` 的源路径由宿主机解析，因此 compose 会把项目目录挂载到容器内的同名绝对路径。如果服务器代码目录不是默认路径，启动前必须设置 `VIDEO_PROJECT_ROOT`。
+
+正式生产环境如果需要独立扩缩容，仍建议把 HTTP API、worker、双塔训练调度拆成独立进程或容器。
+
+## 优先查看
+
+- `video-service/cmd/httpapi/main.go`
+- `video-service/cmd/worker/main.go`
+- `video-service/cmd/twotowertrainer/main.go`
+- `video-service/internal/http/router/router.go`
+- `video-service/docs/swagger/swagger.yaml`
+- `two-tower-training/scripts/run_two_tower_pipeline.sh`
+- `hls-web/vite.config.js`
+
+## 补充说明
+
+- `video-service/` 是当前推荐对接入口；新集成应优先使用标准 REST 路径，不要继续依赖历史兼容路径。
+- 根目录 compose 更偏便捷部署和联调形态，不等同于完整生产编排。
+- `embedding-video/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。

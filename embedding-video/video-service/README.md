@@ -1,4 +1,4 @@
-# 衡桃学堂 HTTP 视频服务
+# 视频向量化 HTTP 视频服务
 
 ## 项目简介
 
@@ -235,7 +235,7 @@ flowchart TD
 go run ./cmd/httpapi
 ```
 
-直接用 `go run` 启动时，会自动向上查找根目录 `.env`，再按其中的 `HSTV_ENV_FILE` 加载 `.env.local` 或 `.env.deploy`。当前本地默认 `.env` 指向 `.env.local`，因此无需手动 export `POSTGRES_DSN`。
+直接用 `go run` 启动时，会自动向上查找根目录 `.env`，再按其中的 `VIDEO_ENV_FILE` 加载 `.env.local` 或 `.env.deploy`。当前本地默认 `.env` 指向 `.env.local`，因此无需手动 export `POSTGRES_DSN`。
 
 该入口会完成以下初始化：
 
@@ -269,7 +269,7 @@ go run ./cmd/worker
 如果要启用向量化 worker，需要同时准备 AI 服务的 API Key，例如：
 
 ```bash
-HSTV_ENV_FILE=.env.local go run ./cmd/worker
+VIDEO_ENV_FILE=.env.local go run ./cmd/worker
 ```
 
 ### 启动双塔训练调度
@@ -575,7 +575,7 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 - Windows、macOS 默认加载 `configs/video.yml`。
 - 其他环境默认加载 `configs/video_prod.yml`。
 - `cmd/httpapi` 和 `cmd/worker` 启动时会先定位到本目录，再按相对路径读取配置。
-- 直接 `go run` 会先加载根目录 `.env`，再根据 `HSTV_ENV_FILE` 加载私有 `.env.local` 或 `.env.deploy`；已有 shell 环境变量优先生效，不会被 `.env` 覆盖。
+- 直接 `go run` 会先加载根目录 `.env`，再根据 `VIDEO_ENV_FILE` 加载私有 `.env.local` 或 `.env.deploy`；已有 shell 环境变量优先生效，不会被 `.env` 覆盖。
 - 可通过 `CONFIG_FILE` 或 `VIDEO_CONFIG_FILE` 覆盖配置文件路径。
 - 两者同时存在时，`CONFIG_FILE` 优先生效。
 
