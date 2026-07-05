@@ -314,3 +314,13 @@ type EduRecommendModelVersion struct {
 }
 
 func (EduRecommendModelVersion) TableName() string { return "edu_recommend_model_version" }
+
+type SysUser struct {
+	ID       uint64 `gorm:"primaryKey;column:id" json:"id"`
+	UserType int16  `gorm:"column:user_type;not null;default:0" json:"user_type"`
+	GradeID  int64  `gorm:"column:grade_id;default:0" json:"grade_id"`
+	ClassID  int64  `gorm:"column:class_id;default:0" json:"class_id"`
+	Deleted  int16  `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (SysUser) TableName() string { return "sys_user" }
