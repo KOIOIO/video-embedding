@@ -11,7 +11,7 @@ Gorse 和业务 HTTP/worker 解耦部署。默认 `docker-compose.yml` 不启动
 当前本机预期已有：
 
 1. Redis，默认 `127.0.0.1:6379`。
-2. PostgreSQL，默认复用主服务的 `hengshui-tablet` 数据库。
+2. PostgreSQL，默认复用主服务的 `video-embedding` 数据库。
 3. MinIO，可选。当前默认使用 Docker volume 保存 Gorse blob/model 文件；需要对象存储时再切到 MinIO/S3。
 
 Gorse 容器通过 `host.docker.internal` 访问宿主机 Redis/PostgreSQL。
@@ -35,8 +35,8 @@ psql "$POSTGRES_DSN" \
 Gorse 连接串通过私有 `.env.local` / `.env.deploy` 注入：
 
 ```bash
-GORSE_DATA_STORE=postgres://postgres:change-me@host.docker.internal:5432/hengshui-tablet?sslmode=disable&search_path=gorse,public
-GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/hengshui-tablet?sslmode=disable&search_path=gorse,public
+GORSE_DATA_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-embedding?sslmode=disable&search_path=gorse,public
+GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-embedding?sslmode=disable&search_path=gorse,public
 ```
 
 隔离方式有两层：

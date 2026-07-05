@@ -1067,10 +1067,10 @@ onBeforeUnmount(() => {
     <div class="console-page admin-main">
       <header id="overview" class="admin-topbar">
         <div class="page-heading">
-          <p class="eyebrow">Hengshui Tablet Video</p>
+          <p class="eyebrow">Video Embedding</p>
           <h1>视频运营与联调中心</h1>
           <p class="hero-text">
-            面向 <code>hengshui-tablet-video-http</code> 的管理后台，集中处理上传、转码、播放、推荐与题库联调。
+            面向 <code>video-service</code> 的管理后台，集中处理上传、转码、播放、推荐与题库联调。
           </p>
         </div>
         <div class="topbar-actions">
