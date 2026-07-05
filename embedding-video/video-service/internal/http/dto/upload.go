@@ -9,6 +9,7 @@ type UploadVideoData struct {
 }
 
 type UploadVideoArchiveData struct {
+	BatchID      string               `json:"batch_id,omitempty"`
 	Total        int                  `json:"total"`
 	Uploaded     int                  `json:"uploaded"`
 	Failed       int                  `json:"failed"`
@@ -23,6 +24,13 @@ type UploadArchiveError struct {
 	Error    string `json:"error"`
 }
 
+type ArchiveProcessingProgressData struct {
+	BatchID    string `json:"batch_id"`
+	Total      int    `json:"total"`
+	Transcoded int    `json:"transcoded"`
+	Vectorized int    `json:"vectorized"`
+}
+
 type UploadCoverData struct {
 	VideoID  uint64 `json:"video_id"`
 	CoverURL string `json:"cover_url"`
@@ -33,6 +41,7 @@ type InitiateChunkedUploadRequest struct {
 	ContentType string `json:"content_type"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	UserID      uint64 `json:"user_id"`
 	FileSize    int64  `json:"file_size"`
 	ChunkSize   int64  `json:"chunk_size"`
 	TotalChunks int    `json:"total_chunks"`
@@ -56,6 +65,11 @@ type UploadVideoResponse struct {
 type UploadVideoArchiveResponse struct {
 	Success bool                   `json:"success"`
 	Data    UploadVideoArchiveData `json:"data"`
+}
+
+type ArchiveProcessingProgressResponse struct {
+	Success bool                          `json:"success"`
+	Data    ArchiveProcessingProgressData `json:"data"`
 }
 
 type UploadCoverResponse struct {

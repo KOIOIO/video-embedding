@@ -1,0 +1,100 @@
+services:
+  gorse_master:
+    env_file:
+      - ${HSTV_ENV_FILE:-.env.deploy}
+    image: hstv/gorse-local:${GORSE_VERSION:-v0.5.10}
+    build:
+      context: ./gorse
+      dockerfile: Dockerfile.local
+    platform: linux/arm64
+    container_name: embedding-video-gorse-master
+    entrypoint: ["/usr/local/bin/gorse-master"]
+    command:
+      - "-c"
+      - "/etc/gorse/config.toml"
+      - "--log-path"
+      - "/var/log/gorse/master.log"
+      - "--cache-path"
+      - "/var/lib/gorse/master"
+    volumes:
+      - ./gorse/config.toml:/etc/gorse/config.toml:ro
+      - hstv_gorse_master_data:/var/lib/gorse/master
+      - hstv_gorse_blob_data:/var/lib/gorse/blob
+      - hstv_gorse_log:/var/log/gorse
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${GORSE_MASTER_GRPC_PORT:-8086}:8086"
+      - "${GORSE_DASHBOARD_PORT:-8088}:8088"
+    restart: unless-stopped
+
+  gorse_worker:
+    env_file:
+      - ${HSTV_ENV_FILE:-.env.deploy}
+    image: hstv/gorse-local:${GORSE_VERSION:-v0.5.10}
+    build:
+      context: ./gorse
+      dockerfile: Dockerfile.local
+    platform: linux/arm64
+    container_name: embedding-video-gorse-worker
+    entrypoint: ["/usr/local/bin/gorse-worker"]
+    command:
+      - "--master-host"
+      - "gorse_master"
+      - "--master-port"
+      - "8086"
+      - "--http-host"
+      - "0.0.0.0"
+      - "--http-port"
+      - "8089"
+      - "--log-path"
+      - "/var/log/gorse/worker.log"
+      - "--cache-path"
+      - "/var/lib/gorse/worker_cache.data"
+    volumes:
+      - hstv_gorse_worker_data:/var/lib/gorse
+      - hstv_gorse_log:/var/log/gorse
+    ports:
+      - "${GORSE_WORKER_PORT:-8089}:8089"
+    depends_on:
+      - gorse_master
+    restart: unless-stopped
+
+  gorse:
+    env_file:
+      - ${HSTV_ENV_FILE:-.env.deploy}
+    image: hstv/gorse-local:${GORSE_VERSION:-v0.5.10}
+    build:
+      context: ./gorse
+      dockerfile: Dockerfile.local
+    platform: linux/arm64
+    container_name: embedding-video-gorse-server
+    entrypoint: ["/usr/local/bin/gorse-server"]
+    command:
+      - "--master-host"
+      - "gorse_master"
+      - "--master-port"
+      - "8086"
+      - "--http-host"
+      - "0.0.0.0"
+      - "--http-port"
+      - "8087"
+      - "--log-path"
+      - "/var/log/gorse/server.log"
+      - "--cache-path"
+      - "/var/lib/gorse/server_cache.data"
+    volumes:
+      - hstv_gorse_server_data:/var/lib/gorse
+      - hstv_gorse_log:/var/log/gorse
+    ports:
+      - "${GORSE_SERVER_PORT:-8087}:8087"
+    depends_on:
+      - gorse_master
+    restart: unless-stopped
+
+volumes:
+  hstv_gorse_master_data:
+  hstv_gorse_worker_data:
+  hstv_gorse_server_data:
+  hstv_gorse_blob_data:
+  hstv_gorse_log:

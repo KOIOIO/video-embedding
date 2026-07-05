@@ -11,18 +11,57 @@ import (
 	"strings"
 	"time"
 
+	"nlp-video-analysis/internal/config"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-var preservedTables = map[string]bool{
-	"edu_user_video_recommend": true,
-	"edu_video_resource":       true,
-	"edu_video_segment":        true,
-	"edu_video_segement":       true,
+const (
+	defaultSourceConfigPath = "configs/video_prod.yml"
+	defaultTargetConfigPath = "configs/video.yml"
+)
+
+var excludedTables = map[string]bool{
+	"edu_recommend_exposure":      true,
+	"edu_recommend_model_version": true,
+	"edu_user_reaction":           true,
+	"edu_user_tower_embedding":    true,
+	"edu_user_video_profile":      true,
+	"edu_user_video_recommend":    true,
+	"edu_video_item_embedding":    true,
+	"edu_video_resource":          true,
+	"edu_video_segment":           true,
+	"edu_video_segement":          true,
+	"edu_video_user_reaction":     true,
+	"edu_video_vector_stage":      true,
 }
 
 type tableColumn struct {
 	Name string
+}
+
+type enumType struct {
+	Name   string
+	Labels []string
+}
+
+type queryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+type migrationPlan struct {
+	copyTables      []string
+	missingToCreate []string
+	skippedMissing  []string
+	excludedTables  []string
+	targetSet       map[string]bool
+}
+
+type dsnOptions struct {
+	sourceDSN        string
+	targetDSN        string
+	sourceConfigPath string
+	targetConfigPath string
 }
 
 func main() {
@@ -30,22 +69,28 @@ func main() {
 	createMissing := flag.Bool("create-missing", true, "create source tables that are missing in the target database")
 	sourceDSN := flag.String("source-dsn", strings.TrimSpace(os.Getenv("SOURCE_DSN")), "source PostgreSQL DSN, or SOURCE_DSN")
 	targetDSN := flag.String("target-dsn", strings.TrimSpace(os.Getenv("TARGET_DSN")), "target PostgreSQL DSN, or TARGET_DSN")
+	sourceConfig := flag.String("source-config", defaultSourceConfigPath, "source config file used when source DSN is not set")
+	targetConfig := flag.String("target-config", defaultTargetConfigPath, "target config file used when target DSN is not set")
 	flag.Parse()
-	if strings.TrimSpace(*sourceDSN) == "" {
-		log.Fatal("source DSN is required: set -source-dsn or SOURCE_DSN")
-	}
-	if strings.TrimSpace(*targetDSN) == "" {
-		log.Fatal("target DSN is required: set -target-dsn or TARGET_DSN")
+
+	resolvedSourceDSN, resolvedTargetDSN, err := resolveDSNs(dsnOptions{
+		sourceDSN:        *sourceDSN,
+		targetDSN:        *targetDSN,
+		sourceConfigPath: *sourceConfig,
+		targetConfigPath: *targetConfig,
+	}, loadPostgresDSN)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	ctx := context.Background()
-	src, err := sql.Open("pgx", *sourceDSN)
+	src, err := sql.Open("pgx", resolvedSourceDSN)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer src.Close()
 
-	dst, err := sql.Open("pgx", *targetDSN)
+	dst, err := sql.Open("pgx", resolvedTargetDSN)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,58 +112,34 @@ func main() {
 		log.Fatal(err)
 	}
 
-	targetSet := make(map[string]bool, len(targetTables))
-	for _, table := range targetTables {
-		targetSet[table] = true
-	}
-
-	var copyTables []string
-	var missingToCreate []string
-	var skippedMissing []string
-	for _, table := range sourceTables {
-		if preservedTables[table] {
-			continue
-		}
-		if !targetSet[table] {
-			if *createMissing {
-				missingToCreate = append(missingToCreate, table)
-				copyTables = append(copyTables, table)
-			} else {
-				skippedMissing = append(skippedMissing, table)
-			}
-			continue
-		}
-		copyTables = append(copyTables, table)
-	}
-
-	sort.Strings(copyTables)
-	sort.Strings(missingToCreate)
-	sort.Strings(skippedMissing)
+	plan := planTables(sourceTables, targetTables, *createMissing)
 
 	fmt.Printf("source tables: %d\n", len(sourceTables))
 	fmt.Printf("target tables: %d\n", len(targetTables))
-	fmt.Printf("tables to migrate: %d\n", len(copyTables))
-	for _, table := range copyTables {
+	fmt.Printf("tables to migrate: %d\n", len(plan.copyTables))
+	for _, table := range plan.copyTables {
 		srcCount, _ := countRows(ctx, src, table)
-		if targetSet[table] {
+		if plan.targetSet[table] {
 			dstCount, _ := countRows(ctx, dst, table)
 			fmt.Printf("  %s source=%d target_before=%d\n", table, srcCount, dstCount)
 			continue
 		}
 		fmt.Printf("  %s source=%d target_before=<missing; will create>\n", table, srcCount)
 	}
-	if len(missingToCreate) > 0 {
-		fmt.Printf("missing target tables to create: %s\n", strings.Join(missingToCreate, ", "))
+	if len(plan.missingToCreate) > 0 {
+		fmt.Printf("missing target tables to create: %s\n", strings.Join(plan.missingToCreate, ", "))
 	}
-	if len(skippedMissing) > 0 {
-		fmt.Printf("skipped because missing in target: %s\n", strings.Join(skippedMissing, ", "))
+	if len(plan.skippedMissing) > 0 {
+		fmt.Printf("skipped because missing in target: %s\n", strings.Join(plan.skippedMissing, ", "))
 	}
-	fmt.Println("preserved tables:")
-	for table := range preservedTables {
-		if targetSet[table] {
+	fmt.Println("excluded video-related tables:")
+	for _, table := range plan.excludedTables {
+		if plan.targetSet[table] {
 			count, _ := countRows(ctx, dst, table)
 			fmt.Printf("  %s target_count=%d\n", table, count)
+			continue
 		}
+		fmt.Printf("  %s target_count=<missing>\n", table)
 	}
 
 	if *dryRun {
@@ -149,25 +170,31 @@ func main() {
 	if _, err := tx.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
 		log.Fatalf("ensure vector extension: %v", err)
 	}
-	for _, table := range missingToCreate {
+	if err := createMissingEnumTypes(ctx, src, tx, plan.copyTables); err != nil {
+		log.Fatalf("create enum types: %v", err)
+	}
+	for _, table := range plan.missingToCreate {
 		if err := createTableLikeSource(ctx, src, tx, table); err != nil {
 			log.Fatalf("create target table %s: %v", table, err)
 		}
 		fmt.Printf("created target table %s\n", table)
 	}
-	for _, table := range copyTables {
+	for _, table := range plan.copyTables {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM public."+quoteIdent(table)); err != nil {
 			log.Fatalf("clear target table %s: %v", table, err)
 		}
 	}
-	for _, table := range copyTables {
+	if err := syncMissingColumns(ctx, src, tx, plan.copyTables, plan.missingToCreate, plan.targetSet); err != nil {
+		log.Fatalf("sync missing columns: %v", err)
+	}
+	for _, table := range plan.copyTables {
 		n, err := copyTable(ctx, src, tx, table)
 		if err != nil {
 			log.Fatalf("copy table %s: %v", table, err)
 		}
 		fmt.Printf("copied %s rows=%d\n", table, n)
 	}
-	for _, table := range missingToCreate {
+	for _, table := range plan.missingToCreate {
 		if err := addNonForeignKeyConstraints(ctx, src, tx, table); err != nil {
 			log.Fatalf("add constraints for %s: %v", table, err)
 		}
@@ -187,11 +214,82 @@ func main() {
 	committed = true
 
 	fmt.Println("migration complete")
-	for _, table := range copyTables {
+	for _, table := range plan.copyTables {
 		srcCount, _ := countRows(ctx, src, table)
 		dstCount, _ := countRows(ctx, dst, table)
 		fmt.Printf("  %s source=%d target_after=%d\n", table, srcCount, dstCount)
 	}
+}
+
+func planTables(sourceTables, targetTables []string, createMissing bool) migrationPlan {
+	plan := migrationPlan{
+		targetSet: make(map[string]bool, len(targetTables)),
+	}
+	for _, table := range targetTables {
+		plan.targetSet[table] = true
+	}
+
+	for _, table := range sourceTables {
+		if excludedTables[table] {
+			plan.excludedTables = append(plan.excludedTables, table)
+			continue
+		}
+		if !plan.targetSet[table] {
+			if createMissing {
+				plan.missingToCreate = append(plan.missingToCreate, table)
+				plan.copyTables = append(plan.copyTables, table)
+			} else {
+				plan.skippedMissing = append(plan.skippedMissing, table)
+			}
+			continue
+		}
+		plan.copyTables = append(plan.copyTables, table)
+	}
+
+	sort.Strings(plan.copyTables)
+	sort.Strings(plan.missingToCreate)
+	sort.Strings(plan.skippedMissing)
+	sort.Strings(plan.excludedTables)
+
+	return plan
+}
+
+func resolveDSNs(opts dsnOptions, loadConfigDSN func(string) (string, error)) (string, string, error) {
+	sourceDSN := strings.TrimSpace(opts.sourceDSN)
+	targetDSN := strings.TrimSpace(opts.targetDSN)
+
+	if sourceDSN == "" && strings.TrimSpace(opts.sourceConfigPath) != "" {
+		dsn, err := loadConfigDSN(opts.sourceConfigPath)
+		if err != nil {
+			return "", "", fmt.Errorf("load source config %s: %w", opts.sourceConfigPath, err)
+		}
+		sourceDSN = strings.TrimSpace(dsn)
+	}
+	if targetDSN == "" && strings.TrimSpace(opts.targetConfigPath) != "" {
+		dsn, err := loadConfigDSN(opts.targetConfigPath)
+		if err != nil {
+			return "", "", fmt.Errorf("load target config %s: %w", opts.targetConfigPath, err)
+		}
+		targetDSN = strings.TrimSpace(dsn)
+	}
+
+	if sourceDSN == "" {
+		return "", "", fmt.Errorf("source DSN is required: set -source-dsn, SOURCE_DSN, or -source-config with Postgres.DSN")
+	}
+	if targetDSN == "" {
+		return "", "", fmt.Errorf("target DSN is required: set -target-dsn, TARGET_DSN, or -target-config with Postgres.DSN")
+	}
+	return sourceDSN, targetDSN, nil
+}
+
+func loadPostgresDSN(path string) (dsn string, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("%v", recovered)
+		}
+	}()
+	cfg := config.MustLoad(path)
+	return cfg.Postgres.DSN, nil
 }
 
 func ping(ctx context.Context, name string, db *sql.DB) error {
@@ -244,6 +342,92 @@ func backupTarget(ctx context.Context, db *sql.DB, schema string, tables []strin
 	return nil
 }
 
+func createMissingEnumTypes(ctx context.Context, src *sql.DB, tx *sql.Tx, tables []string) error {
+	enums, err := listEnumTypesForTables(ctx, src, tables)
+	if err != nil {
+		return err
+	}
+	for _, enum := range enums {
+		if _, err := tx.ExecContext(ctx, createEnumTypeSQL(enum)); err != nil {
+			return fmt.Errorf("create enum type %s: %w", enum.Name, err)
+		}
+		fmt.Printf("ensured enum type %s\n", enum.Name)
+	}
+	return nil
+}
+
+func listEnumTypesForTables(ctx context.Context, db *sql.DB, tables []string) ([]enumType, error) {
+	if len(tables) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, 0, len(tables))
+	args := make([]any, 0, len(tables))
+	for i, table := range tables {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		args = append(args, table)
+	}
+
+	query := `
+SELECT t.oid, t.typname, e.enumlabel
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+JOIN pg_namespace cn ON cn.oid = c.relnamespace
+JOIN pg_type t ON t.oid = a.atttypid
+JOIN pg_namespace tn ON tn.oid = t.typnamespace
+JOIN pg_enum e ON e.enumtypid = t.oid
+WHERE cn.nspname = 'public'
+  AND c.relname IN (` + strings.Join(placeholders, ", ") + `)
+  AND t.typtype = 'e'
+  AND tn.nspname = 'public'
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+ORDER BY t.oid, e.enumsortorder`
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type enumKey uint32
+	enumsByOID := make(map[enumKey]*enumType)
+	var order []enumKey
+	for rows.Next() {
+		var oid uint32
+		var name string
+		var label string
+		if err := rows.Scan(&oid, &name, &label); err != nil {
+			return nil, err
+		}
+		key := enumKey(oid)
+		enum, ok := enumsByOID[key]
+		if !ok {
+			enum = &enumType{Name: name}
+			enumsByOID[key] = enum
+			order = append(order, key)
+		}
+		enum.Labels = append(enum.Labels, label)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	enums := make([]enumType, 0, len(order))
+	for _, key := range order {
+		enums = append(enums, *enumsByOID[key])
+	}
+	return enums, nil
+}
+
+func createEnumTypeSQL(enum enumType) string {
+	labels := make([]string, 0, len(enum.Labels))
+	for _, label := range enum.Labels {
+		labels = append(labels, quoteLiteral(label))
+	}
+	return "DO $$ BEGIN CREATE TYPE public." + quoteIdent(enum.Name) + " AS ENUM (" + strings.Join(labels, ", ") + "); EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+}
+
 func createTableLikeSource(ctx context.Context, src *sql.DB, tx *sql.Tx, table string) error {
 	columns, err := describeColumns(ctx, src, table)
 	if err != nil {
@@ -255,25 +439,65 @@ func createTableLikeSource(ctx context.Context, src *sql.DB, tx *sql.Tx, table s
 
 	defs := make([]string, 0, len(columns))
 	for _, col := range columns {
-		def := quoteIdent(col.Name) + " " + col.Type
-		switch {
-		case col.Generated != "":
-			def += " GENERATED ALWAYS AS (" + col.GenerationExpr + ") STORED"
-		case col.Identity != "":
-			def += " GENERATED BY DEFAULT AS IDENTITY"
-		case strings.HasPrefix(col.Default, "nextval("):
-			def += " GENERATED BY DEFAULT AS IDENTITY"
-		case col.Default != "":
-			def += " DEFAULT " + col.Default
-		}
-		if col.NotNull {
-			def += " NOT NULL"
-		}
-		defs = append(defs, def)
+		defs = append(defs, columnDefinitionSQL(col))
 	}
 
 	_, err = tx.ExecContext(ctx, "CREATE TABLE public."+quoteIdent(table)+" (\n  "+strings.Join(defs, ",\n  ")+"\n)")
 	return err
+}
+
+func syncMissingColumns(ctx context.Context, src *sql.DB, tx *sql.Tx, copyTables, missingToCreate []string, targetSet map[string]bool) error {
+	missingSet := make(map[string]bool, len(missingToCreate))
+	for _, table := range missingToCreate {
+		missingSet[table] = true
+	}
+
+	for _, table := range copyTables {
+		if missingSet[table] || !targetSet[table] {
+			continue
+		}
+		sourceColumns, err := describeColumns(ctx, src, table)
+		if err != nil {
+			return fmt.Errorf("describe source table %s: %w", table, err)
+		}
+		targetColumns, err := listColumns(ctx, tx, table)
+		if err != nil {
+			return fmt.Errorf("describe target table %s: %w", table, err)
+		}
+		targetColumnSet := make(map[string]bool, len(targetColumns))
+		for _, col := range targetColumns {
+			targetColumnSet[col.Name] = true
+		}
+		for _, col := range sourceColumns {
+			if targetColumnSet[col.Name] {
+				continue
+			}
+			_, err := tx.ExecContext(ctx, "ALTER TABLE public."+quoteIdent(table)+" ADD COLUMN "+columnDefinitionSQL(col))
+			if err != nil {
+				return fmt.Errorf("add column %s.%s: %w", table, col.Name, err)
+			}
+			fmt.Printf("added target column %s.%s\n", table, col.Name)
+		}
+	}
+	return nil
+}
+
+func columnDefinitionSQL(col columnDescription) string {
+	def := quoteIdent(col.Name) + " " + col.Type
+	switch {
+	case col.Generated != "":
+		def += " GENERATED ALWAYS AS (" + col.GenerationExpr + ") STORED"
+	case col.Identity != "":
+		def += " GENERATED BY DEFAULT AS IDENTITY"
+	case strings.HasPrefix(col.Default, "nextval("):
+		def += " GENERATED BY DEFAULT AS IDENTITY"
+	case col.Default != "":
+		def += " DEFAULT " + col.Default
+	}
+	if col.NotNull {
+		def += " NOT NULL"
+	}
+	return def
 }
 
 type columnDescription struct {
@@ -434,7 +658,7 @@ func copyTable(ctx context.Context, src *sql.DB, tx *sql.Tx, table string) (int6
 	return copied, rows.Err()
 }
 
-func listColumns(ctx context.Context, db *sql.DB, table string) ([]tableColumn, error) {
+func listColumns(ctx context.Context, db queryer, table string) ([]tableColumn, error) {
 	rows, err := db.QueryContext(ctx, `
 SELECT column_name
 FROM information_schema.columns
@@ -502,4 +726,8 @@ WHERE table_schema = 'public'
 
 func quoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+func quoteLiteral(s string) string {
+	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
 }

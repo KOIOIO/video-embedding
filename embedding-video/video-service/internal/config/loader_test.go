@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -89,8 +91,35 @@ func TestRuntimeConfigDefaultsPreserveExistingValues(t *testing.T) {
 	if got := SegmentReactionUserPrefix(cfg); got != "segment:reaction:user:" {
 		t.Fatalf("SegmentReactionUserPrefix() = %q, want %q", got, "segment:reaction:user:")
 	}
+	if got := RandomPlayRecentPrefix(cfg); got != "video:random_play:recent:" {
+		t.Fatalf("RandomPlayRecentPrefix() = %q, want %q", got, "video:random_play:recent:")
+	}
 	if got := EmbeddingDim(cfg); got != 1536 {
 		t.Fatalf("EmbeddingDim() = %d, want %d", got, 1536)
+	}
+	if got := AIProvider(cfg); got != "legacy" {
+		t.Fatalf("AIProvider() = %q, want %q", got, "legacy")
+	}
+	if got := RecommendationEngine(cfg); got != "knowledge_match" {
+		t.Fatalf("RecommendationEngine() = %q, want %q", got, "knowledge_match")
+	}
+	if got := RandomPlayDedupeWindow(cfg); got != 30*time.Minute {
+		t.Fatalf("RandomPlayDedupeWindow() = %s, want %s", got, 30*time.Minute)
+	}
+	if got := GorseEndpoint(cfg); got != "http://localhost:8087" {
+		t.Fatalf("GorseEndpoint() = %q, want %q", got, "http://localhost:8087")
+	}
+	if got := GorseTimeout(cfg); got != 2*time.Second {
+		t.Fatalf("GorseTimeout() = %s, want %s", got, 2*time.Second)
+	}
+	if got := GorseCandidateLimit(cfg); got != 100 {
+		t.Fatalf("GorseCandidateLimit() = %d, want 100", got)
+	}
+	if got := GorseSyncInterval(cfg); got != time.Hour {
+		t.Fatalf("GorseSyncInterval() = %s, want %s", got, time.Hour)
+	}
+	if got := GorseDataTTL(cfg); got != 30*24*time.Hour {
+		t.Fatalf("GorseDataTTL() = %s, want %s", got, 30*24*time.Hour)
 	}
 }
 
@@ -130,8 +159,31 @@ func TestRuntimeConfigUsesExplicitValues(t *testing.T) {
 			SegmentReactionUser:   "custom:segment:reaction:user:",
 			TranscodeStatus:       "custom:status:",
 			RuntimeActiveCounter:  "custom:active:",
+			RandomPlayRecent:      "custom:random:recent:",
 		},
-		AI: AIConfig{EmbeddingDim: 768},
+		AI: AIConfig{
+			EmbeddingDim: 768,
+			Provider:     "eino",
+		},
+		Recommendation: RecommendationConfig{
+			Engine:                    "two_tower",
+			RandomPlayDedupeWindowSec: 600,
+		},
+		Gorse: GorseConfig{
+			Endpoint:          " http://gorse:8087/ ",
+			APIKey:            "secret",
+			TimeoutSeconds:    5,
+			ShadowMode:        true,
+			SyncEnabled:       true,
+			WriteBackEnabled:  true,
+			CandidateLimit:    120,
+			SyncIntervalMins:  15,
+			EnableGate:        false,
+			MinFeedbackCount:  80,
+			MinRecommendItems: 10,
+			CleanupEnabled:    false,
+			DataRetentionDays: 7,
+		},
 	}
 
 	if got := HTTPAddr(cfg); got != ":9092" {
@@ -212,7 +264,219 @@ func TestRuntimeConfigUsesExplicitValues(t *testing.T) {
 	if got := RuntimeActiveCounterPrefix(cfg); got != "custom:active:" {
 		t.Fatalf("RuntimeActiveCounterPrefix() = %q, want %q", got, "custom:active:")
 	}
+	if got := RandomPlayRecentPrefix(cfg); got != "custom:random:recent:" {
+		t.Fatalf("RandomPlayRecentPrefix() = %q, want %q", got, "custom:random:recent:")
+	}
 	if got := EmbeddingDim(cfg); got != 768 {
 		t.Fatalf("EmbeddingDim() = %d, want %d", got, 768)
+	}
+	if got := AIProvider(cfg); got != "eino" {
+		t.Fatalf("AIProvider() = %q, want %q", got, "eino")
+	}
+	if got := RecommendationEngine(cfg); got != "two_tower" {
+		t.Fatalf("RecommendationEngine() = %q, want %q", got, "two_tower")
+	}
+	if got := RandomPlayDedupeWindow(cfg); got != 10*time.Minute {
+		t.Fatalf("RandomPlayDedupeWindow() = %s, want %s", got, 10*time.Minute)
+	}
+	if got := GorseEndpoint(cfg); got != "http://gorse:8087" {
+		t.Fatalf("GorseEndpoint() = %q, want %q", got, "http://gorse:8087")
+	}
+	if got := cfg.Gorse.APIKey; got != "secret" {
+		t.Fatalf("Gorse APIKey = %q, want %q", got, "secret")
+	}
+	if got := GorseTimeout(cfg); got != 5*time.Second {
+		t.Fatalf("GorseTimeout() = %s, want %s", got, 5*time.Second)
+	}
+	if !cfg.Gorse.ShadowMode {
+		t.Fatal("Gorse ShadowMode = false, want true")
+	}
+	if !cfg.Gorse.SyncEnabled {
+		t.Fatal("Gorse SyncEnabled = false, want true")
+	}
+	if !cfg.Gorse.WriteBackEnabled {
+		t.Fatal("Gorse WriteBackEnabled = false, want true")
+	}
+	if got := GorseCandidateLimit(cfg); got != 120 {
+		t.Fatalf("GorseCandidateLimit() = %d, want 120", got)
+	}
+	if got := GorseSyncInterval(cfg); got != 15*time.Minute {
+		t.Fatalf("GorseSyncInterval() = %s, want %s", got, 15*time.Minute)
+	}
+	if cfg.Gorse.EnableGate {
+		t.Fatal("Gorse EnableGate = true, want false")
+	}
+	if got := cfg.Gorse.MinFeedbackCount; got != 80 {
+		t.Fatalf("Gorse MinFeedbackCount = %d, want 80", got)
+	}
+	if got := cfg.Gorse.MinRecommendItems; got != 10 {
+		t.Fatalf("Gorse MinRecommendItems = %d, want 10", got)
+	}
+	if cfg.Gorse.CleanupEnabled {
+		t.Fatal("Gorse CleanupEnabled = true, want false")
+	}
+	if got := GorseDataTTL(cfg); got != 7*24*time.Hour {
+		t.Fatalf("GorseDataTTL() = %s, want %s", got, 7*24*time.Hour)
+	}
+}
+
+func TestMustLoadParsesCOSObjectStorageFields(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "video.yml")
+	data := []byte(`
+RustFS:
+  Endpoint: "cos.ap-beijing.myqcloud.com"
+  AccessKey: "ak"
+  SecretKey: "sk"
+  Bucket: "video-embedding-storage"
+  UseSSL: true
+  Region: "ap-beijing"
+  BucketLookup: "dns"
+`)
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg := MustLoad(cfgPath)
+
+	if cfg.RustFS.Region != "ap-beijing" {
+		t.Fatalf("Region = %q, want ap-beijing", cfg.RustFS.Region)
+	}
+	if cfg.RustFS.BucketLookup != "dns" {
+		t.Fatalf("BucketLookup = %q, want dns", cfg.RustFS.BucketLookup)
+	}
+}
+
+func TestMustLoadAppliesSensitiveEnvOverrides(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "video.yml")
+	data := []byte(`
+Redis:
+  Password: "file-redis"
+Postgres:
+  DSN: "file-postgres"
+RustFS:
+  AccessKey: "file-ak"
+  SecretKey: "file-sk"
+Gorse:
+  APIKey: "file-gorse"
+`)
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Setenv("POSTGRES_DSN", "env-postgres")
+	t.Setenv("REDIS_PASSWORD", "env-redis")
+	t.Setenv("COS_SECRET_ID", "env-ak")
+	t.Setenv("COS_SECRET_KEY", "env-sk")
+	t.Setenv("GORSE_API_KEY", "env-gorse")
+
+	cfg := MustLoad(cfgPath)
+
+	if cfg.Postgres.DSN != "env-postgres" {
+		t.Fatalf("Postgres.DSN = %q, want env override", cfg.Postgres.DSN)
+	}
+	if cfg.Redis.Password != "env-redis" {
+		t.Fatalf("Redis.Password = %q, want env override", cfg.Redis.Password)
+	}
+	if cfg.RustFS.AccessKey != "env-ak" || cfg.RustFS.SecretKey != "env-sk" {
+		t.Fatalf("RustFS credentials = %q/%q, want env overrides", cfg.RustFS.AccessKey, cfg.RustFS.SecretKey)
+	}
+	if cfg.Gorse.APIKey != "env-gorse" {
+		t.Fatalf("Gorse.APIKey = %q, want env override", cfg.Gorse.APIKey)
+	}
+}
+
+func TestMustLoadAppliesDotEnvOverrides(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "video.yml")
+	data := []byte(`
+Postgres:
+  DSN: ""
+RustFS:
+  AccessKey: ""
+  SecretKey: ""
+Gorse:
+  APIKey: ""
+`)
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("HSTV_ENV_FILE=.env.local\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env.local"), []byte(`
+POSTGRES_DSN=dotenv-postgres
+COS_SECRET_ID=dotenv-ak
+COS_SECRET_KEY=dotenv-sk
+GORSE_API_KEY=dotenv-gorse
+`), 0o600); err != nil {
+		t.Fatalf("write .env.local: %v", err)
+	}
+
+	cleanupEnv := cleanEnv(t, "HSTV_ENV_FILE", "POSTGRES_DSN", "COS_SECRET_ID", "COS_SECRET_KEY", "GORSE_API_KEY")
+	defer cleanupEnv()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalDir) })
+
+	cfg := MustLoad(cfgPath)
+
+	if cfg.Postgres.DSN != "dotenv-postgres" {
+		t.Fatalf("Postgres.DSN = %q, want dotenv override", cfg.Postgres.DSN)
+	}
+	if cfg.RustFS.AccessKey != "dotenv-ak" || cfg.RustFS.SecretKey != "dotenv-sk" {
+		t.Fatalf("RustFS credentials = %q/%q, want dotenv overrides", cfg.RustFS.AccessKey, cfg.RustFS.SecretKey)
+	}
+	if cfg.Gorse.APIKey != "dotenv-gorse" {
+		t.Fatalf("Gorse.APIKey = %q, want dotenv override", cfg.Gorse.APIKey)
+	}
+}
+
+func TestObjectStorageConfigPassesCOSFieldsAndEnvFallback(t *testing.T) {
+	t.Setenv("COS_SECRET_ID", "env-ak")
+	t.Setenv("COS_SECRET_KEY", "env-sk")
+
+	got := ObjectStorageConfig(Config{
+		RustFS: RustFSConfig{
+			Endpoint:     "cos.ap-beijing.myqcloud.com",
+			Bucket:       "video-embedding-storage",
+			UseSSL:       true,
+			Region:       "ap-beijing",
+			BucketLookup: "dns",
+		},
+	})
+
+	if got.AccessKey != "env-ak" || got.SecretKey != "env-sk" {
+		t.Fatalf("credentials = %q/%q, want env fallback", got.AccessKey, got.SecretKey)
+	}
+	if got.Region != "ap-beijing" || got.BucketLookup != "dns" {
+		t.Fatalf("COS fields = region %q lookup %q, want ap-beijing/dns", got.Region, got.BucketLookup)
+	}
+}
+
+func cleanEnv(t *testing.T, names ...string) func() {
+	t.Helper()
+	originals := make(map[string]string, len(names))
+	present := make(map[string]bool, len(names))
+	for _, name := range names {
+		value, ok := os.LookupEnv(name)
+		originals[name] = value
+		present[name] = ok
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatalf("unset %s: %v", name, err)
+		}
+	}
+	return func() {
+		for _, name := range names {
+			if present[name] {
+				_ = os.Setenv(name, originals[name])
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		}
 	}
 }

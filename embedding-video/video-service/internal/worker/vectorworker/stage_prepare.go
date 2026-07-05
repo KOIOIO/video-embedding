@@ -19,6 +19,7 @@ import (
 )
 
 const vectorStageCoarseSegment = "vector.coarse.segment"
+const shortVideoSingleSegmentThresholdSec = 195
 
 type prepareRepository interface {
 	VideoExists(context.Context, uint64) (bool, error)
@@ -111,6 +112,23 @@ func (h *prepareStageHandler) Handle(ctx context.Context, task VectorStageTask) 
 				EndSec:  durationSec,
 			})
 		}
+		if isShortSingleSegmentVideo(durationSec) {
+			if err := h.repo.MarkComplete(ctx, persistence.VectorStageRecord{
+				TaskID:  task.TaskID,
+				VideoID: task.VideoID,
+				Stage:   VectorStagePrepare,
+				EndSec:  durationSec,
+			}); err != nil {
+				return err
+			}
+			return h.refineQueue.Enqueue(ctx, VectorStageTask{
+				TaskID:  task.TaskID,
+				VideoID: task.VideoID,
+				RawKey:  task.RawKey,
+				Stage:   VectorStageRefine,
+				EndSec:  durationSec,
+			})
+		}
 	}
 
 	prefix := fmt.Sprintf("segments/coarse/video_%d/%s", task.VideoID, strings.TrimSpace(task.TaskID))
@@ -155,6 +173,10 @@ func (h *prepareStageHandler) Handle(ctx context.Context, task VectorStageTask) 
 		Stage:   VectorStageCoarse,
 		EndSec:  durationSec,
 	})
+}
+
+func isShortSingleSegmentVideo(durationSec int) bool {
+	return durationSec > 0 && durationSec < shortVideoSingleSegmentThresholdSec
 }
 
 type gormPrepareRepository struct {

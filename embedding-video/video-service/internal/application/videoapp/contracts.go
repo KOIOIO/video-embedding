@@ -34,11 +34,66 @@ type VideoRepository interface {
 	ListQuestions(ctx context.Context, page int, pageSize int) (QuestionPage, error)
 	GetQuestionByID(ctx context.Context, id uint64) (QuestionItem, bool, error)
 	FindRecommendedSegments(ctx context.Context, query pgvector.Vector, limit int) ([]RecommendCandidate, error)
+	FindRecommendedSegmentsByWeakKnowledge(ctx context.Context, userID uint64, limit int, weakLimit int) ([]RecommendCandidate, error)
 	SaveUserVideoRecommendation(ctx context.Context, userID uint64, questionID uint64, videoID uint64, segmentID uint64, score float64, now time.Time) error
 	ListRecommendations(ctx context.Context, userID uint64, questionID uint64, limit int) ([]RecommendationRecord, error)
 	GetVideoIDBySegmentID(ctx context.Context, segmentID uint64) (uint64, error)
 	HasWatchedVideoForQuestion(ctx context.Context, userID uint64, questionID uint64, videoID uint64) (bool, error)
 	SaveWatchRecord(ctx context.Context, userID uint64, videoID uint64, questionID uint64, segmentID uint64, isWatched bool, watchDuration int, now time.Time) (bool, error)
+}
+
+type VideoUploadPermissionRepository interface {
+	CanUploadVideo(ctx context.Context, userID uint64) (bool, error)
+}
+
+type VideoReactionStateRepository interface {
+	ApplyVideoReactionState(ctx context.Context, videoID uint64, userID uint64, reactionType VideoReactionType, active bool) (bool, error)
+}
+
+type VideoProfileRepository interface {
+	GetUserVideoProfile(ctx context.Context, userID uint64, modelVersion string) (UserVideoProfile, bool, error)
+	FindRecommendedSegmentsForProfileRerank(ctx context.Context, input ProfileRerankQuery) ([]ProfileRerankCandidate, error)
+}
+
+type TwoTowerRepository interface {
+	GetUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error)
+	FindRecommendedSegmentsForTwoTower(ctx context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error)
+}
+
+type GorseHydrationRepository interface {
+	HydrateRecommendedSegmentsByID(ctx context.Context, userID uint64, ids []uint64) ([]RecommendCandidate, error)
+}
+
+type WeakKnowledgeVectorRepository interface {
+	ListWeakKnowledge(ctx context.Context, userID uint64, limit int) ([]WeakKnowledge, error)
+	FindRecommendedSegmentsByWeakKnowledgeVector(ctx context.Context, input WeakKnowledgeVectorQuery) ([]RecommendCandidate, error)
+}
+
+type TwoTowerModelVersionRepository interface {
+	GetActiveTwoTowerModelVersion(ctx context.Context) (string, bool, error)
+}
+
+type VideoProfileUpdater interface {
+	RebuildUserVideoProfile(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
+}
+
+type ArchiveProcessingProgress struct {
+	Total      int
+	Transcoded int
+	Vectorized int
+}
+
+type ArchiveProcessingProgressRepository interface {
+	GetArchiveProcessingProgress(ctx context.Context, videoIDs []uint64) (ArchiveProcessingProgress, error)
+}
+
+type UserTowerEmbeddingUpdater interface {
+	RebuildUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
+}
+
+type RecommendationExposureRepository interface {
+	SaveRecommendationExposures(ctx context.Context, exposures []RecommendationExposure) error
+	MarkRecommendationExposureWatched(ctx context.Context, userID uint64, questionID uint64, segmentID uint64, now time.Time) error
 }
 
 type SegmentReactionRepository interface {

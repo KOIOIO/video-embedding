@@ -33,7 +33,8 @@ type videoApp interface {
 	GetVideoReactionCounts(ctx context.Context, videoID uint64) (videoapp.VideoReactionCounts, bool, error)
 	SubmitSegmentReaction(ctx context.Context, segmentID uint64, userID uint64, reactionType videoapp.VideoReactionType) (videoapp.VideoReactionResult, bool, error)
 	GetSegmentReactionCounts(ctx context.Context, segmentID uint64) (videoapp.VideoReactionCounts, bool, error)
-	RandomPlayVideoSegment(ctx context.Context) (videoapp.RecommendResultItem, bool, error)
+	RandomPlayVideoSegment(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error)
+	ExternalTwoTowerItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
 	GetTranscodeStatus(ctx context.Context, taskID string) (videoapp.TranscodeStatus, bool, error)
 }
 
@@ -362,7 +363,17 @@ func (h *Handler) GetSegmentReactionCounts(c *gin.Context) {
 }
 
 func (h *Handler) RandomPlayVideoSegment(c *gin.Context) {
-	item, found, err := h.app.RandomPlayVideoSegment(c.Request.Context())
+	userID, ok := parseOptionalPositiveUintQuery(c, "user_id")
+	if !ok {
+		return
+	}
+	if userID == 0 {
+		userID = 6
+	}
+	item, found, err := h.app.RandomPlayVideoSegment(c.Request.Context(), videoapp.RandomPlayVideoSegmentInput{
+		UserID: userID,
+		Limit:  1,
+	})
 	if err != nil {
 		writeAppError(c, err, "random play video segment failed")
 		return
@@ -385,6 +396,33 @@ func (h *Handler) RandomPlayVideoSegment(c *gin.Context) {
 		CoverURL:       item.Video.CoverURL,
 		PlayURL:        strings.TrimSpace(h.app.ResolvePlaybackURL(c.Request.Context(), item.Video)),
 	})
+}
+
+func (h *Handler) ExternalTwoTowerRecommendations(c *gin.Context) {
+	userID, ok := parseOptionalPositiveUintQuery(c, "user_id")
+	if !ok {
+		return
+	}
+	if userID == 0 {
+		c.JSON(http.StatusOK, []string{})
+		return
+	}
+	limit, ok := parseOptionalPositiveIntQuery(c, "n", 100)
+	if !ok {
+		return
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	ids, err := h.app.ExternalTwoTowerItemIDs(c.Request.Context(), videoapp.RandomPlayVideoSegmentInput{
+		UserID: userID,
+		Limit:  limit,
+	})
+	if err != nil {
+		writeAppError(c, err, "external two tower recommendation failed")
+		return
+	}
+	c.JSON(http.StatusOK, formatExternalItemIDs(ids))
 }
 
 func (h *Handler) GetTranscodeStatus(c *gin.Context) {
@@ -419,6 +457,43 @@ func parsePositiveUintParam(c *gin.Context, name string) (uint64, bool) {
 		return 0, false
 	}
 	return value, true
+}
+
+func parseOptionalPositiveUintQuery(c *gin.Context, name string) (uint64, bool) {
+	raw := strings.TrimSpace(c.Query(name))
+	if raw == "" {
+		return 0, true
+	}
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || value == 0 {
+		httperrors.Write(c, httperrors.InvalidArgument(name+" must be a positive integer"))
+		return 0, false
+	}
+	return value, true
+}
+
+func parseOptionalPositiveIntQuery(c *gin.Context, name string, fallback int) (int, bool) {
+	raw := strings.TrimSpace(c.Query(name))
+	if raw == "" {
+		return fallback, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		httperrors.Write(c, httperrors.InvalidArgument(name+" must be a positive integer"))
+		return 0, false
+	}
+	return value, true
+}
+
+func formatExternalItemIDs(ids []uint64) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+		out = append(out, strconv.FormatUint(id, 10))
+	}
+	return out
 }
 
 func (h *Handler) mapVideos(ctx context.Context, videos []domainvideo.Video) []dto.VideoItem {

@@ -36,6 +36,7 @@ type UploadResult struct {
 }
 
 type ArchiveUploadResult struct {
+	BatchID  string
 	Total    int
 	Uploaded []UploadResult
 	Failed   []ArchiveUploadFailure

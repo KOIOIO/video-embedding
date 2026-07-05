@@ -21,15 +21,18 @@ type RustFS struct {
 
 // Config 定义对象存储连接配置。
 type Config struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	UseSSL    bool
+	Endpoint     string
+	AccessKey    string
+	SecretKey    string
+	Bucket       string
+	UseSSL       bool
+	Region       string
+	BucketLookup string
 }
 
 // NewRustFS 创建一个基于 MinIO SDK 的对象存储客户端。
 func NewRustFS(cfg Config) (*RustFS, error) {
+	cfg = normalizedConfig(cfg)
 	if strings.TrimSpace(cfg.Endpoint) == "" {
 		return nil, errors.New("endpoint is required")
 	}
@@ -43,10 +46,11 @@ func NewRustFS(cfg Config) (*RustFS, error) {
 		return nil, errors.New("secretKey is required")
 	}
 
-	cli, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		Secure: cfg.UseSSL,
-	})
+	opts, err := minioOptions(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cli, err := minio.New(cfg.Endpoint, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +59,56 @@ func NewRustFS(cfg Config) (*RustFS, error) {
 		client: cli,
 		bucket: cfg.Bucket,
 	}, nil
+}
+
+func normalizedConfig(cfg Config) Config {
+	cfg.Endpoint = normalizeEndpoint(cfg.Endpoint)
+	cfg.Endpoint = serviceEndpoint(cfg.Endpoint, cfg.Bucket)
+	return cfg
+}
+
+func minioOptions(cfg Config) (*minio.Options, error) {
+	lookup, err := bucketLookupOption(cfg.BucketLookup)
+	if err != nil {
+		return nil, err
+	}
+	return &minio.Options{
+		Creds:        credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure:       cfg.UseSSL,
+		Region:       strings.TrimSpace(cfg.Region),
+		BucketLookup: lookup,
+	}, nil
+}
+
+func bucketLookupOption(value string) (minio.BucketLookupType, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "auto":
+		return minio.BucketLookupAuto, nil
+	case "dns":
+		return minio.BucketLookupDNS, nil
+	case "path":
+		return minio.BucketLookupPath, nil
+	default:
+		return minio.BucketLookupAuto, errors.New("bucketLookup must be one of auto, dns, path")
+	}
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	return strings.TrimRight(endpoint, "/")
+}
+
+func serviceEndpoint(endpoint string, bucket string) string {
+	bucket = strings.TrimSpace(bucket)
+	if bucket == "" {
+		return endpoint
+	}
+	if suffix, ok := strings.CutPrefix(endpoint, bucket+"."); ok && strings.HasPrefix(suffix, "cos.") {
+		return suffix
+	}
+	return endpoint
 }
 
 // EnsureBucket 确保存储桶存在，不存在则尝试创建。

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -302,7 +303,13 @@ func archiveReader(t *testing.T, entries map[string]string) io.Reader {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	for name, body := range entries {
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		body := entries[name]
 		w, err := zw.Create(name)
 		if err != nil {
 			t.Fatalf("create zip entry: %v", err)

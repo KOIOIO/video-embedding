@@ -18,6 +18,8 @@ var runtimeGOOS = runtime.GOOS
 
 // MustLoad 模仿 go-zero：加载配置，失败直接 panic
 func MustLoad(path string) Config {
+	loadDotEnv()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if !filepath.IsAbs(path) {
@@ -35,8 +37,90 @@ func MustLoad(path string) Config {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		panic("parse config yaml failed: " + err.Error())
 	}
+	applyEnvOverrides(&c)
 
 	return c
+}
+
+func applyEnvOverrides(c *Config) {
+	if value := firstEnv("POSTGRES_DSN"); value != "" {
+		c.Postgres.DSN = value
+	}
+	if value := firstEnv("REDIS_PASSWORD"); value != "" {
+		c.Redis.Password = value
+	}
+	if value := firstEnv("COS_SECRET_ID", "RUSTFS_ACCESS_KEY"); value != "" {
+		c.RustFS.AccessKey = value
+	}
+	if value := firstEnv("COS_SECRET_KEY", "RUSTFS_SECRET_KEY"); value != "" {
+		c.RustFS.SecretKey = value
+	}
+	if value := firstEnv("GORSE_API_KEY"); value != "" {
+		c.Gorse.APIKey = value
+	}
+	if value := firstEnv("ASR_API_KEY", "DASHSCOPE_API_KEY", "OPENAI_API_KEY"); value != "" {
+		c.ASR.APIKey = value
+	}
+	if value := firstEnv("EMBEDDING_API_KEY", "DASHSCOPE_API_KEY", "OPENAI_API_KEY"); value != "" {
+		c.Embedding.APIKey = value
+	}
+}
+
+func loadDotEnv() {
+	if path, err := findUpward(".env", 6); err == nil {
+		loadEnvFile(path)
+	}
+	envFile := firstEnv("HSTV_ENV_FILE")
+	if envFile == "" {
+		return
+	}
+	if !filepath.IsAbs(envFile) {
+		if path, err := findUpward(envFile, 6); err == nil {
+			envFile = path
+		}
+	}
+	loadEnvFile(envFile)
+}
+
+func loadEnvFile(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, ok := parseEnvLine(line)
+		if !ok {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		_ = os.Setenv(key, value)
+	}
+}
+
+func parseEnvLine(line string) (string, string, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
+	line = strings.TrimPrefix(line, "export ")
+	key, value, ok := strings.Cut(line, "=")
+	if !ok {
+		return "", "", false
+	}
+	key = strings.TrimSpace(key)
+	if key == "" || strings.ContainsAny(key, " \t") {
+		return "", "", false
+	}
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 {
+		quote := value[0]
+		if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
+			value = value[1 : len(value)-1]
+		}
+	}
+	return key, value, true
 }
 
 // MustLoadDefault 按运行环境加载默认配置。
@@ -85,7 +169,7 @@ func FindProjectRoot() (string, error) {
 	}
 
 	configCandidates := []string{DefaultConfigPath(), defaultConfigPath, prodConfigPath}
-	projectDirs := []string{"", "video-service", "legacy-video"}
+	projectDirs := []string{"", "video-service", "embedding-video"}
 
 	dir := cwd
 	for {

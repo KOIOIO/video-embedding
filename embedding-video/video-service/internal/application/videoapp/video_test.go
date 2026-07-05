@@ -206,8 +206,12 @@ func TestSubmitVideoReactionPassesThroughRepo(t *testing.T) {
 		submitReactionActive: true,
 		submitReactionOK:     true,
 		reactionCountsOK:     true,
+		activeTowerVersion:   "two_tower_v2",
+		activeTowerFound:     true,
 	}
 	svc := NewService(repo, nil, nil, nil, nil, nil, nil, Paths{})
+	updater := &videoTestProfileUpdater{}
+	svc.ProfileUpdater = updater
 
 	result, ok, err := svc.SubmitVideoReaction(context.Background(), 15, 23, VideoReactionDoubleLike)
 	if err != nil {
@@ -218,6 +222,12 @@ func TestSubmitVideoReactionPassesThroughRepo(t *testing.T) {
 	}
 	if repo.lastReactionVideoID != 15 || repo.lastReactionUserID != 23 || repo.lastReactionType != VideoReactionDoubleLike {
 		t.Fatalf("unexpected repo call: %+v", repo)
+	}
+	if updater.lastUserID != 23 || updater.calls != 1 {
+		t.Fatalf("profile updater calls=%d userID=%d, want one call for user 23", updater.calls, updater.lastUserID)
+	}
+	if repo.lastTowerUserID != 23 || repo.lastTowerVersion != "two_tower_v2" {
+		t.Fatalf("tower rebuild userID=%d version=%q, want user 23 version two_tower_v2", repo.lastTowerUserID, repo.lastTowerVersion)
 	}
 }
 
@@ -358,6 +368,8 @@ func TestSubmitSegmentReactionPassesThroughRepo(t *testing.T) {
 		segmentReactionCountsOK:     true,
 	}
 	svc := NewService(repo, nil, nil, nil, nil, nil, nil, Paths{})
+	updater := &videoTestProfileUpdater{}
+	svc.ProfileUpdater = updater
 
 	result, ok, err := svc.SubmitSegmentReaction(context.Background(), 25, 23, VideoReactionDoubleLike)
 	if err != nil {
@@ -368,6 +380,9 @@ func TestSubmitSegmentReactionPassesThroughRepo(t *testing.T) {
 	}
 	if repo.lastReactionSegmentID != 25 || repo.lastReactionUserID != 23 || repo.lastReactionType != VideoReactionDoubleLike {
 		t.Fatalf("unexpected repo call: %+v", repo)
+	}
+	if updater.lastUserID != 23 || updater.calls != 1 {
+		t.Fatalf("profile updater calls=%d userID=%d, want one call for user 23", updater.calls, updater.lastUserID)
 	}
 }
 
@@ -508,6 +523,10 @@ type videoTestRepo struct {
 	getSegmentReactionFound     bool
 	lastSegmentUserReactionID   uint64
 	lastSegmentUserID           uint64
+	activeTowerVersion          string
+	activeTowerFound            bool
+	lastTowerUserID             uint64
+	lastTowerVersion            string
 }
 
 type videoTestReactionStore struct {
@@ -523,6 +542,12 @@ type videoTestReactionStore struct {
 	lastSubmitSeedActive bool
 	lastGetCountsVideoID uint64
 	lastGetCountsSeed    VideoReactionCounts
+}
+
+type videoTestProfileUpdater struct {
+	calls      int
+	lastUserID uint64
+	err        error
 }
 
 func (*videoTestRepo) Create(context.Context, *domainvideo.Video) error { panic("unexpected call") }
@@ -628,6 +653,9 @@ func (*videoTestRepo) GetQuestionByID(context.Context, uint64) (QuestionItem, bo
 func (*videoTestRepo) FindRecommendedSegments(context.Context, pgvector.Vector, int) ([]RecommendCandidate, error) {
 	panic("unexpected call")
 }
+func (*videoTestRepo) FindRecommendedSegmentsByWeakKnowledge(context.Context, uint64, int, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 func (*videoTestRepo) SaveUserVideoRecommendation(context.Context, uint64, uint64, uint64, uint64, float64, time.Time) error {
 	panic("unexpected call")
 }
@@ -642,6 +670,14 @@ func (*videoTestRepo) HasWatchedVideoForQuestion(context.Context, uint64, uint64
 }
 func (*videoTestRepo) SaveWatchRecord(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error) {
 	panic("unexpected call")
+}
+func (r *videoTestRepo) GetActiveTwoTowerModelVersion(context.Context) (string, bool, error) {
+	return r.activeTowerVersion, r.activeTowerFound, nil
+}
+func (r *videoTestRepo) RebuildUserTowerEmbedding(_ context.Context, userID uint64, modelVersion string, _ time.Time) error {
+	r.lastTowerUserID = userID
+	r.lastTowerVersion = modelVersion
+	return nil
 }
 
 func (s *videoTestReactionStore) HasCounts(context.Context, uint64) (bool, error) {
@@ -666,4 +702,10 @@ func (s *videoTestReactionStore) GetCounts(_ context.Context, videoID uint64, se
 	s.lastGetCountsVideoID = videoID
 	s.lastGetCountsSeed = seed
 	return s.getCountsResult, nil
+}
+
+func (u *videoTestProfileUpdater) RebuildUserVideoProfile(_ context.Context, userID uint64, _ string, _ time.Time) error {
+	u.calls++
+	u.lastUserID = userID
+	return u.err
 }

@@ -47,21 +47,29 @@ func withRetry(ctx context.Context, fn func() error) error {
 
 // TranscodeQueue 基于 Redis Streams 的转码任务队列实现。
 type TranscodeQueue struct {
-	rdb      *goredis.Client
-	key      string
-	group    string
-	consumer string
-	once     sync.Once
-	onceErr  error
+	rdb            *goredis.Client
+	key            string
+	group          string
+	consumer       string
+	pendingMinIdle time.Duration
+	once           sync.Once
+	onceErr        error
 }
 
 // NewTranscodeQueue 创建转码任务队列。
 func NewTranscodeQueue(rdb *goredis.Client, key string) *TranscodeQueue {
 	return &TranscodeQueue{
-		rdb:      rdb,
-		key:      key,
-		group:    streamGroupName(key),
-		consumer: streamConsumerName("transcode"),
+		rdb:            rdb,
+		key:            key,
+		group:          streamGroupName(key),
+		consumer:       streamConsumerName("transcode"),
+		pendingMinIdle: defaultTaskPendingMinIdle,
+	}
+}
+
+func (q *TranscodeQueue) SetPendingMinIdle(minIdle time.Duration) {
+	if minIdle > 0 {
+		q.pendingMinIdle = minIdle
 	}
 }
 
@@ -74,15 +82,7 @@ func (q *TranscodeQueue) Enqueue(ctx context.Context, task videoapp.TranscodeTas
 	if err != nil {
 		return err
 	}
-	return withRetry(ctx, func() error {
-		_, err := q.rdb.XAdd(ctx, &goredis.XAddArgs{
-			Stream: q.key,
-			Values: map[string]interface{}{
-				"payload": string(b),
-			},
-		}).Result()
-		return err
-	})
+	return enqueueStreamPayload(ctx, q.rdb, q.key, string(b), "", 0)
 }
 
 // Dequeue 从消费者组中取出一条转码任务，成功解析后交由调用方决定何时 ACK。
@@ -90,25 +90,45 @@ func (q *TranscodeQueue) Dequeue(ctx context.Context) (videoapp.TranscodeQueueMe
 	if err := q.ensureGroup(ctx); err != nil {
 		return videoapp.TranscodeQueueMessage{}, err
 	}
-	streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
-		Group:    q.group,
-		Consumer: q.consumer,
-		Streams:  []string{q.key, ">"},
-		Count:    1,
-		Block:    0,
-	}).Result()
-	if err != nil {
-		return videoapp.TranscodeQueueMessage{}, err
+	for {
+		if err := ctx.Err(); err != nil {
+			return videoapp.TranscodeQueueMessage{}, err
+		}
+		if err := promoteDueDelayed(ctx, q.rdb, q.key); err != nil {
+			return videoapp.TranscodeQueueMessage{}, err
+		}
+		if raw, ok, err := claimPendingStreamMessage(ctx, q.rdb, q.key, q.group, q.consumer, q.pendingMinIdle); err != nil {
+			return videoapp.TranscodeQueueMessage{}, err
+		} else if ok {
+			task, err := q.decodeTranscodeTask(ctx, raw)
+			if err != nil {
+				return videoapp.TranscodeQueueMessage{}, err
+			}
+			return videoapp.TranscodeQueueMessage{MessageID: raw.ID, Task: task}, nil
+		}
+		streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
+			Group:    q.group,
+			Consumer: q.consumer,
+			Streams:  []string{q.key, ">"},
+			Count:    1,
+			Block:    blockingQueuePollInterval,
+		}).Result()
+		if err != nil {
+			if err == goredis.Nil {
+				continue
+			}
+			return videoapp.TranscodeQueueMessage{}, err
+		}
+		if len(streams) == 0 || len(streams[0].Messages) == 0 {
+			continue
+		}
+		msg := streams[0].Messages[0]
+		task, err := q.decodeTranscodeTask(ctx, msg)
+		if err != nil {
+			return videoapp.TranscodeQueueMessage{}, err
+		}
+		return videoapp.TranscodeQueueMessage{MessageID: msg.ID, Task: task}, nil
 	}
-	if len(streams) == 0 || len(streams[0].Messages) == 0 {
-		return videoapp.TranscodeQueueMessage{}, errors.New("empty stream message")
-	}
-	msg := streams[0].Messages[0]
-	task, err := q.decodeTranscodeTask(ctx, msg)
-	if err != nil {
-		return videoapp.TranscodeQueueMessage{}, err
-	}
-	return videoapp.TranscodeQueueMessage{MessageID: msg.ID, Task: task}, nil
 }
 
 // Ack 在消息成功处理后执行 ACK，并尽力从流中删除该消息。
@@ -125,17 +145,7 @@ func (q *TranscodeQueue) Requeue(ctx context.Context, msg videoapp.TranscodeQueu
 	if err != nil {
 		return err
 	}
-	values := map[string]interface{}{
-		"payload":      string(b),
-		"retry_reason": reason,
-	}
-	if delay > 0 {
-		values["visible_at"] = time.Now().Add(delay).Unix()
-	}
-	if err := withRetry(ctx, func() error {
-		_, err := q.rdb.XAdd(ctx, &goredis.XAddArgs{Stream: q.key, Values: values}).Result()
-		return err
-	}); err != nil {
+	if err := enqueueStreamPayload(ctx, q.rdb, q.key, string(b), reason, delay); err != nil {
 		return err
 	}
 	return q.ackAndDelete(ctx, msg.MessageID)
@@ -164,21 +174,29 @@ func (q *TranscodeQueue) MoveToDeadLetter(ctx context.Context, msg videoapp.Tran
 
 // VectorizeQueue 基于 Redis Streams 的向量化任务队列实现。
 type VectorizeQueue struct {
-	rdb      *goredis.Client
-	key      string
-	group    string
-	consumer string
-	once     sync.Once
-	onceErr  error
+	rdb            *goredis.Client
+	key            string
+	group          string
+	consumer       string
+	pendingMinIdle time.Duration
+	once           sync.Once
+	onceErr        error
 }
 
 // NewVectorizeQueue 创建向量化任务队列。
 func NewVectorizeQueue(rdb *goredis.Client, key string) *VectorizeQueue {
 	return &VectorizeQueue{
-		rdb:      rdb,
-		key:      key,
-		group:    streamGroupName(key),
-		consumer: streamConsumerName("vectorize"),
+		rdb:            rdb,
+		key:            key,
+		group:          streamGroupName(key),
+		consumer:       streamConsumerName("vectorize"),
+		pendingMinIdle: defaultTaskPendingMinIdle,
+	}
+}
+
+func (q *VectorizeQueue) SetPendingMinIdle(minIdle time.Duration) {
+	if minIdle > 0 {
+		q.pendingMinIdle = minIdle
 	}
 }
 
@@ -191,15 +209,7 @@ func (q *VectorizeQueue) Enqueue(ctx context.Context, task videoapp.VectorizeTas
 	if err != nil {
 		return err
 	}
-	return withRetry(ctx, func() error {
-		_, err := q.rdb.XAdd(ctx, &goredis.XAddArgs{
-			Stream: q.key,
-			Values: map[string]interface{}{
-				"payload": string(b),
-			},
-		}).Result()
-		return err
-	})
+	return enqueueStreamPayload(ctx, q.rdb, q.key, string(b), "", 0)
 }
 
 // Dequeue 从消费者组中取出一条向量化任务，成功解析后交由调用方决定何时 ACK。
@@ -207,32 +217,60 @@ func (q *VectorizeQueue) Dequeue(ctx context.Context) (videoapp.VectorizeQueueMe
 	if err := q.ensureGroup(ctx); err != nil {
 		return videoapp.VectorizeQueueMessage{}, err
 	}
-	streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
-		Group:    q.group,
-		Consumer: q.consumer,
-		Streams:  []string{q.key, ">"},
-		Count:    1,
-		Block:    0,
-	}).Result()
-	if err != nil {
-		return videoapp.VectorizeQueueMessage{}, err
+	for {
+		if err := ctx.Err(); err != nil {
+			return videoapp.VectorizeQueueMessage{}, err
+		}
+		if err := promoteDueDelayed(ctx, q.rdb, q.key); err != nil {
+			return videoapp.VectorizeQueueMessage{}, err
+		}
+		if raw, ok, err := claimPendingStreamMessage(ctx, q.rdb, q.key, q.group, q.consumer, q.pendingMinIdle); err != nil {
+			return videoapp.VectorizeQueueMessage{}, err
+		} else if ok {
+			task, err := q.decodeVectorizeTask(ctx, raw)
+			if err != nil {
+				return videoapp.VectorizeQueueMessage{}, err
+			}
+			return videoapp.VectorizeQueueMessage{MessageID: raw.ID, Task: task}, nil
+		}
+		streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
+			Group:    q.group,
+			Consumer: q.consumer,
+			Streams:  []string{q.key, ">"},
+			Count:    1,
+			Block:    blockingQueuePollInterval,
+		}).Result()
+		if err != nil {
+			if err == goredis.Nil {
+				continue
+			}
+			return videoapp.VectorizeQueueMessage{}, err
+		}
+		if len(streams) == 0 || len(streams[0].Messages) == 0 {
+			continue
+		}
+		msg := streams[0].Messages[0]
+		task, err := q.decodeVectorizeTask(ctx, msg)
+		if err != nil {
+			return videoapp.VectorizeQueueMessage{}, err
+		}
+		return videoapp.VectorizeQueueMessage{MessageID: msg.ID, Task: task}, nil
 	}
-	if len(streams) == 0 || len(streams[0].Messages) == 0 {
-		return videoapp.VectorizeQueueMessage{}, errors.New("empty stream message")
-	}
-	msg := streams[0].Messages[0]
+}
+
+func (q *VectorizeQueue) decodeVectorizeTask(ctx context.Context, msg goredis.XMessage) (videoapp.VectorizeTask, error) {
 	payload, _ := msg.Values["payload"].(string)
 	if payload == "" {
 		_ = q.ackAndDelete(ctx, msg.ID)
-		return videoapp.VectorizeQueueMessage{}, errors.New("stream payload missing")
+		return videoapp.VectorizeTask{}, errors.New("stream payload missing")
 	}
 
 	var task videoapp.VectorizeTask
 	if err := json.Unmarshal([]byte(payload), &task); err != nil {
 		_ = q.ackAndDelete(ctx, msg.ID)
-		return videoapp.VectorizeQueueMessage{}, err
+		return videoapp.VectorizeTask{}, err
 	}
-	return videoapp.VectorizeQueueMessage{MessageID: msg.ID, Task: task}, nil
+	return task, nil
 }
 
 // Ack 在消息成功处理后执行 ACK，并尽力从流中删除该消息。
@@ -249,17 +287,7 @@ func (q *VectorizeQueue) Requeue(ctx context.Context, msg videoapp.VectorizeQueu
 	if err != nil {
 		return err
 	}
-	values := map[string]interface{}{
-		"payload":      string(b),
-		"retry_reason": reason,
-	}
-	if delay > 0 {
-		values["visible_at"] = time.Now().Add(delay).Unix()
-	}
-	if err := withRetry(ctx, func() error {
-		_, err := q.rdb.XAdd(ctx, &goredis.XAddArgs{Stream: q.key, Values: values}).Result()
-		return err
-	}); err != nil {
+	if err := enqueueStreamPayload(ctx, q.rdb, q.key, string(b), reason, delay); err != nil {
 		return err
 	}
 	return q.ackAndDelete(ctx, msg.MessageID)

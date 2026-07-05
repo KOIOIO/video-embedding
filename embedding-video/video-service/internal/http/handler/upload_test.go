@@ -27,6 +27,7 @@ type stubUploadApp struct {
 	completeChunkedFunc    func(context.Context, videoapp.CompleteChunkedUploadInput) (videoapp.UploadResult, error)
 	initiateArchiveFunc    func(context.Context, videoapp.InitiateChunkedUploadInput) (videoapp.ChunkedUploadStatus, error)
 	completeArchiveFunc    func(context.Context, videoapp.CompleteChunkedUploadInput) (videoapp.ArchiveUploadResult, error)
+	archiveProgressFunc    func(context.Context, string) (videoapp.ArchiveProcessingProgress, error)
 
 	uploadVideoInput videoapp.UploadVideoInput
 	archiveInput     videoapp.UploadVideoArchiveInput
@@ -47,6 +48,8 @@ type stubUploadApp struct {
 	statusCalls      int
 	completeCalls    int
 	archiveDoneCalls int
+	progressCalls    int
+	progressBatchID  string
 }
 
 func (s *stubUploadApp) UploadVideo(ctx context.Context, input videoapp.UploadVideoInput) (videoapp.UploadResult, error) {
@@ -131,6 +134,15 @@ func (s *stubUploadApp) CompleteChunkedArchiveUpload(ctx context.Context, input 
 	return videoapp.ArchiveUploadResult{}, nil
 }
 
+func (s *stubUploadApp) GetArchiveProcessingProgress(ctx context.Context, batchID string) (videoapp.ArchiveProcessingProgress, error) {
+	s.progressCalls++
+	s.progressBatchID = batchID
+	if s.archiveProgressFunc != nil {
+		return s.archiveProgressFunc(ctx, batchID)
+	}
+	return videoapp.ArchiveProcessingProgress{}, nil
+}
+
 func TestUploadVideo_RequiresFile(t *testing.T) {
 	h := handler.NewUploadHandler(&stubUploadApp{})
 
@@ -170,6 +182,9 @@ func TestUploadVideo_Success(t *testing.T) {
 			if input.Title != "Sample" || input.Description != "Desc" {
 				t.Fatalf("unexpected metadata: title=%q description=%q", input.Title, input.Description)
 			}
+			if input.UserID != 42 {
+				t.Fatalf("unexpected user id: %d", input.UserID)
+			}
 			payload, err := io.ReadAll(input.Reader)
 			if err != nil {
 				t.Fatalf("read input: %v", err)
@@ -189,6 +204,9 @@ func TestUploadVideo_Success(t *testing.T) {
 	}
 	if err := writer.WriteField("description", "Desc"); err != nil {
 		t.Fatalf("write description: %v", err)
+	}
+	if err := writer.WriteField("user_id", "42"); err != nil {
+		t.Fatalf("write user_id: %v", err)
 	}
 	partHeader := textproto.MIMEHeader{}
 	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="demo.mp4"`)
@@ -237,6 +255,9 @@ func TestUploadVideoArchive_Success(t *testing.T) {
 			if input.Description != "Batch" {
 				t.Fatalf("unexpected description: %q", input.Description)
 			}
+			if input.UserID != 42 {
+				t.Fatalf("unexpected user id: %d", input.UserID)
+			}
 			payload, err := io.ReadAll(input.Reader)
 			if err != nil {
 				t.Fatalf("read archive input: %v", err)
@@ -283,6 +304,9 @@ func TestUploadVideoArchive_Success(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	if err := writer.WriteField("description", "Batch"); err != nil {
 		t.Fatalf("write description: %v", err)
+	}
+	if err := writer.WriteField("user_id", "42"); err != nil {
+		t.Fatalf("write user_id: %v", err)
 	}
 	partHeader := textproto.MIMEHeader{}
 	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="lessons.zip"`)
@@ -427,6 +451,9 @@ func TestInitiateChunkedUpload_Success(t *testing.T) {
 			if input.Title != "Big Lesson" || input.Description != "Desc" {
 				t.Fatalf("unexpected metadata: %+v", input)
 			}
+			if input.UserID != 42 {
+				t.Fatalf("unexpected user id: %d", input.UserID)
+			}
 			if input.FileSize != 10 || input.ChunkSize != 5 || input.TotalChunks != 2 {
 				t.Fatalf("unexpected chunk config: %+v", input)
 			}
@@ -443,7 +470,7 @@ func TestInitiateChunkedUpload_Success(t *testing.T) {
 	}
 	h := handler.NewUploadHandler(stub)
 
-	body := bytes.NewBufferString(`{"file_name":"big.mp4","content_type":"video/mp4","title":"Big Lesson","description":"Desc","file_size":10,"chunk_size":5,"total_chunks":2}`)
+	body := bytes.NewBufferString(`{"file_name":"big.mp4","content_type":"video/mp4","title":"Big Lesson","description":"Desc","user_id":42,"file_size":10,"chunk_size":5,"total_chunks":2}`)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/videos/uploads", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -584,6 +611,9 @@ func TestInitiateChunkedArchiveUpload_Success(t *testing.T) {
 			if input.Description != "Batch" {
 				t.Fatalf("unexpected description: %q", input.Description)
 			}
+			if input.UserID != 42 {
+				t.Fatalf("unexpected user id: %d", input.UserID)
+			}
 			if input.FileSize != 20 || input.ChunkSize != 5 || input.TotalChunks != 4 {
 				t.Fatalf("unexpected chunk config: %+v", input)
 			}
@@ -600,7 +630,7 @@ func TestInitiateChunkedArchiveUpload_Success(t *testing.T) {
 	}
 	h := handler.NewUploadHandler(stub)
 
-	body := bytes.NewBufferString(`{"file_name":"lessons.zip","content_type":"application/zip","description":"Batch","file_size":20,"chunk_size":5,"total_chunks":4}`)
+	body := bytes.NewBufferString(`{"file_name":"lessons.zip","content_type":"application/zip","description":"Batch","user_id":42,"file_size":20,"chunk_size":5,"total_chunks":4}`)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/videos/archive/uploads", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -626,7 +656,8 @@ func TestCompleteChunkedArchiveUpload_Success(t *testing.T) {
 				t.Fatalf("unexpected complete archive input: %+v", input)
 			}
 			return videoapp.ArchiveUploadResult{
-				Total: 2,
+				BatchID: "batch-1",
+				Total:   2,
 				Uploaded: []videoapp.UploadResult{
 					{VideoID: 31, TaskID: "31", RawURL: "/videos/raw/a.mp4", HLSURL: "/videos/hls/a/master.m3u8", Name: "a.mp4"},
 				},
@@ -650,7 +681,37 @@ func TestCompleteChunkedArchiveUpload_Success(t *testing.T) {
 		t.Fatalf("expected one archive complete call, got %d", stub.archiveDoneCalls)
 	}
 	assertBodyContains(t, w.Body.Bytes(), `"total":2`)
+	assertBodyContains(t, w.Body.Bytes(), `"batch_id":"batch-1"`)
 	assertBodyContains(t, w.Body.Bytes(), `"uploaded":1`)
 	assertBodyContains(t, w.Body.Bytes(), `"skipped_files":["notes.txt"]`)
 	assertBodyContains(t, w.Body.Bytes(), `"video_id":31`)
+}
+
+func TestGetArchiveProcessingProgress_Success(t *testing.T) {
+	stub := &stubUploadApp{
+		archiveProgressFunc: func(_ context.Context, batchID string) (videoapp.ArchiveProcessingProgress, error) {
+			if batchID != "batch-1" {
+				t.Fatalf("unexpected batch id: %s", batchID)
+			}
+			return videoapp.ArchiveProcessingProgress{Total: 237, Transcoded: 12, Vectorized: 8}, nil
+		},
+	}
+	h := handler.NewUploadHandler(stub)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/videos/archive/batches/batch-1/progress", nil)
+	router := gin.New()
+	router.GET("/api/videos/archive/batches/:batchId/progress", h.GetArchiveProcessingProgress)
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.progressCalls != 1 || stub.progressBatchID != "batch-1" {
+		t.Fatalf("unexpected progress call: calls=%d batch=%q", stub.progressCalls, stub.progressBatchID)
+	}
+	assertBodyContains(t, w.Body.Bytes(), `"total":237`)
+	assertBodyContains(t, w.Body.Bytes(), `"transcoded":12`)
+	assertBodyContains(t, w.Body.Bytes(), `"vectorized":8`)
 }

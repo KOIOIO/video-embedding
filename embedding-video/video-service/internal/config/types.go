@@ -18,6 +18,8 @@ type Config struct {
 	VectorWorker       VectorWorkerConfig       `yaml:"VectorWorker"`
 	VectorStageWorkers VectorStageWorkersConfig `yaml:"VectorStageWorkers"`
 	WorkerPools        WorkerPoolsConfig        `yaml:"WorkerPools"`
+	Recommendation     RecommendationConfig     `yaml:"Recommendation"`
+	Gorse              GorseConfig              `yaml:"Gorse"`
 	Embedding          EmbeddingConfig          `yaml:"embedding"`
 	ASR                ASRConfig                `yaml:"asr"`
 	AI                 AIConfig                 `yaml:"AI"`
@@ -133,6 +135,7 @@ type RedisKeysConfig struct {
 	SegmentReactionUser   string `yaml:"SegmentReactionUser"`
 	TranscodeStatus       string `yaml:"TranscodeStatus"`
 	RuntimeActiveCounter  string `yaml:"RuntimeActiveCounter"`
+	RandomPlayRecent      string `yaml:"RandomPlayRecent"`
 }
 
 // PostgresConfig 定义 PostgreSQL 连接信息与连接池参数。
@@ -146,11 +149,13 @@ type PostgresConfig struct {
 
 // RustFSConfig 定义对象存储连接参数。
 type RustFSConfig struct {
-	Endpoint  string `yaml:"Endpoint"`
-	AccessKey string `yaml:"AccessKey"`
-	SecretKey string `yaml:"SecretKey"`
-	Bucket    string `yaml:"Bucket"`
-	UseSSL    bool   `yaml:"UseSSL"`
+	Endpoint     string `yaml:"Endpoint"`
+	AccessKey    string `yaml:"AccessKey"`
+	SecretKey    string `yaml:"SecretKey"`
+	Bucket       string `yaml:"Bucket"`
+	UseSSL       bool   `yaml:"UseSSL"`
+	Region       string `yaml:"Region"`
+	BucketLookup string `yaml:"BucketLookup"`
 }
 
 // TransConfig 定义转码 worker 的并发、超时与模式参数。
@@ -200,6 +205,29 @@ type WorkerPoolConfig struct {
 	Size int `yaml:"Size"`
 }
 
+// RecommendationConfig controls which personalized recommendation chain is primary.
+type RecommendationConfig struct {
+	Engine                    string `yaml:"Engine"`
+	RandomPlayDedupeWindowSec int    `yaml:"RandomPlayDedupeWindowSec"`
+}
+
+// GorseConfig defines the local Gorse recommendation engine integration.
+type GorseConfig struct {
+	Endpoint          string `yaml:"Endpoint"`
+	APIKey            string `yaml:"APIKey"`
+	TimeoutSeconds    int    `yaml:"TimeoutSeconds"`
+	ShadowMode        bool   `yaml:"ShadowMode"`
+	SyncEnabled       bool   `yaml:"SyncEnabled"`
+	WriteBackEnabled  bool   `yaml:"WriteBackEnabled"`
+	CandidateLimit    int    `yaml:"CandidateLimit"`
+	SyncIntervalMins  int    `yaml:"SyncIntervalMins"`
+	EnableGate        bool   `yaml:"EnableGate"`
+	MinFeedbackCount  int    `yaml:"MinFeedbackCount"`
+	MinRecommendItems int    `yaml:"MinRecommendItems"`
+	CleanupEnabled    bool   `yaml:"CleanupEnabled"`
+	DataRetentionDays int    `yaml:"DataRetentionDays"`
+}
+
 // EmbeddingConfig 定义向量化所需的 Embedding 服务配置。
 type EmbeddingConfig struct {
 	Options struct {
@@ -223,5 +251,6 @@ type ASRConfig struct {
 
 // AIConfig 保存向量维度等 AI 基础参数。
 type AIConfig struct {
-	EmbeddingDim int `yaml:"EmbeddingDim"`
+	EmbeddingDim int    `yaml:"EmbeddingDim"`
+	Provider     string `yaml:"Provider"`
 }

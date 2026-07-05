@@ -10,9 +10,10 @@ import (
 )
 
 type StreamQueueOptions struct {
-	Key      string
-	Group    string
-	Consumer string
+	Key            string
+	Group          string
+	Consumer       string
+	PendingMinIdle time.Duration
 }
 
 type StreamMessage[T any] struct {
@@ -21,10 +22,11 @@ type StreamMessage[T any] struct {
 }
 
 type StreamQueue[T any] struct {
-	rdb      *goredis.Client
-	key      string
-	group    string
-	consumer string
+	rdb            *goredis.Client
+	key            string
+	group          string
+	consumer       string
+	pendingMinIdle time.Duration
 }
 
 func NewStreamQueue[T any](rdb *goredis.Client, opts StreamQueueOptions) *StreamQueue[T] {
@@ -36,11 +38,16 @@ func NewStreamQueue[T any](rdb *goredis.Client, opts StreamQueueOptions) *Stream
 	if consumer == "" {
 		consumer = streamConsumerName("stream")
 	}
+	pendingMinIdle := opts.PendingMinIdle
+	if pendingMinIdle <= 0 {
+		pendingMinIdle = defaultStreamPendingMinIdle
+	}
 	return &StreamQueue[T]{
-		rdb:      rdb,
-		key:      opts.Key,
-		group:    group,
-		consumer: consumer,
+		rdb:            rdb,
+		key:            opts.Key,
+		group:          group,
+		consumer:       consumer,
+		pendingMinIdle: pendingMinIdle,
 	}
 }
 
@@ -52,18 +59,20 @@ func (q *StreamQueue[T]) Enqueue(ctx context.Context, payload T) error {
 	if err != nil {
 		return err
 	}
-	return withRetry(ctx, func() error {
-		_, err := q.rdb.XAdd(ctx, &goredis.XAddArgs{
-			Stream: q.key,
-			Values: map[string]interface{}{"payload": string(b)},
-		}).Result()
-		return err
-	})
+	return enqueueStreamPayload(ctx, q.rdb, q.key, string(b), "", 0)
 }
 
 func (q *StreamQueue[T]) Dequeue(ctx context.Context, block time.Duration) (StreamMessage[T], error) {
 	if err := q.ensureGroup(ctx); err != nil {
 		return StreamMessage[T]{}, err
+	}
+	if err := promoteDueDelayed(ctx, q.rdb, q.key); err != nil {
+		return StreamMessage[T]{}, err
+	}
+	if raw, ok, err := claimPendingStreamMessage(ctx, q.rdb, q.key, q.group, q.consumer, q.pendingMinIdle); err != nil {
+		return StreamMessage[T]{}, err
+	} else if ok {
+		return q.decodeMessage(ctx, raw)
 	}
 	streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
 		Group:    q.group,
@@ -78,7 +87,10 @@ func (q *StreamQueue[T]) Dequeue(ctx context.Context, block time.Duration) (Stre
 	if len(streams) == 0 || len(streams[0].Messages) == 0 {
 		return StreamMessage[T]{}, errors.New("empty stream message")
 	}
-	raw := streams[0].Messages[0]
+	return q.decodeMessage(ctx, streams[0].Messages[0])
+}
+
+func (q *StreamQueue[T]) decodeMessage(ctx context.Context, raw goredis.XMessage) (StreamMessage[T], error) {
 	payload, _ := raw.Values["payload"].(string)
 	if payload == "" {
 		_ = q.ackAndDelete(ctx, raw.ID)
@@ -104,17 +116,7 @@ func (q *StreamQueue[T]) Requeue(ctx context.Context, msg StreamMessage[T], dela
 	if err != nil {
 		return err
 	}
-	values := map[string]interface{}{
-		"payload":      string(b),
-		"retry_reason": reason,
-	}
-	if delay > 0 {
-		values["visible_at"] = time.Now().Add(delay).Unix()
-	}
-	if err := withRetry(ctx, func() error {
-		_, err := q.rdb.XAdd(ctx, &goredis.XAddArgs{Stream: q.key, Values: values}).Result()
-		return err
-	}); err != nil {
+	if err := enqueueStreamPayload(ctx, q.rdb, q.key, string(b), reason, delay); err != nil {
 		return err
 	}
 	return q.ackAndDelete(ctx, msg.ID)

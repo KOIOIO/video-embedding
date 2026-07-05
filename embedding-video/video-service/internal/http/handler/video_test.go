@@ -38,7 +38,8 @@ type stubVideoApp struct {
 	getReactionCountsFunc        func(context.Context, uint64) (videoapp.VideoReactionCounts, bool, error)
 	submitSegmentReactionFunc    func(context.Context, uint64, uint64, videoapp.VideoReactionType) (videoapp.VideoReactionResult, bool, error)
 	getSegmentReactionCountsFunc func(context.Context, uint64) (videoapp.VideoReactionCounts, bool, error)
-	randomPlaySegmentFunc        func(context.Context) (videoapp.RecommendResultItem, bool, error)
+	randomPlaySegmentFunc        func(context.Context, videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error)
+	externalTwoTowerFunc         func(context.Context, videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
 
 	listVideosCalls            int
 	listVideosFilter           videoapp.ListFilter
@@ -62,6 +63,9 @@ type stubVideoApp struct {
 	getReactionCountsID        uint64
 	getSegmentReactionCountsID uint64
 	randomPlaySegmentCalls     int
+	randomPlaySegmentInput     videoapp.RandomPlayVideoSegmentInput
+	externalTwoTowerCalls      int
+	externalTwoTowerInput      videoapp.RandomPlayVideoSegmentInput
 }
 
 func (s *stubVideoApp) ListVideos(ctx context.Context, filter videoapp.ListFilter) ([]domainvideo.Video, error) {
@@ -198,12 +202,22 @@ func (s *stubVideoApp) GetSegmentReactionCounts(ctx context.Context, segmentID u
 	return videoapp.VideoReactionCounts{}, false, nil
 }
 
-func (s *stubVideoApp) RandomPlayVideoSegment(ctx context.Context) (videoapp.RecommendResultItem, bool, error) {
+func (s *stubVideoApp) RandomPlayVideoSegment(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error) {
 	s.randomPlaySegmentCalls++
+	s.randomPlaySegmentInput = input
 	if s.randomPlaySegmentFunc != nil {
-		return s.randomPlaySegmentFunc(ctx)
+		return s.randomPlaySegmentFunc(ctx, input)
 	}
 	return videoapp.RecommendResultItem{}, false, nil
+}
+
+func (s *stubVideoApp) ExternalTwoTowerItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error) {
+	s.externalTwoTowerCalls++
+	s.externalTwoTowerInput = input
+	if s.externalTwoTowerFunc != nil {
+		return s.externalTwoTowerFunc(ctx, input)
+	}
+	return nil, nil
 }
 
 func TestListVideos_UsesApplicationService(t *testing.T) {
@@ -889,7 +903,10 @@ func TestGetSegmentReactionCounts_Success(t *testing.T) {
 
 func TestRandomPlayVideoSegment_ReturnsPlayableSegment(t *testing.T) {
 	stub := &stubVideoApp{
-		randomPlaySegmentFunc: func(context.Context) (videoapp.RecommendResultItem, bool, error) {
+		randomPlaySegmentFunc: func(_ context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error) {
+			if input.UserID != 7 {
+				t.Fatalf("expected user_id 7 to be passed, got %d", input.UserID)
+			}
 			return videoapp.RecommendResultItem{
 				VideoID:        11,
 				VideoSegmentID: 101,
@@ -916,7 +933,7 @@ func TestRandomPlayVideoSegment_ReturnsPlayableSegment(t *testing.T) {
 	h := handler.NewVideoHandler(stub)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/video-segments/random-play", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/video-segments/random-play?user_id=7", nil)
 	router := gin.New()
 	router.GET("/api/video-segments/random-play", h.RandomPlayVideoSegment)
 
@@ -928,6 +945,9 @@ func TestRandomPlayVideoSegment_ReturnsPlayableSegment(t *testing.T) {
 	if stub.randomPlaySegmentCalls != 1 {
 		t.Fatalf("expected one random segment call, got %d", stub.randomPlaySegmentCalls)
 	}
+	if stub.randomPlaySegmentInput.UserID != 7 {
+		t.Fatalf("expected user_id 7 to be passed, got %d", stub.randomPlaySegmentInput.UserID)
+	}
 	assertBodyContains(t, w.Body.Bytes(), `"video_id":11`)
 	assertBodyContains(t, w.Body.Bytes(), `"video_segment_id":101`)
 	assertBodyContains(t, w.Body.Bytes(), `"start_time_sec":10`)
@@ -935,6 +955,119 @@ func TestRandomPlayVideoSegment_ReturnsPlayableSegment(t *testing.T) {
 	assertBodyContains(t, w.Body.Bytes(), `"title":"segment title"`)
 	assertBodyContains(t, w.Body.Bytes(), `"cover_url":"/covers/11.jpg"`)
 	assertBodyContains(t, w.Body.Bytes(), `"play_url":"/videos/hls/2026/06/09/playable/master.m3u8"`)
+}
+
+func TestExternalTwoTowerRecommendations_ReturnsStringIDs(t *testing.T) {
+	stub := &stubVideoApp{
+		externalTwoTowerFunc: func(_ context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error) {
+			if input.UserID != 7 || input.Limit != 3 {
+				t.Fatalf("input = %+v, want user 7 limit 3", input)
+			}
+			return []uint64{102, 101, 0, 103}, nil
+		},
+	}
+	h := handler.NewVideoHandler(stub)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/internal/recommendations/external/two-tower?user_id=7&n=3", nil)
+	router := gin.New()
+	router.GET("/api/internal/recommendations/external/two-tower", h.ExternalTwoTowerRecommendations)
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.externalTwoTowerCalls != 1 {
+		t.Fatalf("external calls = %d, want 1", stub.externalTwoTowerCalls)
+	}
+	var ids []string
+	if err := json.Unmarshal(w.Body.Bytes(), &ids); err != nil {
+		t.Fatalf("decode ids: %v body=%s", err, w.Body.String())
+	}
+	want := []string{"102", "101", "103"}
+	if len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Fatalf("ids = %v, want %v", ids, want)
+	}
+}
+
+func TestExternalTwoTowerRecommendations_ReturnsEmptyForMissingUserID(t *testing.T) {
+	stub := &stubVideoApp{}
+	h := handler.NewVideoHandler(stub)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/internal/recommendations/external/two-tower", nil)
+	router := gin.New()
+	router.GET("/api/internal/recommendations/external/two-tower", h.ExternalTwoTowerRecommendations)
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.externalTwoTowerCalls != 0 {
+		t.Fatalf("external calls = %d, want 0", stub.externalTwoTowerCalls)
+	}
+	assertBodyContains(t, w.Body.Bytes(), `[]`)
+}
+
+func TestRandomPlayVideoSegment_DefaultsMissingUserIDToSix(t *testing.T) {
+	stub := &stubVideoApp{
+		randomPlaySegmentFunc: func(_ context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error) {
+			if input.UserID != 6 {
+				t.Fatalf("expected missing user_id to default to 6, got %d", input.UserID)
+			}
+			return videoapp.RecommendResultItem{
+				VideoID:        11,
+				VideoSegmentID: 101,
+				Video: domainvideo.Video{
+					ID:          11,
+					Title:       "video title",
+					VideoURL:    "/videos/raw/2026/06/09/playable.mp4",
+					Status:      domainvideo.StatusDone,
+					IsPublished: true,
+				},
+			}, true, nil
+		},
+		resolvePlaybackURLFunc: func(context.Context, domainvideo.Video) string {
+			return "/videos/hls/2026/06/09/playable/master.m3u8"
+		},
+	}
+	h := handler.NewVideoHandler(stub)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/video-segments/random-play", nil)
+	router := gin.New()
+	router.GET("/api/video-segments/random-play", h.RandomPlayVideoSegment)
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.randomPlaySegmentInput.UserID != 6 {
+		t.Fatalf("expected user_id 6 to be passed, got %d", stub.randomPlaySegmentInput.UserID)
+	}
+}
+
+func TestRandomPlayVideoSegment_RejectsInvalidUserID(t *testing.T) {
+	stub := &stubVideoApp{}
+	h := handler.NewVideoHandler(stub)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/video-segments/random-play?user_id=bad", nil)
+	router := gin.New()
+	router.GET("/api/video-segments/random-play", h.RandomPlayVideoSegment)
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.randomPlaySegmentCalls != 0 {
+		t.Fatalf("expected no random segment call, got %d", stub.randomPlaySegmentCalls)
+	}
+	assertBodyContains(t, w.Body.Bytes(), `"code":"invalid_argument"`)
 }
 
 func TestRandomPlayVideoSegment_ReturnsNotFoundWhenNoSegmentExists(t *testing.T) {

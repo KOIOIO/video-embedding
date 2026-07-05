@@ -8,13 +8,16 @@ import (
 func TestNewUploadedInitializesDefaults(t *testing.T) {
 	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
 
-	v, err := NewUploaded(" lesson 1 ", "desc", "raw/lesson.mp4", now)
+	v, err := NewUploaded(" lesson 1 ", "desc", "raw/lesson.mp4", 1, now)
 	if err != nil {
 		t.Fatalf("NewUploaded returned error: %v", err)
 	}
 
 	if v.Title != " lesson 1 " {
 		t.Fatalf("Title = %q", v.Title)
+	}
+	if v.UserID != 1 {
+		t.Fatalf("UserID = %d, want 1", v.UserID)
 	}
 	if v.Status != StatusUploaded {
 		t.Fatalf("Status = %v, want %v", v.Status, StatusUploaded)
@@ -33,17 +36,20 @@ func TestNewUploadedInitializesDefaults(t *testing.T) {
 func TestNewUploadedRejectsMissingRequiredFields(t *testing.T) {
 	now := time.Now()
 
-	if _, err := NewUploaded(" ", "desc", "raw.mp4", now); err == nil {
+	if _, err := NewUploaded(" ", "desc", "raw.mp4", 1, now); err == nil {
 		t.Fatal("expected missing title to fail")
 	}
-	if _, err := NewUploaded("title", "desc", " ", now); err == nil {
+	if _, err := NewUploaded("title", "desc", " ", 1, now); err == nil {
 		t.Fatal("expected missing video url to fail")
+	}
+	if _, err := NewUploaded("title", "desc", "raw.mp4", 0, now); err == nil {
+		t.Fatal("expected missing user id to fail")
 	}
 }
 
 func TestVideoStatusTransitions(t *testing.T) {
 	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
-	v, err := NewUploaded("title", "desc", "raw.mp4", now)
+	v, err := NewUploaded("title", "desc", "raw.mp4", 1, now)
 	if err != nil {
 		t.Fatalf("NewUploaded returned error: %v", err)
 	}
@@ -68,7 +74,7 @@ func TestVideoStatusTransitions(t *testing.T) {
 
 func TestVideoRejectsInvalidStatusTransitions(t *testing.T) {
 	now := time.Now()
-	v, err := NewUploaded("title", "desc", "raw.mp4", now)
+	v, err := NewUploaded("title", "desc", "raw.mp4", 1, now)
 	if err != nil {
 		t.Fatalf("NewUploaded returned error: %v", err)
 	}

@@ -2,7 +2,9 @@ package persistence
 
 import (
 	"context"
+	"math"
 	"testing"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -18,10 +20,157 @@ func newVideoRepoTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduUserVideoRecommend{}); err != nil {
+	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduRecommendExposure{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
+}
+
+func TestBuildTowerVectorEnablesNormalizedVectorForPositiveEvents(t *testing.T) {
+	now := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
+	vector, status := buildTowerVector([]towerEvent{
+		{
+			Source:       "segment_reaction",
+			ReactionType: "like",
+			Vector:       []float32{3, 4},
+			EventTime:    now.Add(-time.Hour),
+		},
+	}, now)
+
+	if status != 1 {
+		t.Fatalf("status = %d, want 1", status)
+	}
+	if len(vector) != 2 {
+		t.Fatalf("vector length = %d, want 2: %#v", len(vector), vector)
+	}
+	if !floatClose(float64(vector[0]), 0.6) || !floatClose(float64(vector[1]), 0.8) {
+		t.Fatalf("vector = %#v, want normalized [0.6 0.8]", vector)
+	}
+}
+
+func TestBuildTowerVectorDisablesVectorWithoutPositiveEvents(t *testing.T) {
+	now := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
+	vector, status := buildTowerVector([]towerEvent{
+		{
+			Source:       "segment_reaction",
+			ReactionType: "dislike",
+			Vector:       []float32{1, 0},
+			EventTime:    now.Add(-time.Hour),
+		},
+	}, now)
+
+	if status != 0 {
+		t.Fatalf("status = %d, want 0", status)
+	}
+	if vector != nil {
+		t.Fatalf("vector = %#v, want nil", vector)
+	}
+}
+
+func floatClose(got float64, want float64) bool {
+	return math.Abs(got-want) < 0.000001
+}
+
+func TestCanUploadVideoAllowsUserTypesTwoAndThreeOnly(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	if err := db.Exec(`CREATE TABLE sys_user (id INTEGER PRIMARY KEY, user_type INTEGER NOT NULL)`).Error; err != nil {
+		t.Fatalf("create sys_user: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO sys_user (id, user_type) VALUES (1, 1), (2, 2), (3, 3)`).Error; err != nil {
+		t.Fatalf("seed sys_user: %v", err)
+	}
+	repo := NewGormVideoRepository(db)
+
+	for _, userID := range []uint64{2, 3} {
+		allowed, err := repo.CanUploadVideo(ctx, userID)
+		if err != nil {
+			t.Fatalf("CanUploadVideo(%d) returned error: %v", userID, err)
+		}
+		if !allowed {
+			t.Fatalf("CanUploadVideo(%d) = false, want true", userID)
+		}
+	}
+
+	for _, userID := range []uint64{1, 404} {
+		allowed, err := repo.CanUploadVideo(ctx, userID)
+		if err != nil {
+			t.Fatalf("CanUploadVideo(%d) returned error: %v", userID, err)
+		}
+		if allowed {
+			t.Fatalf("CanUploadVideo(%d) = true, want false", userID)
+		}
+	}
+}
+
+func TestSaveRecommendationExposuresPersistsRankAndStrategy(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+	now := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+
+	err := repo.SaveRecommendationExposures(ctx, []videoapp.RecommendationExposure{
+		{
+			RequestID:      "req-1",
+			UserID:         7,
+			QuestionID:     99,
+			VideoID:        11,
+			VideoSegmentID: 22,
+			Rank:           1,
+			Score:          0.8,
+			Strategy:       videoapp.RecommendStrategyQuestionVector,
+			Now:            now,
+		},
+	})
+	if err != nil {
+		t.Fatalf("SaveRecommendationExposures returned error: %v", err)
+	}
+
+	var row model.EduRecommendExposure
+	if err := db.First(&row).Error; err != nil {
+		t.Fatalf("query exposure: %v", err)
+	}
+	if row.RequestID != "req-1" || row.UserID != 7 || row.QuestionID != 99 || row.VideoID != 11 || row.VideoSegmentID != 22 {
+		t.Fatalf("unexpected exposure row: %+v", row)
+	}
+	if row.Rank != 1 || row.Score != 0.8 || row.Strategy != videoapp.RecommendStrategyQuestionVector || row.Clicked || row.Watched {
+		t.Fatalf("unexpected exposure metadata: %+v", row)
+	}
+}
+
+func TestMarkRecommendationExposureWatchedUpdatesLatestMatchingExposure(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+	first := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	second := first.Add(time.Minute)
+
+	if err := db.Create(&[]model.EduRecommendExposure{
+		{RequestID: "req-old", UserID: 7, QuestionID: 99, VideoID: 11, VideoSegmentID: 22, Rank: 1, Score: 0.8, Strategy: videoapp.RecommendStrategyQuestionVector, CreateTime: first, UpdateTime: first, Deleted: 0},
+		{RequestID: "req-new", UserID: 7, QuestionID: 99, VideoID: 11, VideoSegmentID: 22, Rank: 1, Score: 0.9, Strategy: videoapp.RecommendStrategyProfileRerank, CreateTime: second, UpdateTime: second, Deleted: 0},
+	}).Error; err != nil {
+		t.Fatalf("seed exposures: %v", err)
+	}
+
+	markTime := second.Add(time.Minute)
+	if err := repo.MarkRecommendationExposureWatched(ctx, 7, 99, 22, markTime); err != nil {
+		t.Fatalf("MarkRecommendationExposureWatched returned error: %v", err)
+	}
+
+	var oldRow model.EduRecommendExposure
+	if err := db.Where("request_id = ?", "req-old").First(&oldRow).Error; err != nil {
+		t.Fatalf("query old exposure: %v", err)
+	}
+	if oldRow.Clicked || oldRow.Watched {
+		t.Fatalf("old exposure should remain unmarked: %+v", oldRow)
+	}
+	var newRow model.EduRecommendExposure
+	if err := db.Where("request_id = ?", "req-new").First(&newRow).Error; err != nil {
+		t.Fatalf("query new exposure: %v", err)
+	}
+	if !newRow.Clicked || !newRow.Watched || !newRow.ClickedTime.Equal(markTime) || !newRow.WatchedTime.Equal(markTime) {
+		t.Fatalf("new exposure should be marked watched: %+v", newRow)
+	}
 }
 
 func seedVideoResource(t *testing.T, db *gorm.DB, id uint64) {
@@ -145,6 +294,323 @@ func TestFindRandomPlayableSegmentFallsBackToVideoTitleAndReportsMissing(t *test
 	}
 	if result.TitleOverride != "fallback title" {
 		t.Fatalf("expected video title fallback, got %q", result.TitleOverride)
+	}
+}
+
+func TestFindRandomPlayableSegmentExcludingSkipsRecentSegments(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+
+	videos := []model.EduVideoResource{
+		{ID: 31, Title: "first video", VideoURL: "/raw/31.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, Deleted: 0},
+		{ID: 32, Title: "second video", VideoURL: "/raw/32.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, Deleted: 0},
+	}
+	if err := db.Create(&videos).Error; err != nil {
+		t.Fatalf("seed videos: %v", err)
+	}
+	segments := []model.EduVideoSegment{
+		{ID: 301, VideoID: 31, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "recent segment", Status: 1, Deleted: 0},
+		{ID: 302, VideoID: 32, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "fresh segment", Status: 1, Deleted: 0},
+	}
+	if err := db.Create(&segments).Error; err != nil {
+		t.Fatalf("seed segments: %v", err)
+	}
+
+	result, found, err := repo.FindRandomPlayableSegmentExcluding(ctx, []uint64{301})
+	if err != nil {
+		t.Fatalf("FindRandomPlayableSegmentExcluding returned error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected a playable segment")
+	}
+	if result.VideoSegmentID != 302 {
+		t.Fatalf("VideoSegmentID = %d, want 302", result.VideoSegmentID)
+	}
+}
+
+func TestHydrateRecommendedSegmentsByIDFiltersAndPreservesGorseOrder(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+
+	videos := []model.EduVideoResource{
+		{ID: 11, Title: "video 11", VideoURL: "/raw/11.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 12, Title: "video 12", VideoURL: "/raw/12.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 13, Title: "video 13", VideoURL: "/raw/13.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 14, Title: "video 14", VideoURL: "/raw/14.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 15, Title: "video 15", VideoURL: "/raw/15.mp4", Status: int16(domainvideo.StatusProcessing), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 16, Title: "video 16", VideoURL: "/raw/16.mp4", Status: int16(domainvideo.StatusDone), IsPublish: false, IsRec: true, Deleted: 0},
+	}
+	if err := db.Create(&videos).Error; err != nil {
+		t.Fatalf("seed videos: %v", err)
+	}
+	if err := db.Model(&model.EduVideoResource{}).Where("id = ?", 16).Update("is_published", false).Error; err != nil {
+		t.Fatalf("mark unpublished: %v", err)
+	}
+	segments := []model.EduVideoSegment{
+		{ID: 101, VideoID: 11, SegmentIndex: 1, StartTimeSec: 10, EndTimeSec: 40, ContentSummary: "segment 101", Status: 1, Deleted: 0},
+		{ID: 102, VideoID: 12, SegmentIndex: 1, StartTimeSec: 10, EndTimeSec: 40, ContentSummary: "segment 102", Status: 1, Deleted: 0},
+		{ID: 103, VideoID: 13, SegmentIndex: 1, StartTimeSec: 10, EndTimeSec: 40, ContentSummary: "segment 103", Status: 1, Deleted: 0},
+		{ID: 104, VideoID: 14, SegmentIndex: 1, StartTimeSec: 10, EndTimeSec: 40, ContentSummary: "segment 104", Status: 1, Deleted: 0},
+		{ID: 105, VideoID: 15, SegmentIndex: 1, StartTimeSec: 10, EndTimeSec: 40, ContentSummary: "segment 105", Status: 1, Deleted: 0},
+		{ID: 106, VideoID: 16, SegmentIndex: 1, StartTimeSec: 10, EndTimeSec: 40, ContentSummary: "segment 106", Status: 1, Deleted: 0},
+	}
+	if err := db.Create(&segments).Error; err != nil {
+		t.Fatalf("seed segments: %v", err)
+	}
+	if err := db.Create(&model.EduUserReaction{UserID: 7, VideoID: 12, VideoSegmentID: 102, ReactionType: "dislike", Deleted: 0}).Error; err != nil {
+		t.Fatalf("seed dislike: %v", err)
+	}
+	if err := db.Create(&model.EduUserVideoRecommend{UserID: 7, VideoID: 13, QuestionID: 0, VideoSegmentID: 103, IsWatched: true, Deleted: 0}).Error; err != nil {
+		t.Fatalf("seed watched: %v", err)
+	}
+
+	got, err := repo.HydrateRecommendedSegmentsByID(ctx, 7, []uint64{104, 102, 101, 106, 103, 105, 101})
+	if err != nil {
+		t.Fatalf("HydrateRecommendedSegmentsByID returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d candidates: %+v", len(got), got)
+	}
+	if got[0].VideoSegmentID != 104 || got[1].VideoSegmentID != 101 {
+		t.Fatalf("got order = [%d %d], want [104 101]", got[0].VideoSegmentID, got[1].VideoSegmentID)
+	}
+	if got[0].SegmentTitle != "segment 104" || got[1].VideoID != 11 {
+		t.Fatalf("unexpected hydrated data: %+v", got)
+	}
+}
+
+func TestFindRecommendedSegmentsByWeakKnowledgeMatchesLowestMasteryDescriptions(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+
+	if err := db.Exec(`CREATE TABLE edu_user_knowledge_mastery (
+		user_id INTEGER NOT NULL,
+		knowledge_point_id INTEGER NOT NULL,
+		mastery REAL NOT NULL,
+		deleted INTEGER DEFAULT 0
+	)`).Error; err != nil {
+		t.Fatalf("create mastery table: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE dict_knowledge_point (
+		id INTEGER PRIMARY KEY,
+		name TEXT,
+		discription TEXT,
+		description TEXT,
+		deleted INTEGER DEFAULT 0
+	)`).Error; err != nil {
+		t.Fatalf("create knowledge dict: %v", err)
+	}
+
+	videos := []model.EduVideoResource{
+		{ID: 11, Title: "一次函数专题", VideoURL: "/raw/11.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 12, Title: "几何专题", VideoURL: "/raw/12.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 13, Title: "已看专题", VideoURL: "/raw/13.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 14, Title: "第十一弱专题", VideoURL: "/raw/14.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 15, Title: "无摘要斜率专题", Description: "一次函数 斜率", VideoURL: "/raw/15.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+	}
+	if err := db.Create(&videos).Error; err != nil {
+		t.Fatalf("seed videos: %v", err)
+	}
+	segments := []model.EduVideoSegment{
+		{ID: 101, VideoID: 11, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "一次函数图像", KnowledgeTags: model.TextArray{"一次函数"}, Status: 1, Deleted: 0},
+		{ID: 102, VideoID: 12, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "三角形面积", KnowledgeTags: model.TextArray{"几何"}, Status: 1, Deleted: 0},
+		{ID: 103, VideoID: 13, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "一次函数练习", KnowledgeTags: model.TextArray{"一次函数"}, Status: 1, Deleted: 0},
+		{ID: 104, VideoID: 14, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "第十一弱知识点", KnowledgeTags: model.TextArray{"第十一弱"}, Status: 1, Deleted: 0},
+		{ID: 105, VideoID: 15, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "综合复习", Status: 1, Deleted: 0},
+	}
+	if err := db.Create(&segments).Error; err != nil {
+		t.Fatalf("seed segments: %v", err)
+	}
+	if err := db.Create(&model.EduUserVideoRecommend{UserID: 7, VideoID: 13, QuestionID: 0, VideoSegmentID: 103, IsWatched: true, Deleted: 0}).Error; err != nil {
+		t.Fatalf("seed watched: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO edu_user_knowledge_mastery (user_id, knowledge_point_id, mastery, deleted) VALUES
+		(7, 1, 0.10, 0),
+		(7, 2, 0.20, 0),
+		(7, 3, 0.30, 0),
+		(7, 4, 0.40, 0),
+		(7, 5, 0.50, 0),
+		(7, 6, 0.60, 0),
+		(7, 7, 0.70, 0),
+		(7, 8, 0.80, 0),
+		(7, 9, 0.90, 0),
+		(7, 10, 1.00, 0),
+		(7, 11, 1.10, 0),
+		(8, 2, 0.05, 0)`).Error; err != nil {
+		t.Fatalf("seed mastery: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO dict_knowledge_point (id, name, discription, description, deleted) VALUES
+		(1, '一次函数', '一次函数 图像 斜率', '', 0),
+		(2, '三角形面积', '三角形 面积', '', 0),
+		(3, '无匹配三', '无匹配三', '', 0),
+		(4, '无匹配四', '无匹配四', '', 0),
+		(5, '无匹配五', '无匹配五', '', 0),
+		(6, '无匹配六', '无匹配六', '', 0),
+		(7, '无匹配七', '无匹配七', '', 0),
+		(8, '无匹配八', '无匹配八', '', 0),
+		(9, '无匹配九', '无匹配九', '', 0),
+		(10, '无匹配十', '无匹配十', '', 0),
+		(11, '第十一弱', '第十一弱 知识点', '', 0)`).Error; err != nil {
+		t.Fatalf("seed knowledge dict: %v", err)
+	}
+
+	got, err := repo.FindRecommendedSegmentsByWeakKnowledge(ctx, 7, 5, 10)
+	if err != nil {
+		t.Fatalf("FindRecommendedSegmentsByWeakKnowledge returned error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d candidates: %+v", len(got), got)
+	}
+	if got[0].VideoSegmentID != 101 || got[0].VideoID != 11 || got[0].SegmentTitle != "一次函数图像" {
+		t.Fatalf("candidate = %+v, want segment 101", got[0])
+	}
+	if got[1].VideoSegmentID != 105 || got[1].VideoID != 15 || got[1].SegmentTitle != "综合复习" {
+		t.Fatalf("candidate = %+v, want segment 105 from resource title/description match", got[1])
+	}
+	if got[2].VideoSegmentID != 102 || got[2].VideoID != 12 || got[2].SegmentTitle != "三角形面积" {
+		t.Fatalf("candidate = %+v, want segment 102", got[2])
+	}
+}
+
+func TestFindRecommendedSegmentsByWeakKnowledgeSupportsLegacyKnowledgePointColumnCase(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+
+	if err := db.Exec(`CREATE TABLE edu_user_knowledge_mastery (
+		user_id INTEGER NOT NULL,
+		Knowledge_point_id INTEGER NOT NULL,
+		mastery REAL NOT NULL
+	)`).Error; err != nil {
+		t.Fatalf("create mastery table: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE dict_knowledge_point (
+		id INTEGER PRIMARY KEY,
+		name TEXT,
+		discription TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create knowledge dict: %v", err)
+	}
+	if err := db.Create(&model.EduVideoResource{ID: 21, Title: "一次函数专题", VideoURL: "/raw/21.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0}).Error; err != nil {
+		t.Fatalf("seed video: %v", err)
+	}
+	if err := db.Create(&model.EduVideoSegment{ID: 201, VideoID: 21, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, ContentSummary: "一次函数图像", Status: 1, Deleted: 0}).Error; err != nil {
+		t.Fatalf("seed segment: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO edu_user_knowledge_mastery (user_id, Knowledge_point_id, mastery) VALUES (7, 1, 0.10)`).Error; err != nil {
+		t.Fatalf("seed mastery: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO dict_knowledge_point (id, name, discription) VALUES (1, '一次函数', '一次函数 图像')`).Error; err != nil {
+		t.Fatalf("seed knowledge dict: %v", err)
+	}
+
+	got, err := repo.FindRecommendedSegmentsByWeakKnowledge(ctx, 7, 5, 10)
+	if err != nil {
+		t.Fatalf("FindRecommendedSegmentsByWeakKnowledge returned error: %v", err)
+	}
+	if len(got) != 1 || got[0].VideoSegmentID != 201 {
+		t.Fatalf("got candidates = %+v, want segment 201", got)
+	}
+}
+
+func TestListWeakKnowledgeReturnsLowestMasteryDescriptions(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+
+	if err := db.Exec(`CREATE TABLE edu_user_knowledge_mastery (
+		user_id INTEGER NOT NULL,
+		knowledge_point_id INTEGER NOT NULL,
+		mastery REAL NOT NULL
+	)`).Error; err != nil {
+		t.Fatalf("create mastery table: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE dict_knowledge_point (
+		id INTEGER PRIMARY KEY,
+		name TEXT,
+		discription TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create knowledge dict: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO edu_user_knowledge_mastery (user_id, knowledge_point_id, mastery) VALUES
+		(7, 1, 0.30),
+		(7, 2, 0.10),
+		(7, 3, 0.20),
+		(8, 4, 0.01)`).Error; err != nil {
+		t.Fatalf("seed mastery: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO dict_knowledge_point (id, name, discription) VALUES
+		(1, '一次函数', '图像与斜率'),
+		(2, '三角形面积', '底高关系'),
+		(3, '方程', '一元一次方程'),
+		(4, '其他用户', '不应出现')`).Error; err != nil {
+		t.Fatalf("seed knowledge dict: %v", err)
+	}
+
+	got, err := repo.ListWeakKnowledge(ctx, 7, 2)
+	if err != nil {
+		t.Fatalf("ListWeakKnowledge returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows: %+v", len(got), got)
+	}
+	if got[0].KnowledgePointID != 2 || got[0].Name != "三角形面积" || got[0].Description != "底高关系" {
+		t.Fatalf("first weak knowledge = %+v, want id=2", got[0])
+	}
+	if got[1].KnowledgePointID != 3 || got[1].Name != "方程" || got[1].Description != "一元一次方程" {
+		t.Fatalf("second weak knowledge = %+v, want id=3", got[1])
+	}
+}
+
+func TestGetArchiveProcessingProgressCountsTranscodeAndVectorizedVideos(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+
+	videos := []model.EduVideoResource{
+		{ID: 11, Title: "done and vectorized", VideoURL: "/raw/11.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, Deleted: 0},
+		{ID: 12, Title: "done only", VideoURL: "/raw/12.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, Deleted: 0},
+		{ID: 13, Title: "processing", VideoURL: "/raw/13.mp4", Status: int16(domainvideo.StatusProcessing), IsPublish: true, Deleted: 0},
+		{ID: 14, Title: "deleted", VideoURL: "/raw/14.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, Deleted: 1},
+	}
+	if err := db.Create(&videos).Error; err != nil {
+		t.Fatalf("seed videos: %v", err)
+	}
+	segments := []model.EduVideoSegment{
+		{ID: 101, VideoID: 11, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, Status: 1, Deleted: 0},
+		{ID: 102, VideoID: 12, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, Status: 1, Deleted: 0},
+		{ID: 103, VideoID: 13, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, Status: 1, Deleted: 0},
+		{ID: 104, VideoID: 14, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 30, Status: 1, Deleted: 0},
+	}
+	if err := db.Create(&segments).Error; err != nil {
+		t.Fatalf("seed segments: %v", err)
+	}
+	if err := db.Create(&model.EduVideoVectorStage{
+		TaskID:       "11",
+		VideoID:      11,
+		Stage:        "vector.finalize",
+		SegmentIndex: 0,
+		SegmentID:    0,
+		Status:       2,
+	}).Error; err != nil {
+		t.Fatalf("seed vector stage: %v", err)
+	}
+
+	progress, err := repo.GetArchiveProcessingProgress(ctx, []uint64{11, 12, 13, 14})
+	if err != nil {
+		t.Fatalf("GetArchiveProcessingProgress returned error: %v", err)
+	}
+	if progress.Total != 4 {
+		t.Fatalf("Total = %d, want 4", progress.Total)
+	}
+	if progress.Transcoded != 2 {
+		t.Fatalf("Transcoded = %d, want 2", progress.Transcoded)
+	}
+	if progress.Vectorized != 1 {
+		t.Fatalf("Vectorized = %d, want 1", progress.Vectorized)
 	}
 }
 

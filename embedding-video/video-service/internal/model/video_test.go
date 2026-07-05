@@ -82,4 +82,19 @@ func TestVideoModelTableNames(t *testing.T) {
 	if got := (EduVideoVectorStage{}).TableName(); got != "edu_video_vector_stage" {
 		t.Fatalf("EduVideoVectorStage.TableName() = %q", got)
 	}
+	if got := (EduUserVideoProfile{}).TableName(); got != "edu_user_video_profile" {
+		t.Fatalf("EduUserVideoProfile.TableName() = %q", got)
+	}
+	if got := (EduRecommendExposure{}).TableName(); got != "edu_recommend_exposure" {
+		t.Fatalf("EduRecommendExposure.TableName() = %q", got)
+	}
+	if got := (EduVideoItemEmbedding{}).TableName(); got != "edu_video_item_embedding" {
+		t.Fatalf("EduVideoItemEmbedding.TableName() = %q", got)
+	}
+	if got := (EduUserTowerEmbedding{}).TableName(); got != "edu_user_tower_embedding" {
+		t.Fatalf("EduUserTowerEmbedding.TableName() = %q", got)
+	}
+	if got := (EduRecommendModelVersion{}).TableName(); got != "edu_recommend_model_version" {
+		t.Fatalf("EduRecommendModelVersion.TableName() = %q", got)
+	}
 }

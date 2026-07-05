@@ -28,10 +28,12 @@ func (r *refineRepo) HasExistingSegments(_ context.Context, _ uint64) (bool, err
 
 type fakeRefineProcessor struct {
 	called bool
+	task   VectorStageTask
 }
 
-func (p *fakeRefineProcessor) ProcessRefine(_ context.Context, _ VectorStageTask, _ []persistence.VectorStageRecord) error {
+func (p *fakeRefineProcessor) ProcessRefine(_ context.Context, task VectorStageTask, _ []persistence.VectorStageRecord) error {
 	p.called = true
+	p.task = task
 	return nil
 }
 
@@ -70,5 +72,35 @@ func TestRefineStageRejectsEmptyCoarseWithoutExistingSegments(t *testing.T) {
 	}
 	if processor.called {
 		t.Fatal("processor should not be called")
+	}
+}
+
+func TestRefineStageAllowsEmptyCoarseForShortVideo(t *testing.T) {
+	repo := &refineRepo{}
+	nextQueue := &recordingStageQueue{}
+	processor := &fakeRefineProcessor{}
+	handler := newRefineStageHandler(repo, processor, nextQueue)
+
+	err := handler.Handle(context.Background(), VectorStageTask{
+		TaskID:  "task-short",
+		VideoID: 9,
+		RawKey:  "raw/short.mp4",
+		Stage:   VectorStageRefine,
+		EndSec:  194,
+	})
+	if err != nil {
+		t.Fatalf("Handle returned error: %v", err)
+	}
+	if !processor.called {
+		t.Fatal("expected processor to be called")
+	}
+	if processor.task.EndSec != 194 {
+		t.Fatalf("processor EndSec = %d, want 194", processor.task.EndSec)
+	}
+	if len(repo.complete) != 1 || repo.complete[0].Stage != VectorStageRefine {
+		t.Fatalf("refine not complete: %+v", repo.complete)
+	}
+	if len(nextQueue.enqueued) != 1 || nextQueue.enqueued[0].Stage != VectorStageFinalize {
+		t.Fatalf("finalize not enqueued: %+v", nextQueue.enqueued)
 	}
 }

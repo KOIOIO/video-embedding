@@ -29,6 +29,7 @@ type uploadApp interface {
 	CompleteChunkedUpload(ctx context.Context, input videoapp.CompleteChunkedUploadInput) (videoapp.UploadResult, error)
 	InitiateChunkedArchiveUpload(ctx context.Context, input videoapp.InitiateChunkedUploadInput) (videoapp.ChunkedUploadStatus, error)
 	CompleteChunkedArchiveUpload(ctx context.Context, input videoapp.CompleteChunkedUploadInput) (videoapp.ArchiveUploadResult, error)
+	GetArchiveProcessingProgress(ctx context.Context, batchID string) (videoapp.ArchiveProcessingProgress, error)
 }
 
 func New(app any) *Handler {
@@ -48,12 +49,17 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+	userID, ok := parseOptionalPositiveUintForm(c, "user_id")
+	if !ok {
+		return
+	}
 
 	result, err := h.app.UploadVideo(c.Request.Context(), videoapp.UploadVideoInput{
 		FileName:    header.Filename,
 		ContentType: header.Header.Get("Content-Type"),
 		Title:       strings.TrimSpace(c.PostForm("title")),
 		Description: c.PostForm("description"),
+		UserID:      userID,
 		Reader:      file,
 	})
 	if err != nil {
@@ -78,11 +84,16 @@ func (h *Handler) UploadVideoArchive(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+	userID, ok := parseOptionalPositiveUintForm(c, "user_id")
+	if !ok {
+		return
+	}
 
 	result, err := h.app.UploadVideoArchive(c.Request.Context(), videoapp.UploadVideoArchiveInput{
 		FileName:    header.Filename,
 		ContentType: header.Header.Get("Content-Type"),
 		Description: c.PostForm("description"),
+		UserID:      userID,
 		Reader:      file,
 	})
 	if err != nil {
@@ -137,6 +148,7 @@ func (h *Handler) InitiateChunkedUpload(c *gin.Context) {
 		ContentType: req.ContentType,
 		Title:       strings.TrimSpace(req.Title),
 		Description: req.Description,
+		UserID:      req.UserID,
 		FileSize:    req.FileSize,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: req.TotalChunks,
@@ -221,6 +233,7 @@ func (h *Handler) InitiateChunkedArchiveUpload(c *gin.Context) {
 		FileName:    req.FileName,
 		ContentType: req.ContentType,
 		Description: req.Description,
+		UserID:      req.UserID,
 		FileSize:    req.FileSize,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: req.TotalChunks,
@@ -248,6 +261,26 @@ func (h *Handler) CompleteChunkedArchiveUpload(c *gin.Context) {
 	}
 
 	writeSuccess(c, mapArchiveUploadResult(result))
+}
+
+func (h *Handler) GetArchiveProcessingProgress(c *gin.Context) {
+	batchID, ok := parseRequiredStringParam(c, "batchId", "batch_id is required")
+	if !ok {
+		return
+	}
+
+	progress, err := h.app.GetArchiveProcessingProgress(c.Request.Context(), batchID)
+	if err != nil {
+		writeAppError(c, err, "get archive processing progress failed")
+		return
+	}
+
+	writeSuccess(c, dto.ArchiveProcessingProgressData{
+		BatchID:    batchID,
+		Total:      progress.Total,
+		Transcoded: progress.Transcoded,
+		Vectorized: progress.Vectorized,
+	})
 }
 
 func readRequiredFormFile(c *gin.Context) (multipart.File, *multipart.FileHeader, bool) {
@@ -303,6 +336,7 @@ func mapArchiveUploadResult(result videoapp.ArchiveUploadResult) dto.UploadVideo
 		})
 	}
 	return dto.UploadVideoArchiveData{
+		BatchID:      result.BatchID,
 		Total:        result.Total,
 		Uploaded:     len(result.Uploaded),
 		Failed:       len(result.Failed),
@@ -339,6 +373,19 @@ func parseNonNegativeIntParam(c *gin.Context, name string) (int, bool) {
 	value, err := strconv.Atoi(raw)
 	if err != nil || value < 0 {
 		httperrors.Write(c, httperrors.InvalidArgument(name+" must be a non-negative integer"))
+		return 0, false
+	}
+	return value, true
+}
+
+func parseOptionalPositiveUintForm(c *gin.Context, name string) (uint64, bool) {
+	raw := strings.TrimSpace(c.PostForm(name))
+	if raw == "" {
+		return 0, true
+	}
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || value == 0 {
+		httperrors.Write(c, httperrors.InvalidArgument(name+" must be a positive integer"))
 		return 0, false
 	}
 	return value, true

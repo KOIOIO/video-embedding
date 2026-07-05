@@ -22,6 +22,7 @@ func NewUploadHandler(app any) *UploadHandler {
 // @Param file formData file true "Video file"
 // @Param title formData string false "Video title"
 // @Param description formData string false "Video description"
+// @Param user_id formData int false "Uploader user ID, defaults to 1"
 // @Success 200 {object} dto.UploadVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -37,6 +38,7 @@ func (h *UploadHandler) UploadVideo(c *gin.Context) {
 // @Produce json
 // @Param file formData file true "Zip archive"
 // @Param description formData string false "Video description"
+// @Param user_id formData int false "Uploader user ID, defaults to 1"
 // @Success 200 {object} dto.UploadVideoArchiveResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -143,4 +145,18 @@ func (h *UploadHandler) InitiateChunkedArchiveUpload(c *gin.Context) {
 // @Router /api/videos/archive/uploads/{uploadId}/complete [post]
 func (h *UploadHandler) CompleteChunkedArchiveUpload(c *gin.Context) {
 	h.inner.CompleteChunkedArchiveUpload(c)
+}
+
+// GetArchiveProcessingProgress godoc
+// @Summary Get zip archive processing progress
+// @Tags videos
+// @Produce json
+// @Param batchId path string true "Archive batch ID"
+// @Success 200 {object} dto.ArchiveProcessingProgressResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/videos/archive/batches/{batchId}/progress [get]
+func (h *UploadHandler) GetArchiveProcessingProgress(c *gin.Context) {
+	h.inner.GetArchiveProcessingProgress(c)
 }

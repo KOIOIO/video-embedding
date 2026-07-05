@@ -3,7 +3,6 @@ package transcodeworker
 import (
 	"context"
 	"errors"
-	"os"
 	"time"
 
 	"nlp-video-analysis/internal/application/videoapp"
@@ -14,7 +13,6 @@ import (
 	infraredis "nlp-video-analysis/internal/infrastructure/redis"
 	"nlp-video-analysis/internal/infrastructure/transcode"
 	"nlp-video-analysis/internal/lifecycle"
-	"nlp-video-analysis/internal/model"
 
 	goredis "github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
@@ -54,32 +52,14 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	if sqlDB, err := db.DB(); err == nil {
 		app.AddCloser(func(ctx context.Context) error { return sqlDB.Close() })
 	}
-	_ = db.Exec("CREATE EXTENSION IF NOT EXISTS vector;").Error
-	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}); err != nil {
-		zap.L().Fatal("db_migrate_failed", zap.String("worker", "transcode"), zap.String("err", err.Error()))
-	}
-	if err := persistence.EnsureIntegrity(db); err != nil {
+	if err := persistence.EnsureSchema(db); err != nil {
 		zap.L().Fatal("db_integrity_failed", zap.String("worker", "transcode"), zap.String("err", err.Error()))
 	}
 
 	rawDir := config.RawPath(cfg)
 	hlsDir := config.HLSPath(cfg)
 
-	accessKey := cfg.RustFS.AccessKey
-	if accessKey == "" {
-		accessKey = os.Getenv("RUSTFS_ACCESS_KEY")
-	}
-	secretKey := cfg.RustFS.SecretKey
-	if secretKey == "" {
-		secretKey = os.Getenv("RUSTFS_SECRET_KEY")
-	}
-	store, err := objectstorage.NewRustFS(objectstorage.Config{
-		Endpoint:  cfg.RustFS.Endpoint,
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		Bucket:    cfg.RustFS.Bucket,
-		UseSSL:    cfg.RustFS.UseSSL,
-	})
+	store, err := objectstorage.NewRustFS(config.ObjectStorageConfig(cfg))
 	if err != nil {
 		zap.L().Fatal("init_rustfs_failed", zap.String("worker", "transcode"), zap.String("err", err.Error()))
 	}
@@ -92,6 +72,11 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	fileStorage := fs.NewLocalFileStorage()
 	queueKey := config.TranscodeQueueKey(cfg)
 	queue := infraredis.NewTranscodeQueue(rdb, queueKey)
+	taskTimeout := time.Duration(cfg.Transcode.TaskTimeoutMinutes) * time.Minute
+	if taskTimeout <= 0 {
+		taskTimeout = 6 * time.Hour
+	}
+	queue.SetPendingMinIdle(taskTimeout + time.Minute)
 	reactionQueue := infraredis.NewVideoReactionBufferWithOptions(rdb, infraredis.VideoReactionBufferOptions{
 		StreamKey:    config.VideoReactionQueueKey(cfg),
 		CountsPrefix: config.VideoReactionCountsPrefix(cfg),
@@ -105,14 +90,12 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	statusStore := infraredis.NewTranscodeStatusStore(rdb, config.TranscodeStatusPrefix(cfg))
 	videoapp.SetRuntimeCounters(infraredis.NewRuntimeCounterStore(rdb, config.RuntimeActiveCounterPrefix(cfg)))
 	transcoder := transcode.NewFFmpegTranscoder(cfg.FFmpeg, cfg.Transcode.Mode)
-	taskTimeout := time.Duration(cfg.Transcode.TaskTimeoutMinutes) * time.Minute
-	if taskTimeout <= 0 {
-		taskTimeout = 6 * time.Hour
-	}
 	worker := videoapp.NewWorker(queue, statusStore, repo, transcoder, store, store, uploader, fileStorage, rawDir, hlsDir, taskTimeout)
 	worker.CoverURLPrefix = config.CoverURLPrefix(cfg)
 	reactionWorker := videoapp.NewVideoReactionWorker(reactionQueue, repo)
 	segmentReactionWorker := videoapp.NewSegmentReactionWorker(segmentReactionQueue, repo)
+	reactionWorker.ProfileUpdater = repo
+	segmentReactionWorker.ProfileUpdater = repo
 
 	zap.L().Info("transcode_worker_start",
 		zap.String("queue_key", queueKey),

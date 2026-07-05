@@ -15,6 +15,55 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/internal/recommendations/external/two-tower": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "internal"
+                ],
+                "summary": "Get two-tower item IDs for Gorse external recommender",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of item IDs, capped at 500",
+                        "name": "n",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/questions": {
             "get": {
                 "produces": [
@@ -266,11 +315,25 @@ const docTemplate = `{
                     "videos"
                 ],
                 "summary": "Random play video segment",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID for two-tower personalized recommendation",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/dto.RandomVideoSegmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
@@ -466,6 +529,12 @@ const docTemplate = `{
                         "description": "Video description",
                         "name": "description",
                         "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Uploader user ID, defaults to 1",
+                        "name": "user_id",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -515,6 +584,12 @@ const docTemplate = `{
                         "description": "Video description",
                         "name": "description",
                         "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Uploader user ID, defaults to 1",
+                        "name": "user_id",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -526,6 +601,52 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/videos/archive/batches/{batchId}/progress": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Get zip archive processing progress",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Archive batch ID",
+                        "name": "batchId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ArchiveProcessingProgressResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorResponse"
                         }
@@ -1384,6 +1505,34 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "dto.ArchiveProcessingProgressData": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "transcoded": {
+                    "type": "integer"
+                },
+                "vectorized": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.ArchiveProcessingProgressResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.ArchiveProcessingProgressData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "dto.ChunkedUploadData": {
             "type": "object",
             "properties": {
@@ -1490,6 +1639,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "total_chunks": {
+                    "type": "integer"
+                },
+                "user_id": {
                     "type": "integer"
                 }
             }
@@ -2017,6 +2169,9 @@ const docTemplate = `{
         "dto.UploadVideoArchiveData": {
             "type": "object",
             "properties": {
+                "batch_id": {
+                    "type": "string"
+                },
                 "errors": {
                     "type": "array",
                     "items": {
@@ -2280,7 +2435,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
-		Title: "Intelligent Teaching Video Analysis and Recommendation API",
+	Title:            "Video Embedding HTTP API",
 	Description:      "Standalone REST API for video upload, playback, recommendation, and question lookup.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

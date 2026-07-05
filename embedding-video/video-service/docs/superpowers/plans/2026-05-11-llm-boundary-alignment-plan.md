@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 `nlp-video-project` 的 hierarchical 分段链路中新增一个可降级的 `Boundary Alignment` 层，同时提升 LLM 语义边界表达能力和 ASR 边界对齐能力，降低开头半句、结尾半句和知识点硬裁切问题。
+**Goal:** 在 `embedding-video` 的 hierarchical 分段链路中新增一个可降级的 `Boundary Alignment` 层，同时提升 LLM 语义边界表达能力和 ASR 边界对齐能力，降低开头半句、结尾半句和知识点硬裁切问题。
 
 **Architecture:** 保持现有 coarse ASR -> LLM segmentation -> refine ASR -> embedding 的主链路不变，在 `internal/worker/vectorworker/tasks/` 下新增独立的边界对齐模块。LLM prompt 和解析层只补充辅助边界字段；真正的边界吸附和相邻片段重叠协调都在 refine 阶段完成，并且任何增强失败都能安全回退到当前 tail alignment 行为。
 
@@ -12,23 +12,23 @@
 
 ## 文件结构与职责
 
-- `nlp-video-project/internal/worker/vectorworker/tasks/db.go`
+- `embedding-video/internal/worker/vectorworker/tasks/db.go`
   - 扩展 `LLMSegment`，增加可选辅助边界字段，保持现有入库字段兼容。
-- `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go`
+- `embedding-video/internal/worker/vectorworker/tasks/hierarchical.go`
   - 更新主 prompt / retry prompt，对 LLM 提出 `boundary_reason`、`start_anchor_text`、`end_anchor_text`、`boundary_confidence` 要求。
-- `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical_test.go`
+- `embedding-video/internal/worker/vectorworker/tasks/hierarchical_test.go`
   - 新增 prompt 和 JSON normalization 的测试，约束新增字段和兼容解析行为。
-- `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go`
+- `embedding-video/internal/worker/vectorworker/tasks/tail_alignment.go`
   - 保留现有尾部规则，抽出共享句首/句尾判断辅助函数，供新边界对齐器复用。
-- `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment.go`
+- `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment.go`
   - 新增边界对齐引擎：窗口计算、候选打分、起止点校正、相邻片段重叠限制。
-- `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment_test.go`
+- `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment_test.go`
   - 新增规则级测试，覆盖开头半句、结尾半句、重叠限制、锚点命中和降级路径。
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
+- `embedding-video/internal/worker/vectorworker/tasks/asr.go`
   - 在 refine 阶段接入新的边界对齐器，保留失败时回退到 `alignSegmentTail` 的路径。
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go`
+- `embedding-video/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go`
   - 新增 refine 集成测试，约束校正结果和降级行为。
-- `nlp-video-project/docs/superpowers/specs/2026-05-11-llm-boundary-alignment-design.md`
+- `embedding-video/docs/superpowers/specs/2026-05-11-llm-boundary-alignment-design.md`
   - 仅当实现现实与 spec 不一致时修正文档，否则不改。
 
 ---
@@ -36,13 +36,13 @@
 ### Task 1: 扩展 LLM segment 契约并补齐 prompt 约束
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/db.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go`
-- Create: `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical_test.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/db.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/hierarchical.go`
+- Create: `embedding-video/internal/worker/vectorworker/tasks/hierarchical_test.go`
 
 - [ ] **Step 1: 先写 JSON normalization 兼容测试**
 
-创建 `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical_test.go`，先锁定“新增字段可解析、缺失字段不报错、未知字段被忽略”的行为：
+创建 `embedding-video/internal/worker/vectorworker/tasks/hierarchical_test.go`，先锁定“新增字段可解析、缺失字段不报错、未知字段被忽略”的行为：
 
 ```go
 package tasks
@@ -116,7 +116,7 @@ func TestNormalizeLLMSegmentsAllowsMissingOptionalBoundaryFields(t *testing.T) {
 
 - [ ] **Step 2: 运行测试，确认当前实现失败**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestNormalizeLLMSegments(KeepsOptionalBoundaryFields|AllowsMissingOptionalBoundaryFields)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "TestNormalizeLLMSegments(KeepsOptionalBoundaryFields|AllowsMissingOptionalBoundaryFields)" -v`
 
 Expected:
 
@@ -127,7 +127,7 @@ FAIL
 
 - [ ] **Step 3: 扩展 `LLMSegment` 结构，增加可选辅助字段**
 
-修改 `nlp-video-project/internal/worker/vectorworker/tasks/db.go`：
+修改 `embedding-video/internal/worker/vectorworker/tasks/db.go`：
 
 ```go
 type LLMSegment struct {
@@ -150,7 +150,7 @@ type LLMSegment struct {
 
 - [ ] **Step 4: 在 normalization 阶段清洗新增字段**
 
-修改 `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go` 的 `NormalizeLLMSegments` 循环，补充字符串 trim 和置信度规范化：
+修改 `embedding-video/internal/worker/vectorworker/tasks/hierarchical.go` 的 `NormalizeLLMSegments` 循环，补充字符串 trim 和置信度规范化：
 
 ```go
 	s.BoundaryReason = strings.TrimSpace(s.BoundaryReason)
@@ -193,7 +193,7 @@ import (
 
 - [ ] **Step 6: 运行测试，确认 prompt 测试先失败**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(BuildHierarchicalSegmentationPromptMentionsBoundaryFields|NormalizeLLMSegments)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(BuildHierarchicalSegmentationPromptMentionsBoundaryFields|NormalizeLLMSegments)" -v`
 
 Expected:
 
@@ -204,7 +204,7 @@ FAIL
 
 - [ ] **Step 7: 更新主 prompt 和 retry prompt 的 schema 与规则说明**
 
-修改 `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go`，在 `BuildHierarchicalSegmentationPrompt` 和 `BuildHierarchicalSegmentationRetryPrompt` 中新增这些约束文本：
+修改 `embedding-video/internal/worker/vectorworker/tasks/hierarchical.go`，在 `BuildHierarchicalSegmentationPrompt` 和 `BuildHierarchicalSegmentationRetryPrompt` 中新增这些约束文本：
 
 ```go
 	b.WriteString("- 如果主题切换点出现在一句话中间，先给出语义边界意图，最终句子收尾由后处理完成\n")
@@ -225,7 +225,7 @@ FAIL
 
 - [ ] **Step 8: 运行测试，确认契约与 prompt 通过**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(BuildHierarchicalSegmentationPromptMentionsBoundaryFields|NormalizeLLMSegments)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(BuildHierarchicalSegmentationPromptMentionsBoundaryFields|NormalizeLLMSegments)" -v`
 
 Expected:
 
@@ -236,19 +236,19 @@ PASS
 - [ ] **Step 9: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/db.go nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go nlp-video-project/internal/worker/vectorworker/tasks/hierarchical_test.go
+git add embedding-video/internal/worker/vectorworker/tasks/db.go embedding-video/internal/worker/vectorworker/tasks/hierarchical.go embedding-video/internal/worker/vectorworker/tasks/hierarchical_test.go
 git commit -m "feat(vector-worker): extend llm boundary contract"
 ```
 
 ### Task 2: 提取可复用的句首/句尾规则并为边界对齐器打基础
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/tail_alignment.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/tail_alignment_test.go`
 
 - [ ] **Step 1: 先写句首/句尾规则测试**
 
-在 `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go` 追加：
+在 `embedding-video/internal/worker/vectorworker/tasks/tail_alignment_test.go` 追加：
 
 ```go
 func TestLooksLikeSentenceStart(t *testing.T) {
@@ -283,7 +283,7 @@ func TestNormalizeBoundaryConfidence(t *testing.T) {
 
 - [ ] **Step 2: 运行测试，确认新函数还不存在**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(LooksLikeSentenceStart|NormalizeBoundaryConfidence)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(LooksLikeSentenceStart|NormalizeBoundaryConfidence)" -v`
 
 Expected:
 
@@ -363,7 +363,7 @@ func NormalizeBoundaryConfidence(s string) string {
 
 - [ ] **Step 5: 运行测试，确认规则层通过且旧测试不回归**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(NormalizeTailAlignmentConfigDefaults|LooksLikeSentenceEnd|NeedsTailExtension|NextAlignedEndSec|LooksLikeSentenceStart|NormalizeBoundaryConfidence)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(NormalizeTailAlignmentConfigDefaults|LooksLikeSentenceEnd|NeedsTailExtension|NextAlignedEndSec|LooksLikeSentenceStart|NormalizeBoundaryConfidence)" -v`
 
 Expected:
 
@@ -374,19 +374,19 @@ PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go
+git add embedding-video/internal/worker/vectorworker/tasks/tail_alignment.go embedding-video/internal/worker/vectorworker/tasks/tail_alignment_test.go embedding-video/internal/worker/vectorworker/tasks/hierarchical.go
 git commit -m "refactor(vector-worker): share boundary rule helpers"
 ```
 
 ### Task 3: 新增 `Boundary Alignment` 引擎和规则测试
 
 **Files:**
-- Create: `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment.go`
-- Create: `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment_test.go`
+- Create: `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment.go`
+- Create: `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment_test.go`
 
 - [ ] **Step 1: 先写规则级测试，约束窗口、重叠和锚点行为**
 
-创建 `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment_test.go`：
+创建 `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment_test.go`：
 
 ```go
 package tasks
@@ -431,7 +431,7 @@ func TestScoreBoundaryCandidateUsesAnchorAndConfidence(t *testing.T) {
 
 - [ ] **Step 2: 运行测试，确认新文件函数全部缺失**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(BuildBoundaryWindows|AlignSegmentBoundariesPrefersNaturalSentenceAndCapsOverlap|ScoreBoundaryCandidateUsesAnchorAndConfidence)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(BuildBoundaryWindows|AlignSegmentBoundariesPrefersNaturalSentenceAndCapsOverlap|ScoreBoundaryCandidateUsesAnchorAndConfidence)" -v`
 
 Expected:
 
@@ -442,7 +442,7 @@ FAIL
 
 - [ ] **Step 3: 新增 `boundary_alignment.go` 的最小结构**
 
-创建 `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment.go`：
+创建 `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment.go`：
 
 ```go
 package tasks
@@ -571,7 +571,7 @@ func TestAlignSegmentBoundariesWithoutAnchorKeepsLegalRange(t *testing.T) {
 
 - [ ] **Step 5: 运行测试，确认引擎行为通过**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(BuildBoundaryWindows|AlignSegmentBoundaries|ScoreBoundaryCandidate)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(BuildBoundaryWindows|AlignSegmentBoundaries|ScoreBoundaryCandidate)" -v`
 
 Expected:
 
@@ -582,20 +582,20 @@ PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment_test.go
+git add embedding-video/internal/worker/vectorworker/tasks/boundary_alignment.go embedding-video/internal/worker/vectorworker/tasks/boundary_alignment_test.go
 git commit -m "feat(vector-worker): add boundary alignment engine"
 ```
 
 ### Task 4: 在 refine ASR 流程中接入边界对齐并保留安全降级
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
-- Create: `nlp-video-project/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go`
-- Keep: `nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/asr.go`
+- Create: `embedding-video/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go`
+- Keep: `embedding-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
 
 - [ ] **Step 1: 先写 refine 集成测试，约束“优先新对齐器，失败回退旧 tail alignment”**
 
-创建 `nlp-video-project/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go`：
+创建 `embedding-video/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go`：
 
 ```go
 package tasks
@@ -655,7 +655,7 @@ func TestAlignSegmentForRefineFallsBackToTailAlignment(t *testing.T) {
 
 - [ ] **Step 2: 运行测试，确认集成函数尚不存在**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestAlignSegmentForRefine" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "TestAlignSegmentForRefine" -v`
 
 Expected:
 
@@ -666,7 +666,7 @@ FAIL
 
 - [ ] **Step 3: 在 `asr.go` 中抽出 `alignSegmentForRefine`，先接入新对齐器，再回退旧 tail alignment**
 
-在 `nlp-video-project/internal/worker/vectorworker/tasks/asr.go` 增加一个小型协调函数：
+在 `embedding-video/internal/worker/vectorworker/tasks/asr.go` 增加一个小型协调函数：
 
 ```go
 func alignSegmentForRefine(
@@ -767,7 +767,7 @@ type job struct {
 
 - [ ] **Step 6: 运行新旧边界测试**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "Test(AlignSegmentForRefine|AlignSegmentTail)" -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -run "Test(AlignSegmentForRefine|AlignSegmentTail)" -v`
 
 Expected:
 
@@ -778,17 +778,17 @@ PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/asr.go nlp-video-project/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go
+git add embedding-video/internal/worker/vectorworker/tasks/asr.go embedding-video/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go
 git commit -m "feat(vector-worker): integrate boundary alignment into refine"
 ```
 
 ### Task 5: 补齐日志、回归测试并完成整包验证
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment_test.go`
-- Modify: `nlp-video-project/docs/superpowers/specs/2026-05-11-llm-boundary-alignment-design.md` only if implementation reality diverges
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/asr.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment.go`
+- Modify: `embedding-video/internal/worker/vectorworker/tasks/boundary_alignment_test.go`
+- Modify: `embedding-video/docs/superpowers/specs/2026-05-11-llm-boundary-alignment-design.md` only if implementation reality diverges
 
 - [ ] **Step 1: 给新对齐器补充结构化日志字段**
 
@@ -837,7 +837,7 @@ func TestAlignSegmentBoundariesCapsOverlapAtThreeSeconds(t *testing.T) {
 
 - [ ] **Step 3: 跑 tasks 包全量测试**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -v`
+Run: `go test ./embedding-video/internal/worker/vectorworker/tasks -v`
 
 Expected:
 
@@ -847,7 +847,7 @@ PASS
 
 - [ ] **Step 4: 跑后端全量回归测试**
 
-Run: `go test ./nlp-video-project/...`
+Run: `go test ./embedding-video/...`
 
 Expected:
 
@@ -880,7 +880,7 @@ vectorize_hierarchical_refine_asr_one_done
 - [ ] **Step 6: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/asr.go nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/boundary_alignment_test.go nlp-video-project/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go
+git add embedding-video/internal/worker/vectorworker/tasks/asr.go embedding-video/internal/worker/vectorworker/tasks/boundary_alignment.go embedding-video/internal/worker/vectorworker/tasks/boundary_alignment_test.go embedding-video/internal/worker/vectorworker/tasks/asr_boundary_alignment_test.go
 git commit -m "test(vector-worker): verify boundary alignment rollout"
 ```
 

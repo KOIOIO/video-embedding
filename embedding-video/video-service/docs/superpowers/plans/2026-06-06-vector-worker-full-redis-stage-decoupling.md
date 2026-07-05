@@ -110,7 +110,7 @@ package vectorworker
 import (
 	"testing"
 
-	"nlp-video-project/http/internal/config"
+	"embedding-video/http/internal/config"
 )
 
 func TestCoarseStageQueueKeyFromConfigUsesDefaults(t *testing.T) {
@@ -291,7 +291,7 @@ Create `internal/worker/vectorworker/stage_config.go`:
 ```go
 package vectorworker
 
-import "nlp-video-project/http/internal/config"
+import "embedding-video/http/internal/config"
 
 var vectorStageOrder = []string{
 	VectorStagePrepare,
@@ -456,8 +456,8 @@ Create `internal/worker/vectorworker/stage_queue.go`:
 package vectorworker
 
 import (
-	"nlp-video-project/http/internal/config"
-	infraredis "nlp-video-project/http/internal/infrastructure/redis"
+	"embedding-video/http/internal/config"
+	infraredis "embedding-video/http/internal/infrastructure/redis"
 
 	goredis "github.com/go-redis/redis/v8"
 )
@@ -497,7 +497,7 @@ import (
 	"errors"
 	"time"
 
-	infraredis "nlp-video-project/http/internal/infrastructure/redis"
+	infraredis "embedding-video/http/internal/infrastructure/redis"
 
 	"go.uber.org/zap"
 )
@@ -754,8 +754,8 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-project/http/internal/application/videoapp"
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/application/videoapp"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type recordingStageQueue struct {
@@ -828,8 +828,8 @@ import (
 	"errors"
 	"strings"
 
-	"nlp-video-project/http/internal/application/videoapp"
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/application/videoapp"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 var errNonHierarchicalStageAdapter = errors.New("stage adapter only handles hierarchical mode")
@@ -945,7 +945,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type prepareRepo struct {
@@ -1029,7 +1029,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 const vectorStageCoarseSegment = "vector.coarse.segment"
@@ -1183,7 +1183,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type coarseRepo struct {
@@ -1279,7 +1279,7 @@ import (
 	"context"
 	"fmt"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type coarseStageRepository interface {
@@ -1390,7 +1390,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type refineRepo struct {
@@ -1486,7 +1486,7 @@ import (
 	"context"
 	"fmt"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type refineStageRepository interface {
@@ -1595,7 +1595,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type finalizeRepo struct {
@@ -1646,7 +1646,7 @@ import (
 	"context"
 	"fmt"
 
-	"nlp-video-project/http/internal/infrastructure/persistence"
+	"embedding-video/http/internal/infrastructure/persistence"
 )
 
 type finalizeStageRepository interface {

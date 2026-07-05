@@ -1,5 +1,23 @@
 basePath: /
 definitions:
+  dto.ArchiveProcessingProgressData:
+    properties:
+      batch_id:
+        type: string
+      total:
+        type: integer
+      transcoded:
+        type: integer
+      vectorized:
+        type: integer
+    type: object
+  dto.ArchiveProcessingProgressResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.ArchiveProcessingProgressData'
+      success:
+        type: boolean
+    type: object
   dto.ChunkedUploadData:
     properties:
       chunk_size:
@@ -69,6 +87,8 @@ definitions:
       title:
         type: string
       total_chunks:
+        type: integer
+      user_id:
         type: integer
     type: object
   dto.PlayVideoData:
@@ -409,6 +429,8 @@ definitions:
     type: object
   dto.UploadVideoArchiveData:
     properties:
+      batch_id:
+        type: string
       errors:
         items:
           $ref: '#/definitions/dto.UploadArchiveError'
@@ -577,9 +599,41 @@ info:
   contact: {}
   description: Standalone REST API for video upload, playback, recommendation, and
     question lookup.
-  title: Intelligent Teaching Video Analysis and Recommendation API
+  title: Video Embedding HTTP API
   version: "1.0"
 paths:
+  /api/internal/recommendations/external/two-tower:
+    get:
+      parameters:
+      - description: User ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: Number of item IDs, capped at 500
+        in: query
+        name: "n"
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get two-tower item IDs for Gorse external recommender
+      tags:
+      - internal
   /api/questions:
     get:
       parameters:
@@ -808,6 +862,11 @@ paths:
       - videos
   /api/video-segments/random-play:
     get:
+      parameters:
+      - description: User ID for two-tower personalized recommendation
+        in: query
+        name: user_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -815,6 +874,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/dto.RandomVideoSegmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -873,6 +936,10 @@ paths:
         in: formData
         name: description
         type: string
+      - description: Uploader user ID, defaults to 1
+        in: formData
+        name: user_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -1244,6 +1311,10 @@ paths:
         in: formData
         name: description
         type: string
+      - description: Uploader user ID, defaults to 1
+        in: formData
+        name: user_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -1260,6 +1331,36 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: Upload a zip archive containing videos
+      tags:
+      - videos
+  /api/videos/archive/batches/{batchId}/progress:
+    get:
+      parameters:
+      - description: Archive batch ID
+        in: path
+        name: batchId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ArchiveProcessingProgressResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get zip archive processing progress
       tags:
       - videos
   /api/videos/archive/uploads:
