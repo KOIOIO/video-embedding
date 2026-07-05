@@ -43,7 +43,7 @@ Redis:
   DB: 0
 
 Postgres:
-  DSN: "host=localhost user=postgres password=postgres dbname=hengshui-tablet port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+  DSN: "host=localhost user=postgres password=postgres dbname=video-embedding port=5432 sslmode=disable TimeZone=Asia/Shanghai"
   MaxOpenConns: 20
   MaxIdleConns: 10
   ConnMaxLifetime: 300
@@ -53,7 +53,7 @@ RustFS:
   Endpoint: "localhost:9000"
   AccessKey: "minioadmin"
   SecretKey: "minioadmin"
-  Bucket: "hengshui-tablet-cloud-drive"
+  Bucket: "video-embedding-storage"
   UseSSL: false
 
 

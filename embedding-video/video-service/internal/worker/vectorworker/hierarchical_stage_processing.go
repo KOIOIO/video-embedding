@@ -30,7 +30,7 @@ type coarseClipJob struct {
 type hierarchicalCoarseInput struct {
 	Store         *objectstorage.RustFS
 	FFmpeg        *transcode.FFmpegTranscoder
-	Client        *openAICompatClient
+	Client        vectorAIClient
 	TmpRoot       string
 	LocalVideo    string
 	VideoID       uint64
@@ -366,7 +366,7 @@ func processHierarchicalCoarseSegments(ctx context.Context, input hierarchicalCo
 type hierarchicalRefineInput struct {
 	DB                  *gorm.DB
 	FFmpeg              *transcode.FFmpegTranscoder
-	Client              *openAICompatClient
+	Client              vectorAIClient
 	TmpRoot             string
 	LocalVideo          string
 	VideoID             uint64
@@ -390,6 +390,9 @@ func processHierarchicalRefine(ctx context.Context, input hierarchicalRefineInpu
 		return errors.New("invalid duration for hierarchical mode")
 	}
 	if len(input.CoarseItems) == 0 {
+		if isShortSingleSegmentVideo(input.DurationSec) {
+			return processShortSingleSegmentRefine(ctx, input)
+		}
 		zap.L().Debug("vectorize_hierarchical_resume",
 			zap.Uint64("video_id", input.VideoID),
 			zap.String("task_id", input.TaskID),
@@ -518,4 +521,96 @@ func processHierarchicalRefine(ctx context.Context, input hierarchicalRefineInpu
 		zap.Uint64("video_id", input.VideoID),
 		zap.String("task_id", input.TaskID))
 	return nil
+}
+
+func processShortSingleSegmentRefine(ctx context.Context, input hierarchicalRefineInput) error {
+	if strings.TrimSpace(input.LLMModel) == "" {
+		return errors.New("llm_model is required for short video summary")
+	}
+	llmTask := VectorStageTask{
+		TaskID:  input.TaskID,
+		VideoID: input.VideoID,
+		Stage:   VectorStageSegmentLLM,
+		EndSec:  input.DurationSec,
+	}
+	input.StageRecorder.Pending(ctx, llmTask)
+
+	audioPath, err := extractWholeVideoAudio(ctx, input.FFmpeg, input.TmpRoot, input.LocalVideo, input.TaskID, input.DurationSec)
+	if err != nil {
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+	defer os.Remove(audioPath)
+
+	asrCtx, cancelASR := context.WithTimeout(ctx, 12*time.Minute)
+	transcript, err := input.Client.Transcribe(asrCtx, audioPath)
+	cancelASR()
+	if err != nil {
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+	transcript = tasks.NormalizeText(transcript)
+	if strings.TrimSpace(transcript) == "" {
+		err := errors.New("short video transcript is empty")
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+
+	prompt, err := tasks.BuildSingleSegmentSummaryPrompt(input.DurationSec, transcript)
+	if err != nil {
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+	llmOut, err := input.Client.ChatCompletionsWithTimeout(ctx, input.LLMModel, prompt, input.LLMTimeoutMinutes)
+	if err != nil {
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+	seg, err := tasks.NormalizeSingleSegmentSummary(llmOut, input.DurationSec)
+	if err != nil {
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+	if err := tasks.UpsertHierarchicalSegments(ctx, input.DB, input.VideoID, []tasks.LLMSegment{seg}); err != nil {
+		input.StageRecorder.Fail(ctx, llmTask, err)
+		return err
+	}
+	input.StageRecorder.Complete(ctx, llmTask, "segments=1")
+	zap.L().Debug("vectorize_short_video_single_segment_saved",
+		zap.Uint64("video_id", input.VideoID),
+		zap.String("task_id", input.TaskID),
+		zap.String("summary", seg.ContentSummary),
+		zap.Int("tags", len(seg.KnowledgeTags)))
+
+	if err := tasks.RefineSegmentsASRAndEmbed(ctx, input.DB, input.FFmpeg, input.Client, input.TmpRoot, input.LocalVideo, input.VideoID, input.TaskID, input.DurationSec, input.ASRWorkers, input.EmbedBatch, input.EmbeddingDim, input.TailCfg, &tasks.RefineASRHints{
+		CoarseItems:       []tasks.CoarseItem{{Index: 0, StartSec: 0, EndSec: input.DurationSec, Text: transcript}},
+		Segments:          []tasks.LLMSegment{seg},
+		LLMModel:          input.LLMModel,
+		LLMTimeoutMinutes: input.LLMTimeoutMinutes,
+	}, input.StageRecorder); err != nil {
+		return err
+	}
+	zap.L().Debug("vectorize_short_video_single_segment_refined",
+		zap.Uint64("video_id", input.VideoID),
+		zap.String("task_id", input.TaskID))
+	return nil
+}
+
+func extractWholeVideoAudio(ctx context.Context, ff *transcode.FFmpegTranscoder, tmpRoot string, localVideo string, taskID string, durationSec int) (string, error) {
+	if ff == nil {
+		return "", errors.New("ffmpeg transcoder is required")
+	}
+	if strings.TrimSpace(localVideo) == "" {
+		return "", errors.New("localVideo is required")
+	}
+	audioPath := filepath.Join(tmpRoot, fmt.Sprintf("%s_short_full.wav", strings.TrimSpace(taskID)))
+	_ = os.Remove(audioPath)
+	extractCtx, cancelExtract := context.WithTimeout(ctx, 8*time.Minute)
+	err := ff.ExtractAudioSegment(extractCtx, localVideo, audioPath, 0, durationSec)
+	cancelExtract()
+	if err != nil {
+		_ = os.Remove(audioPath)
+		return "", err
+	}
+	return audioPath, nil
 }

@@ -1,6 +1,6 @@
 
 Name: video-rpc
-Host: 10.200.10.12
+Host: 127.0.0.1
 Port: 9090
 GRPC:
   MaxMsgSize: 104857600
@@ -39,22 +39,22 @@ FFmpeg:
     Channels: 1
 
 Redis:
-  Addr: "10.200.10.12:16379"
+  Addr: "127.0.0.1:16379"
   Password: ""
   DB: 0
 
 Postgres:
-  DSN: "host=10.200.10.12 user=postgres password=postgres dbname=hengshui-tablet port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+  DSN: "host=127.0.0.1 user=postgres password=postgres dbname=video-embedding port=5432 sslmode=disable TimeZone=Asia/Shanghai"
   MaxOpenConns: 20
   MaxIdleConns: 10
   ConnMaxLifetime: 300
   ConnMaxIdleTime: 60
 
 RustFS:
-  Endpoint: "10.200.10.12:9000"
+  Endpoint: "127.0.0.1:9000"
   AccessKey: "minioadmin"
   SecretKey: "minioadmin"
-  Bucket: "hengshui-tablet-cloud-drive"
+  Bucket: "video-embedding-storage"
   UseSSL: false
 
 

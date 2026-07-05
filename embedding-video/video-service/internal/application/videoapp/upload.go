@@ -13,6 +13,8 @@ import (
 	domainvideo "nlp-video-analysis/internal/domain/video"
 )
 
+const DefaultUploadUserID uint64 = 1
+
 // BuildUploadPlan 根据原始文件名预先计算本地落盘路径、对象存储键和未来播放 URL。
 func (s *Service) BuildUploadPlan(originalFileName string) (UploadPlan, error) {
 	now := s.Now()
@@ -70,7 +72,14 @@ func (s *Service) FinalizeUpload(ctx context.Context, plan UploadPlan, meta Uplo
 		baseName := filepath.Base(plan.OriginalFileName)
 		title = strings.TrimSuffix(baseName, filepath.Ext(baseName))
 	}
-	v, err := domainvideo.NewUploaded(title, meta.Description, plan.RawURL, now)
+	userID := meta.UserID
+	if userID == 0 {
+		userID = DefaultUploadUserID
+	}
+	if err := s.ensureUploadAllowed(ctx, userID); err != nil {
+		return UploadResult{}, err
+	}
+	v, err := domainvideo.NewUploaded(title, meta.Description, plan.RawURL, userID, now)
 	if err != nil {
 		return UploadResult{}, err
 	}
@@ -134,6 +143,21 @@ func (s *Service) FinalizeUpload(ctx context.Context, plan UploadPlan, meta Uplo
 		HLSURL:  plan.HLSURL,
 		Name:    plan.StoredFileName,
 	}, nil
+}
+
+func (s *Service) ensureUploadAllowed(ctx context.Context, userID uint64) error {
+	repo, ok := s.Repo.(VideoUploadPermissionRepository)
+	if !ok {
+		return nil
+	}
+	allowed, err := repo.CanUploadVideo(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return InvalidArgumentError("user is not allowed to upload videos")
+	}
+	return nil
 }
 
 func (s *Service) markUploadBootstrapFailed(ctx context.Context, videoID uint64, cause error) {

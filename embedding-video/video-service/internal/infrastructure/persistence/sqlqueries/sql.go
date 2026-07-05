@@ -58,6 +58,174 @@ ORDER BY s.embedding <=> ?
 LIMIT ?;
 `
 
+// RecommendByWeakKnowledgeVectorQuery 根据用户薄弱知识点向量查询相似视频分段。
+const RecommendByWeakKnowledgeVectorQuery = `
+SELECT
+  s.id AS video_segment_id,
+  s.video_id AS video_id,
+  s.start_time AS start_time_sec,
+  s.end_time AS end_time_sec,
+  (s.embedding <=> ?) AS distance,
+  CASE
+    WHEN TRIM(COALESCE(s.content_summary, '')) <> '' THEN s.content_summary
+    ELSE r.title
+  END AS segment_title,
+  COALESCE(CAST(s.knowledge_tags AS TEXT), '') AS knowledge_tags,
+  r.title AS video_title,
+  r.description AS description,
+  r.video_url AS video_url,
+  r.cover_url AS cover_url,
+  r.status AS status,
+  r.is_published AS is_published,
+  r.is_recommend AS is_recommend,
+  r.view_count AS view_count,
+  r.create_time AS create_time,
+  r.update_time AS update_time
+FROM edu_video_segment s
+JOIN edu_video_resource r ON r.id = s.video_id
+LEFT JOIN edu_user_reaction ur
+  ON ur.user_id = ?
+ AND ur.video_segment_id = s.id
+ AND ur.reaction_type = 'dislike'
+ AND ur.deleted = 0
+LEFT JOIN edu_video_user_reaction vur
+  ON vur.user_id = ?
+ AND vur.video_id = s.video_id
+ AND vur.reaction_type = 'dislike'
+ AND vur.deleted = 0
+LEFT JOIN edu_user_video_recommend watched
+  ON watched.user_id = ?
+ AND watched.video_segment_id = s.id
+ AND watched.is_watched = true
+ AND watched.deleted = 0
+WHERE s.deleted = 0
+  AND s.status = 1
+  AND s.embedding IS NOT NULL
+  AND r.deleted = 0
+  AND r.is_published = true
+  AND (? = false OR r.is_recommend = true)
+  AND r.status = 3
+  AND TRIM(COALESCE(r.video_url, '')) <> ''
+  AND ur.id IS NULL
+  AND vur.id IS NULL
+  AND watched.id IS NULL
+ORDER BY s.embedding <=> ?
+LIMIT ?;
+`
+
+// RecommendByQuestionWithProfileQuery 根据问题向量召回候选，同时计算候选与用户画像的距离和用户历史信号。
+const RecommendByQuestionWithProfileQuery = `
+SELECT
+  s.id AS video_segment_id,
+  s.video_id AS video_id,
+  s.start_time AS start_time_sec,
+  s.end_time AS end_time_sec,
+  (s.embedding <=> ?) AS distance,
+  (s.embedding <=> ?) AS profile_distance,
+  s.content_summary AS segment_title,
+  s.like_count AS like_count,
+  s.double_like_count AS double_like_count,
+  s.dislike_count AS dislike_count,
+  r.video_url AS video_url,
+  r.cover_url AS cover_url,
+  r.status AS status,
+  r.is_published AS is_published,
+  r.is_recommend AS is_recommend,
+  r.view_count AS view_count,
+  r.create_time AS create_time,
+  r.update_time AS update_time,
+  COALESCE(ur.reaction_type = 'dislike' AND ur.deleted = 0, false) AS user_disliked,
+  COALESCE(vur.reaction_type = 'dislike' AND vur.deleted = 0, false) AS user_video_disliked,
+  COALESCE(w.is_watched, false) AS user_watched
+FROM edu_video_segment s
+JOIN edu_video_resource r ON r.id = s.video_id
+LEFT JOIN edu_user_reaction ur
+  ON ur.user_id = ?
+ AND ur.video_segment_id = s.id
+LEFT JOIN edu_video_user_reaction vur
+  ON vur.user_id = ?
+ AND vur.video_id = s.video_id
+LEFT JOIN edu_user_video_recommend w
+  ON w.user_id = ?
+ AND w.video_segment_id = s.id
+ AND w.deleted = 0
+WHERE s.deleted = 0
+  AND s.status = 1
+  AND s.embedding IS NOT NULL
+  AND r.deleted = 0
+ORDER BY s.embedding <=> ?
+LIMIT ?;
+`
+
+const GetUserVideoProfileQuery = `
+SELECT
+  user_id AS user_id,
+  profile_vector::text AS profile_vector,
+  positive_count AS positive_count,
+  model_version AS model_version,
+  status AS status
+FROM edu_user_video_profile
+WHERE user_id = ?
+  AND model_version = ?
+  AND status = 1
+  AND deleted = 0
+LIMIT 1;
+`
+
+const GetUserTowerEmbeddingQuery = `
+SELECT
+  user_id AS user_id,
+  tower_vector::text AS tower_vector,
+  model_version AS model_version,
+  status AS status
+FROM edu_user_tower_embedding
+WHERE user_id = ?
+  AND model_version = ?
+  AND status = 1
+  AND deleted = 0
+LIMIT 1;
+`
+
+const GetActiveRecommendModelVersionQuery = `
+SELECT model_version
+FROM edu_recommend_model_version
+WHERE model_name = ?
+  AND is_active = TRUE
+  AND status = 1
+  AND deleted = 0
+ORDER BY published_at DESC, id DESC
+LIMIT 1;
+`
+
+const RecommendByTwoTowerQuery = `
+SELECT
+  s.id AS video_segment_id,
+  s.video_id AS video_id,
+  s.start_time AS start_time_sec,
+  s.end_time AS end_time_sec,
+  (ie.embedding <=> ?) AS distance,
+  s.content_summary AS segment_title,
+  r.video_url AS video_url,
+  r.cover_url AS cover_url,
+  r.status AS status,
+  r.is_published AS is_published,
+  r.is_recommend AS is_recommend,
+  r.view_count AS view_count,
+  r.create_time AS create_time,
+  r.update_time AS update_time
+FROM edu_video_item_embedding ie
+JOIN edu_video_segment s ON s.id = ie.video_segment_id
+JOIN edu_video_resource r ON r.id = ie.video_id
+WHERE ie.model_version = ?
+  AND ie.status = 1
+  AND ie.deleted = 0
+  AND s.deleted = 0
+  AND s.status = 1
+  AND r.deleted = 0
+ORDER BY ie.embedding <=> ?
+LIMIT ?;
+`
+
 // UpsertUserVideoRecommendQuery 插入或更新用户视频推荐记录
 const UpsertUserVideoRecommendQuery = `
 INSERT INTO edu_user_video_recommend
@@ -160,6 +328,15 @@ ALTER TABLE edu_user_video_recommend ADD COLUMN IF NOT EXISTS is_watched BOOLEAN
 ALTER TABLE edu_user_video_recommend ADD COLUMN IF NOT EXISTS watch_duration INT;
 `
 
+const AddVideoResourceUserIDQuery = `
+ALTER TABLE edu_video_resource ADD COLUMN IF NOT EXISTS user_id BIGINT;
+UPDATE edu_video_resource SET user_id = 1 WHERE user_id IS NULL OR user_id = 0;
+ALTER TABLE edu_video_resource ALTER COLUMN user_id SET DEFAULT 1;
+ALTER TABLE edu_video_resource ALTER COLUMN user_id SET NOT NULL;
+`
+
+const CreateVideoResourceUserIndexQuery = `CREATE INDEX IF NOT EXISTS idx_video_resource_user ON edu_video_resource(user_id);`
+
 // CreateUserQuestionIndexQuery 创建用户-问题索引
 const CreateUserQuestionIndexQuery = `CREATE INDEX IF NOT EXISTS idx_user_video_recommend_user_question ON edu_user_video_recommend(user_id, question_id);`
 
@@ -195,6 +372,99 @@ BEGIN
   END IF;
 END$$;
 `
+
+const CreateUserVideoProfileUniqueConstraintQuery = `
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_user_video_profile_user_model') THEN
+    ALTER TABLE edu_user_video_profile
+      ADD CONSTRAINT uk_user_video_profile_user_model UNIQUE (user_id, model_version);
+  END IF;
+END$$;
+`
+
+const CreateVideoItemEmbeddingTableQuery = `
+CREATE TABLE IF NOT EXISTS edu_video_item_embedding (
+  id BIGSERIAL PRIMARY KEY,
+  video_segment_id BIGINT NOT NULL,
+  video_id BIGINT NOT NULL,
+  embedding vector(64) NOT NULL,
+  model_version TEXT NOT NULL,
+  status SMALLINT DEFAULT 1,
+  deleted SMALLINT DEFAULT 0,
+  create_time TIMESTAMP,
+  update_time TIMESTAMP
+);
+`
+
+const CreateUserTowerEmbeddingTableQuery = `
+CREATE TABLE IF NOT EXISTS edu_user_tower_embedding (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  tower_vector vector(64) NOT NULL,
+  model_version TEXT NOT NULL,
+  status SMALLINT DEFAULT 1,
+  deleted SMALLINT DEFAULT 0,
+  create_time TIMESTAMP,
+  update_time TIMESTAMP
+);
+`
+
+const CreateRecommendModelVersionTableQuery = `
+CREATE TABLE IF NOT EXISTS edu_recommend_model_version (
+  id BIGSERIAL PRIMARY KEY,
+  model_name TEXT NOT NULL,
+  model_version TEXT NOT NULL,
+  artifact_path TEXT,
+  metrics_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_active BOOLEAN DEFAULT FALSE,
+  status SMALLINT DEFAULT 1,
+  published_at TIMESTAMP,
+  create_time TIMESTAMP,
+  update_time TIMESTAMP,
+  deleted SMALLINT DEFAULT 0
+);
+`
+
+const CreateVideoItemEmbeddingUniqueConstraintQuery = `
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_video_item_embedding_segment_model') THEN
+    ALTER TABLE edu_video_item_embedding
+      ADD CONSTRAINT uk_video_item_embedding_segment_model UNIQUE (video_segment_id, model_version);
+  END IF;
+END$$;
+`
+
+const CreateUserTowerEmbeddingUniqueConstraintQuery = `
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_user_tower_embedding_user_model') THEN
+    ALTER TABLE edu_user_tower_embedding
+      ADD CONSTRAINT uk_user_tower_embedding_user_model UNIQUE (user_id, model_version);
+  END IF;
+END$$;
+`
+
+const CreateRecommendModelVersionUniqueConstraintQuery = `
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_recommend_model_version_name_version') THEN
+    ALTER TABLE edu_recommend_model_version
+      ADD CONSTRAINT uk_recommend_model_version_name_version UNIQUE (model_name, model_version);
+  END IF;
+END$$;
+`
+
+const CreateVideoItemEmbeddingModelIndexQuery = `CREATE INDEX IF NOT EXISTS idx_video_item_embedding_model_status ON edu_video_item_embedding(model_version, status, deleted);`
+
+const CreateUserTowerEmbeddingModelIndexQuery = `CREATE INDEX IF NOT EXISTS idx_user_tower_embedding_user_model ON edu_user_tower_embedding(user_id, model_version, status, deleted);`
+
+const CreateRecommendModelVersionActiveIndexQuery = `CREATE INDEX IF NOT EXISTS idx_recommend_model_version_active ON edu_recommend_model_version(model_name, is_active, status, deleted, published_at DESC);`
+
+const CreateRecommendExposureLookupIndexQuery = `CREATE INDEX IF NOT EXISTS idx_recommend_exposure_user_question_segment_time ON edu_recommend_exposure(user_id, question_id, video_segment_id, create_time DESC);`
+
+const CreateRecommendExposureRequestIndexQuery = `CREATE INDEX IF NOT EXISTS idx_recommend_exposure_request_rank ON edu_recommend_exposure(request_id, rank);`
 
 // CreateUserQuestionSegmentUniqueConstraintQuery 创建唯一约束
 const CreateUserQuestionSegmentUniqueConstraintQuery = `

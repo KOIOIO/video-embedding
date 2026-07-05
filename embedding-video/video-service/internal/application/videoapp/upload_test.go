@@ -448,6 +448,9 @@ func (*uploadTestRepo) GetQuestionByID(context.Context, uint64) (QuestionItem, b
 func (*uploadTestRepo) FindRecommendedSegments(context.Context, pgvector.Vector, int) ([]RecommendCandidate, error) {
 	panic("unexpected call")
 }
+func (*uploadTestRepo) FindRecommendedSegmentsByWeakKnowledge(context.Context, uint64, int, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 func (*uploadTestRepo) SaveUserVideoRecommendation(context.Context, uint64, uint64, uint64, uint64, float64, time.Time) error {
 	panic("unexpected call")
 }

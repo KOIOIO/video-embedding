@@ -20,6 +20,7 @@ const (
 // Video 是视频领域对象，承载应用层真正关心的业务字段。
 type Video struct {
 	ID          uint64
+	UserID      uint64
 	Title       string
 	Description string
 	VideoURL    string
@@ -36,15 +37,19 @@ type Video struct {
 }
 
 // NewUploaded 创建一个刚完成原视频上传、尚未进入转码的 Video。
-func NewUploaded(title string, description string, rawVideoURL string, now time.Time) (*Video, error) {
+func NewUploaded(title string, description string, rawVideoURL string, userID uint64, now time.Time) (*Video, error) {
 	if strings.TrimSpace(title) == "" {
 		return nil, errors.New("title is required")
 	}
 	if strings.TrimSpace(rawVideoURL) == "" {
 		return nil, errors.New("video_url is required")
 	}
+	if userID == 0 {
+		return nil, errors.New("user_id is required")
+	}
 
 	return &Video{
+		UserID:      userID,
 		Title:       title,
 		Description: description,
 		VideoURL:    rawVideoURL,

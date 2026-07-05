@@ -65,7 +65,7 @@ func handleVectorizeTask(
 	db *gorm.DB,
 	store *objectstorage.RustFS,
 	ff *transcode.FFmpegTranscoder,
-	client *openAICompatClient,
+	client vectorAIClient,
 	tmpRoot string,
 	mode string,
 	windowSec int,

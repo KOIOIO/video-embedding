@@ -109,8 +109,8 @@ go test ./internal/infrastructure/redis ./internal/infrastructure/persistence
 Expected before later tasks are implemented:
 
 ```text
-?   	nlp-video-project/http/internal/infrastructure/redis	[no test files]
-?   	nlp-video-project/http/internal/infrastructure/persistence	[no test files]
+?   	embedding-video/http/internal/infrastructure/redis	[no test files]
+?   	embedding-video/http/internal/infrastructure/persistence	[no test files]
 ```
 
 If existing tests are added before this task runs, the packages may fail for missing implementation symbols. That is acceptable only if the dependency resolution errors are gone.
@@ -513,7 +513,7 @@ go test ./internal/infrastructure/redis
 Expected:
 
 ```text
-ok  	nlp-video-project/http/internal/infrastructure/redis
+ok  	embedding-video/http/internal/infrastructure/redis
 ```
 
 - [ ] **Step 6: Check diff**
@@ -708,7 +708,7 @@ func TestVectorizeQueueDequeueDoesNotAck(t *testing.T) {
 Add the missing import to `stream_queue_test.go`:
 
 ```go
-"nlp-video-project/http/internal/application/videoapp"
+"embedding-video/http/internal/application/videoapp"
 ```
 
 - [ ] **Step 6: Run focused tests**
@@ -722,8 +722,8 @@ go test ./internal/infrastructure/redis ./internal/worker/vectorworker
 Expected:
 
 ```text
-ok  	nlp-video-project/http/internal/infrastructure/redis
-ok  	nlp-video-project/http/internal/worker/vectorworker
+ok  	embedding-video/http/internal/infrastructure/redis
+ok  	embedding-video/http/internal/worker/vectorworker
 ```
 
 - [ ] **Step 7: Check diff**
@@ -886,7 +886,7 @@ go test ./internal/worker/vectorworker
 Expected:
 
 ```text
-ok  	nlp-video-project/http/internal/worker/vectorworker
+ok  	embedding-video/http/internal/worker/vectorworker
 ```
 
 ## Task 5: Vector Stage State Model
@@ -980,9 +980,9 @@ go test ./internal/model ./cmd/httpapi ./cmd/worker
 Expected:
 
 ```text
-ok  	nlp-video-project/http/internal/model
-ok  	nlp-video-project/http/cmd/httpapi
-ok  	nlp-video-project/http/cmd/worker
+ok  	embedding-video/http/internal/model
+ok  	embedding-video/http/cmd/httpapi
+ok  	embedding-video/http/cmd/worker
 ```
 
 ## Task 6: Vector Stage Repository
@@ -1004,7 +1004,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-project/http/internal/model"
+	"embedding-video/http/internal/model"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -1144,7 +1144,7 @@ package persistence
 import (
 	"context"
 
-	"nlp-video-project/http/internal/model"
+	"embedding-video/http/internal/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -1278,7 +1278,7 @@ go test ./internal/infrastructure/persistence
 Expected:
 
 ```text
-ok  	nlp-video-project/http/internal/infrastructure/persistence
+ok  	embedding-video/http/internal/infrastructure/persistence
 ```
 
 ## Task 7: Final Focused Verification
@@ -1298,12 +1298,12 @@ go test ./internal/infrastructure/redis ./internal/infrastructure/persistence ./
 Expected:
 
 ```text
-ok  	nlp-video-project/http/internal/infrastructure/redis
-ok  	nlp-video-project/http/internal/infrastructure/persistence
-ok  	nlp-video-project/http/internal/model
-ok  	nlp-video-project/http/internal/worker/vectorworker
-ok  	nlp-video-project/http/cmd/httpapi
-ok  	nlp-video-project/http/cmd/worker
+ok  	embedding-video/http/internal/infrastructure/redis
+ok  	embedding-video/http/internal/infrastructure/persistence
+ok  	embedding-video/http/internal/model
+ok  	embedding-video/http/internal/worker/vectorworker
+ok  	embedding-video/http/cmd/httpapi
+ok  	embedding-video/http/cmd/worker
 ```
 
 - [ ] **Step 2: Run full Go test suite**

@@ -75,7 +75,7 @@ func (h *refineStageHandler) Handle(ctx context.Context, task VectorStageTask) e
 		if err != nil {
 			return err
 		}
-		if !existing {
+		if !existing && !isShortSingleSegmentVideo(task.EndSec) {
 			return errors.New("coarse transcript list is empty")
 		}
 	}
@@ -103,7 +103,7 @@ type productionRefineStageProcessor struct {
 	db                  *gorm.DB
 	store               *objectstorage.RustFS
 	ff                  *transcode.FFmpegTranscoder
-	client              *openAICompatClient
+	client              vectorAIClient
 	tmpRoot             string
 	coarseSegmentSec    int
 	refineMinSegmentSec int
@@ -117,7 +117,7 @@ type productionRefineStageProcessor struct {
 	stageRecorder       *vectorStageRecorder
 }
 
-func newProductionRefineStageProcessor(db *gorm.DB, store *objectstorage.RustFS, ff *transcode.FFmpegTranscoder, client *openAICompatClient, tmpRoot string, coarseSegmentSec int, refineMinSegmentSec int, refineMaxSegmentSec int, llmModel string, llmTimeoutMinutes int, asrWorkers int, embedBatch int, embeddingDim int, tailCfg tasks.TailAlignmentConfig, stageRecorder *vectorStageRecorder) *productionRefineStageProcessor {
+func newProductionRefineStageProcessor(db *gorm.DB, store *objectstorage.RustFS, ff *transcode.FFmpegTranscoder, client vectorAIClient, tmpRoot string, coarseSegmentSec int, refineMinSegmentSec int, refineMaxSegmentSec int, llmModel string, llmTimeoutMinutes int, asrWorkers int, embedBatch int, embeddingDim int, tailCfg tasks.TailAlignmentConfig, stageRecorder *vectorStageRecorder) *productionRefineStageProcessor {
 	return &productionRefineStageProcessor{
 		db:                  db,
 		store:               store,

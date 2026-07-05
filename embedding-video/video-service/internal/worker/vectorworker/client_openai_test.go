@@ -42,6 +42,30 @@ func TestNewOpenAICompatClientReturnsMissingAPIKeySentinel(t *testing.T) {
 	}
 }
 
+func TestNewVectorAIClientDefaultsToLegacy(t *testing.T) {
+	t.Setenv("DASHSCOPE_API_KEY", "test-key")
+	cfg := config.Config{}
+	client, err := newVectorAIClient(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("newVectorAIClient error = %v", err)
+	}
+	if _, ok := client.(*openAICompatClient); !ok {
+		t.Fatalf("client type = %T, want *openAICompatClient", client)
+	}
+}
+
+func TestNewVectorAIClientUsesLegacyWhenConfigured(t *testing.T) {
+	t.Setenv("DASHSCOPE_API_KEY", "test-key")
+	cfg := config.Config{AI: config.AIConfig{Provider: "legacy"}}
+	client, err := newVectorAIClient(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("newVectorAIClient error = %v", err)
+	}
+	if _, ok := client.(*openAICompatClient); !ok {
+		t.Fatalf("client type = %T, want *openAICompatClient", client)
+	}
+}
+
 func TestIsASRQuotaExhaustedRespDetectsQuotaErrors(t *testing.T) {
 	body := `{"message":"insufficient balance for current model quota"}`
 	if !isASRQuotaExhaustedResp(429, body) {

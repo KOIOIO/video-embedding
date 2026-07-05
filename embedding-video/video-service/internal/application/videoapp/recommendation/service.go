@@ -2,8 +2,11 @@ package recommendation
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +23,9 @@ type Candidate struct {
 	EndTimeSec     int
 	Distance       float64
 	SegmentTitle   string
+	KnowledgeTags  string
+	VideoTitle     string
+	Description    string
 	VideoURL       string
 	CoverURL       string
 	Status         int16
@@ -28,6 +34,78 @@ type Candidate struct {
 	ViewCount      int
 	CreateTime     time.Time
 	UpdateTime     time.Time
+}
+
+const (
+	DefaultProfileModelVersion  = "video_profile_v1"
+	DefaultTwoTowerModelVersion = "two_tower_v1"
+	MaxProfileRerankCandidates  = 300
+	WeakKnowledgeRecallLimit    = 50
+	StrategyQuestionVector      = "question_vector"
+	StrategyProfileRerank       = "profile_rerank"
+	StrategyTwoTower            = "two_tower"
+	StrategyGorse               = "gorse"
+	StrategyKnowledgeMatch      = "knowledge_match"
+	GorseModelVersion           = "gorse"
+	KnowledgeMatchModelVersion  = "knowledge_match_v1"
+	EngineKnowledgeMatch        = "knowledge_match"
+	EngineGorse                 = "gorse"
+	EngineTwoTower              = "two_tower"
+)
+
+type UserVideoProfile struct {
+	UserID        uint64
+	ProfileVector []float32
+	ModelVersion  string
+	Status        int16
+	PositiveCount int
+}
+
+func (p UserVideoProfile) IsUsable() bool {
+	return p.UserID != 0 && p.Status == 1 && p.PositiveCount > 0 && len(p.ProfileVector) > 0
+}
+
+type ProfileRerankQuery struct {
+	UserID         uint64
+	QuestionVector pgvector.Vector
+	ProfileVector  pgvector.Vector
+	Limit          int
+}
+
+type UserTowerEmbedding struct {
+	UserID       uint64
+	Vector       []float32
+	ModelVersion string
+	Status       int16
+}
+
+func (e UserTowerEmbedding) IsUsable() bool {
+	return e.UserID != 0 && e.Status == 1 && len(e.Vector) > 0
+}
+
+type TwoTowerQuery struct {
+	UserID       uint64
+	UserVector   pgvector.Vector
+	ModelVersion string
+	Limit        int
+}
+
+type TwoTowerCandidate struct {
+	Candidate
+}
+
+type WeakKnowledge struct {
+	KnowledgePointID uint64
+	Mastery          float64
+	Name             string
+	Description      string
+}
+
+type WeakKnowledgeVectorQuery struct {
+	UserID           uint64
+	Query            pgvector.Vector
+	Limit            int
+	RequireRecommend bool
 }
 
 type ResultItem struct {
@@ -70,6 +148,11 @@ type RecommendByQuestionInput struct {
 	Limit        int
 }
 
+type RandomPlayInput struct {
+	UserID uint64
+	Limit  int
+}
+
 type ListRecommendationsInput struct {
 	QuestionID uint64
 	UserID     uint64
@@ -84,6 +167,19 @@ type ReportWatchInput struct {
 	WatchDuration  int
 }
 
+type ExposureRecord struct {
+	RequestID      string
+	UserID         uint64
+	QuestionID     uint64
+	VideoID        uint64
+	VideoSegmentID uint64
+	Rank           int
+	Score          float64
+	Strategy       string
+	ModelVersion   string
+	Now            time.Time
+}
+
 type Repository interface {
 	GetSegmentEmbeddingDim(ctx context.Context) (int, error)
 	GetQuestionEmbeddingTextByID(ctx context.Context, questionID uint64) (string, error)
@@ -96,6 +192,48 @@ type Repository interface {
 	IncrementViewCount(ctx context.Context, id uint64) (int, bool, error)
 }
 
+type ExposureRepository interface {
+	SaveRecommendationExposures(ctx context.Context, exposures []ExposureRecord) error
+	MarkRecommendationExposureWatched(ctx context.Context, userID uint64, questionID uint64, segmentID uint64, now time.Time) error
+}
+
+type ProfileRepository interface {
+	GetUserVideoProfile(ctx context.Context, userID uint64, modelVersion string) (UserVideoProfile, bool, error)
+	FindRecommendedSegmentsForProfileRerank(ctx context.Context, input ProfileRerankQuery) ([]ProfileCandidate, error)
+}
+
+type TwoTowerRepository interface {
+	GetUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error)
+	FindRecommendedSegmentsForTwoTower(ctx context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error)
+}
+
+type GorseHydrationRepository interface {
+	HydrateRecommendedSegmentsByID(ctx context.Context, userID uint64, ids []uint64) ([]Candidate, error)
+}
+
+type WeakKnowledgeVectorRepository interface {
+	ListWeakKnowledge(ctx context.Context, userID uint64, limit int) ([]WeakKnowledge, error)
+	FindRecommendedSegmentsByWeakKnowledgeVector(ctx context.Context, input WeakKnowledgeVectorQuery) ([]Candidate, error)
+}
+
+type TwoTowerModelVersionRepository interface {
+	GetActiveTwoTowerModelVersion(ctx context.Context) (string, bool, error)
+}
+
+type ProfileUpdater interface {
+	RebuildUserVideoProfile(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
+}
+
+type UserTowerUpdater interface {
+	RebuildUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
+}
+
+type RecentSegmentStore interface {
+	FilterRecent(ctx context.Context, userID uint64, segmentIDs []uint64) (map[uint64]bool, error)
+	ListRecent(ctx context.Context, userID uint64) ([]uint64, error)
+	MarkReturned(ctx context.Context, userID uint64, segmentID uint64, ttl time.Duration) error
+}
+
 type Embedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 }
@@ -103,11 +241,26 @@ type Embedder interface {
 type Service struct {
 	Repo                  Repository
 	Embedder              Embedder
+	Gorse                 GorseClient
+	Engine                string
+	GorseOptions          GorseOptions
 	Now                   func() time.Time
 	InvalidArgument       func(message string) error
 	IsProviderUnavailable func(error) bool
 	NewDegradedError      func(reason string, items []ResultItem) error
 	ErrVideoSegmentAbsent error
+	ProfileUpdater        ProfileUpdater
+	UserTowerUpdater      UserTowerUpdater
+	RecentSegments        RecentSegmentStore
+	RecentSegmentTTL      time.Duration
+	NewRequestID          func() string
+}
+
+type GorseOptions struct {
+	CandidateLimit    int
+	MinRecommendItems int
+	WriteBackEnabled  bool
+	ShadowMode        bool
 }
 
 func (s Service) RecommendByQuestion(ctx context.Context, input RecommendByQuestionInput) ([]ResultItem, error) {
@@ -152,8 +305,10 @@ func (s Service) RecommendByQuestion(ctx context.Context, input RecommendByQuest
 	}
 
 	now := s.Now()
+	exposures := make([]ExposureRecord, 0, len(candidates))
+	requestID := s.newRequestID()
 	items := make([]ResultItem, 0, len(candidates))
-	for _, c := range candidates {
+	for i, c := range candidates {
 		score := 0.0
 		if c.Distance >= 0 {
 			score = 1.0 / (1.0 + c.Distance)
@@ -163,9 +318,593 @@ func (s Service) RecommendByQuestion(ctx context.Context, input RecommendByQuest
 		}
 
 		items = append(items, buildResultItem(input.QuestionID, c, score, false, 0))
+		exposures = append(exposures, buildExposureRecord(requestID, userID, input.QuestionID, c.VideoID, c.VideoSegmentID, i+1, score, StrategyQuestionVector, "", now))
+	}
+	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
+		return nil, err
 	}
 
 	return items, nil
+}
+
+func (s Service) RandomPlay(ctx context.Context, input RandomPlayInput) ([]ResultItem, error) {
+	if input.UserID == 0 {
+		return nil, nil
+	}
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 1
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	if s.recommendationEngine() == EngineGorse && !s.GorseOptions.ShadowMode {
+		if items, ok, err := s.recommendByGorse(ctx, input.UserID, limit); err != nil {
+			return nil, err
+		} else if ok {
+			return items, nil
+		}
+	}
+	if s.recommendationEngine() == EngineTwoTower {
+		return s.randomPlayByTwoTower(ctx, input.UserID, limit)
+	}
+	return s.recommendByKnowledgeMatch(ctx, input.UserID, limit)
+}
+
+func (s Service) randomPlayByTwoTower(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {
+	twoTowerRepo, ok := s.Repo.(TwoTowerRepository)
+	if !ok {
+		return nil, nil
+	}
+	modelVersion, err := s.activeTwoTowerModelVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	userEmbedding, found, err := twoTowerRepo.GetUserTowerEmbedding(ctx, userID, modelVersion)
+	if err != nil {
+		return nil, err
+	}
+	if !found || !userEmbedding.IsUsable() {
+		return nil, nil
+	}
+
+	return s.recommendByTwoTower(ctx, twoTowerRepo, RecommendByQuestionInput{
+		UserID: userID,
+		Limit:  limit,
+	}, userID, userEmbedding, modelVersion, limit)
+}
+
+func (s Service) RecommendTwoTowerItemIDs(ctx context.Context, userID uint64, limit int) ([]uint64, error) {
+	if userID == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	twoTowerRepo, ok := s.Repo.(TwoTowerRepository)
+	if !ok {
+		return nil, nil
+	}
+	modelVersion, err := s.activeTwoTowerModelVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	userEmbedding, found, err := twoTowerRepo.GetUserTowerEmbedding(ctx, userID, modelVersion)
+	if err != nil {
+		return nil, err
+	}
+	if !found || !userEmbedding.IsUsable() {
+		return nil, nil
+	}
+	candidates, err := twoTowerRepo.FindRecommendedSegmentsForTwoTower(ctx, TwoTowerQuery{
+		UserID:       userID,
+		UserVector:   pgvector.NewVector(userEmbedding.Vector),
+		ModelVersion: modelVersion,
+		Limit:        profileCandidateLimit(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	candidates = s.filterRecentTwoTowerCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	items := BuildTwoTowerRankedItems(candidates, limit)
+	ids := make([]uint64, 0, len(items))
+	seen := make(map[uint64]bool, len(items))
+	for _, item := range items {
+		if item.VideoSegmentID == 0 || seen[item.VideoSegmentID] {
+			continue
+		}
+		seen[item.VideoSegmentID] = true
+		ids = append(ids, item.VideoSegmentID)
+	}
+	return ids, nil
+}
+
+func (s Service) recommendationEngine() string {
+	engine := strings.ToLower(strings.TrimSpace(s.Engine))
+	if engine == "" {
+		return EngineKnowledgeMatch
+	}
+	return engine
+}
+
+func (s Service) recommendByKnowledgeMatch(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {
+	const weakKnowledgeLimit = 10
+	candidates, err := s.recommendWeakKnowledgeCandidates(ctx, userID, limit, weakKnowledgeLimit)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	candidates = s.filterRecentCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+	now := s.Now()
+	requestID := s.newRequestID()
+	items := make([]ResultItem, 0, len(candidates))
+	exposures := make([]ExposureRecord, 0, len(candidates))
+	for i, candidate := range candidates {
+		score := gorseRankScore(i)
+		item := buildResultItem(0, candidate, score, false, 0)
+		items = append(items, item)
+		s.markRecentReturned(ctx, userID, candidate.VideoSegmentID)
+		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, 0, candidate.VideoID, candidate.VideoSegmentID, score, now); err != nil {
+			return nil, err
+		}
+		exposures = append(exposures, buildExposureRecord(requestID, userID, 0, candidate.VideoID, candidate.VideoSegmentID, i+1, score, StrategyKnowledgeMatch, KnowledgeMatchModelVersion, now))
+	}
+	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s Service) recommendWeakKnowledgeCandidates(ctx context.Context, userID uint64, limit int, weakKnowledgeLimit int) ([]Candidate, error) {
+	repo, ok := s.Repo.(WeakKnowledgeVectorRepository)
+	if !ok || s.Embedder == nil {
+		return nil, nil
+	}
+	weakKnowledge, err := repo.ListWeakKnowledge(ctx, userID, weakKnowledgeLimit)
+	if err != nil {
+		return nil, err
+	}
+	queryText := buildWeakKnowledgeEmbeddingText(weakKnowledge)
+	if queryText == "" {
+		return nil, nil
+	}
+	targetDim, err := s.Repo.GetSegmentEmbeddingDim(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if targetDim <= 0 {
+		targetDim = 1536
+	}
+	vec, err := s.Embedder.Embed(ctx, queryText)
+	if err != nil {
+		return nil, err
+	}
+	vec = NormalizeVectorDim(vec, targetDim)
+	if len(vec) != targetDim {
+		return nil, fmt.Errorf("weak knowledge embedding dimension mismatch: got=%d want=%d", len(vec), targetDim)
+	}
+	recallLimit := MaxInt(limit, WeakKnowledgeRecallLimit)
+	query := WeakKnowledgeVectorQuery{
+		UserID:           userID,
+		Query:            pgvector.NewVector(vec),
+		Limit:            recallLimit,
+		RequireRecommend: true,
+	}
+	candidates, err := repo.FindRecommendedSegmentsByWeakKnowledgeVector(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		query.RequireRecommend = false
+		candidates, err = repo.FindRecommendedSegmentsByWeakKnowledgeVector(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rerankWeakKnowledgeCandidates(candidates, weakKnowledge, recallLimit), nil
+}
+
+func buildWeakKnowledgeEmbeddingText(rows []WeakKnowledge) string {
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		description := strings.TrimSpace(row.Description)
+		switch {
+		case name != "" && description != "":
+			parts = append(parts, name+"："+description)
+		case name != "":
+			parts = append(parts, name)
+		case description != "":
+			parts = append(parts, description)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func rerankWeakKnowledgeCandidates(candidates []Candidate, weakKnowledge []WeakKnowledge, limit int) []Candidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+	tokens := weakKnowledgeTokens(weakKnowledge)
+	if len(tokens) == 0 {
+		return trimCandidates(candidates, limit)
+	}
+	type scoredCandidate struct {
+		candidate Candidate
+		score     int
+		index     int
+	}
+	scored := make([]scoredCandidate, 0, len(candidates))
+	for i, candidate := range candidates {
+		scored = append(scored, scoredCandidate{
+			candidate: candidate,
+			score:     weakKnowledgeTextScore(candidate, tokens),
+			index:     i,
+		})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].index < scored[j].index
+	})
+	if limit <= 0 || limit > len(scored) {
+		limit = len(scored)
+	}
+	out := make([]Candidate, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, scored[i].candidate)
+	}
+	return out
+}
+
+func weakKnowledgeTextScore(candidate Candidate, tokens []string) int {
+	primary := strings.ToLower(strings.Join([]string{
+		candidate.SegmentTitle,
+		candidate.KnowledgeTags,
+	}, " "))
+	secondary := strings.ToLower(strings.Join([]string{
+		candidate.VideoTitle,
+		candidate.Description,
+	}, " "))
+	score := 0
+	for _, token := range tokens {
+		switch {
+		case strings.Contains(primary, token):
+			score += 2
+		case strings.Contains(secondary, token):
+			score++
+		}
+	}
+	return score
+}
+
+func weakKnowledgeTokens(rows []WeakKnowledge) []string {
+	seen := map[string]bool{}
+	tokens := make([]string, 0, len(rows)*2)
+	for _, row := range rows {
+		for _, token := range splitKnowledgeTokens(row.Name + " " + row.Description) {
+			if seen[token] {
+				continue
+			}
+			seen[token] = true
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
+func splitKnowledgeTokens(text string) []string {
+	parts := strings.FieldsFunc(text, func(r rune) bool {
+		switch r {
+		case ' ', '\t', '\n', '\r', ',', '，', ';', '；', '/', '|', '、', '.', '。', ':', '：', '(', ')', '（', '）', '[', ']', '【', '】':
+			return true
+		default:
+			return false
+		}
+	})
+	tokens := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" {
+			continue
+		}
+		tokens = append(tokens, part)
+	}
+	return tokens
+}
+
+func trimCandidates(candidates []Candidate, limit int) []Candidate {
+	if limit <= 0 || limit >= len(candidates) {
+		return candidates
+	}
+	return candidates[:limit]
+}
+
+func (s Service) recommendByGorse(ctx context.Context, userID uint64, limit int) ([]ResultItem, bool, error) {
+	if s.Gorse == nil {
+		return nil, false, nil
+	}
+	hydrator, ok := s.Repo.(GorseHydrationRepository)
+	if !ok {
+		return nil, false, nil
+	}
+	candidateLimit := s.GorseOptions.CandidateLimit
+	if candidateLimit <= 0 {
+		candidateLimit = profileCandidateLimit(limit)
+	}
+	if candidateLimit < limit {
+		candidateLimit = limit
+	}
+	ids, err := s.Gorse.Recommend(ctx, userID, candidateLimit)
+	if err != nil {
+		return nil, false, nil
+	}
+	ids = uniquePositiveUint64s(ids)
+	if len(ids) == 0 {
+		return nil, false, nil
+	}
+	candidates, err := hydrator.HydrateRecommendedSegmentsByID(ctx, userID, ids)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(candidates) == 0 {
+		return nil, false, nil
+	}
+	if minItems := s.GorseOptions.MinRecommendItems; minItems > 0 && len(candidates) < minItems {
+		return nil, false, nil
+	}
+	candidates = s.filterRecentCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, false, nil
+	}
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+	now := s.Now()
+	requestID := s.newRequestID()
+	items := make([]ResultItem, 0, len(candidates))
+	exposures := make([]ExposureRecord, 0, len(candidates))
+	feedback := make([]GorseFeedback, 0, len(candidates))
+	for i, candidate := range candidates {
+		score := gorseRankScore(i)
+		item := buildResultItem(0, candidate, score, false, 0)
+		items = append(items, item)
+		s.markRecentReturned(ctx, userID, candidate.VideoSegmentID)
+		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, 0, candidate.VideoID, candidate.VideoSegmentID, score, now); err != nil {
+			return nil, false, err
+		}
+		exposures = append(exposures, buildExposureRecord(requestID, userID, 0, candidate.VideoID, candidate.VideoSegmentID, i+1, score, StrategyGorse, GorseModelVersion, now))
+		if mapped, ok := MapGorseFeedback(GorseFeedbackSource{
+			UserID:         userID,
+			VideoSegmentID: candidate.VideoSegmentID,
+			Kind:           GorseFeedbackExposure,
+			EventTime:      now,
+		}); ok {
+			feedback = append(feedback, mapped)
+		}
+	}
+	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
+		return nil, false, err
+	}
+	if s.GorseOptions.WriteBackEnabled {
+		_ = s.Gorse.PutFeedback(ctx, feedback)
+	}
+	return items, true, nil
+}
+
+func (s Service) activeTwoTowerModelVersion(ctx context.Context) (string, error) {
+	repo, ok := s.Repo.(TwoTowerModelVersionRepository)
+	if !ok {
+		return DefaultTwoTowerModelVersion, nil
+	}
+	version, found, err := repo.GetActiveTwoTowerModelVersion(ctx)
+	if err != nil {
+		return "", err
+	}
+	version = strings.TrimSpace(version)
+	if !found || version == "" {
+		return DefaultTwoTowerModelVersion, nil
+	}
+	return version, nil
+}
+
+func (s Service) recommendByTwoTower(ctx context.Context, repo TwoTowerRepository, input RecommendByQuestionInput, userID uint64, userEmbedding UserTowerEmbedding, modelVersion string, limit int) ([]ResultItem, error) {
+	candidateLimit := profileCandidateLimit(limit)
+	candidates, err := repo.FindRecommendedSegmentsForTwoTower(ctx, TwoTowerQuery{
+		UserID:       userID,
+		UserVector:   pgvector.NewVector(userEmbedding.Vector),
+		ModelVersion: modelVersion,
+		Limit:        candidateLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	candidates = s.filterRecentTwoTowerCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	items := BuildTwoTowerRankedItems(candidates, limit)
+	now := s.Now()
+	exposures := make([]ExposureRecord, 0, len(items))
+	requestID := s.newRequestID()
+	for i := range items {
+		items[i].QuestionID = input.QuestionID
+		s.markRecentReturned(ctx, userID, items[i].VideoSegmentID)
+		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, items[i].RecommendScore, now); err != nil {
+			return nil, err
+		}
+		exposures = append(exposures, buildExposureRecord(requestID, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, i+1, items[i].RecommendScore, StrategyTwoTower, modelVersion, now))
+	}
+	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s Service) recommendByProfileRerank(ctx context.Context, repo ProfileRepository, input RecommendByQuestionInput, userID uint64, queryVec pgvector.Vector, profile UserVideoProfile, limit int) ([]ResultItem, error) {
+	candidateLimit := profileCandidateLimit(limit)
+	candidates, err := repo.FindRecommendedSegmentsForProfileRerank(ctx, ProfileRerankQuery{
+		UserID:         userID,
+		QuestionVector: queryVec,
+		ProfileVector:  pgvector.NewVector(profile.ProfileVector),
+		Limit:          candidateLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	candidates = s.filterRecentProfileCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	items := RerankProfileCandidates(candidates, limit)
+	now := s.Now()
+	exposures := make([]ExposureRecord, 0, len(items))
+	requestID := s.newRequestID()
+	for i := range items {
+		items[i].QuestionID = input.QuestionID
+		s.markRecentReturned(ctx, userID, items[i].VideoSegmentID)
+		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, items[i].RecommendScore, now); err != nil {
+			return nil, err
+		}
+		exposures = append(exposures, buildExposureRecord(requestID, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, i+1, items[i].RecommendScore, StrategyProfileRerank, DefaultProfileModelVersion, now))
+	}
+	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func profileCandidateLimit(limit int) int {
+	if limit <= 0 {
+		limit = 10
+	}
+	candidateLimit := limit * 10
+	if candidateLimit < 100 {
+		candidateLimit = 100
+	}
+	if candidateLimit > MaxProfileRerankCandidates {
+		candidateLimit = MaxProfileRerankCandidates
+	}
+	return candidateLimit
+}
+
+func (s Service) filterRecentCandidates(ctx context.Context, userID uint64, candidates []Candidate) []Candidate {
+	if s.RecentSegments == nil || userID == 0 || len(candidates) == 0 || s.recentSegmentTTL() <= 0 {
+		return candidates
+	}
+	ids := make([]uint64, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.VideoSegmentID == 0 {
+			continue
+		}
+		ids = append(ids, candidate.VideoSegmentID)
+	}
+	if len(ids) == 0 {
+		return candidates
+	}
+	recent, err := s.RecentSegments.FilterRecent(ctx, userID, ids)
+	if err != nil || len(recent) == 0 {
+		return candidates
+	}
+	filtered := make([]Candidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if recent[candidate.VideoSegmentID] {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	return filtered
+}
+
+func (s Service) filterRecentTwoTowerCandidates(ctx context.Context, userID uint64, candidates []TwoTowerCandidate) []TwoTowerCandidate {
+	base := make([]Candidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		base = append(base, candidate.Candidate)
+	}
+	filteredBase := s.filterRecentCandidates(ctx, userID, base)
+	if len(filteredBase) == len(base) {
+		return candidates
+	}
+	kept := make(map[uint64]bool, len(filteredBase))
+	for _, candidate := range filteredBase {
+		kept[candidate.VideoSegmentID] = true
+	}
+	filtered := make([]TwoTowerCandidate, 0, len(filteredBase))
+	for _, candidate := range candidates {
+		if kept[candidate.VideoSegmentID] {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
+}
+
+func (s Service) filterRecentProfileCandidates(ctx context.Context, userID uint64, candidates []ProfileCandidate) []ProfileCandidate {
+	base := make([]Candidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		base = append(base, candidate.Candidate)
+	}
+	filteredBase := s.filterRecentCandidates(ctx, userID, base)
+	if len(filteredBase) == len(base) {
+		return candidates
+	}
+	kept := make(map[uint64]bool, len(filteredBase))
+	for _, candidate := range filteredBase {
+		kept[candidate.VideoSegmentID] = true
+	}
+	filtered := make([]ProfileCandidate, 0, len(filteredBase))
+	for _, candidate := range candidates {
+		if kept[candidate.VideoSegmentID] {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
+}
+
+func (s Service) markRecentReturned(ctx context.Context, userID uint64, segmentID uint64) {
+	if s.RecentSegments == nil || userID == 0 || segmentID == 0 {
+		return
+	}
+	ttl := s.recentSegmentTTL()
+	if ttl <= 0 {
+		return
+	}
+	_ = s.RecentSegments.MarkReturned(ctx, userID, segmentID, ttl)
+}
+
+func (s Service) MarkRecentReturned(ctx context.Context, userID uint64, segmentID uint64) {
+	s.markRecentReturned(ctx, userID, segmentID)
+}
+
+func (s Service) recentSegmentTTL() time.Duration {
+	if s.RecentSegmentTTL > 0 {
+		return s.RecentSegmentTTL
+	}
+	return 30 * time.Minute
 }
 
 func (s Service) ListRecommendations(ctx context.Context, input ListRecommendationsInput) ([]ResultItem, error) {
@@ -234,9 +973,29 @@ func (s Service) ReportWatch(ctx context.Context, input ReportWatchInput) error 
 	if err != nil {
 		return err
 	}
-	created, err := s.Repo.SaveWatchRecord(ctx, userID, videoID, input.QuestionID, input.VideoSegmentID, input.IsWatched, input.WatchDuration, s.Now())
+	now := s.Now()
+	created, err := s.Repo.SaveWatchRecord(ctx, userID, videoID, input.QuestionID, input.VideoSegmentID, input.IsWatched, input.WatchDuration, now)
 	if err != nil {
 		return err
+	}
+	if exposureRepo, ok := s.Repo.(ExposureRepository); ok {
+		if err := exposureRepo.MarkRecommendationExposureWatched(ctx, userID, input.QuestionID, input.VideoSegmentID, now); err != nil {
+			return err
+		}
+	}
+	if s.ProfileUpdater != nil {
+		if err := s.ProfileUpdater.RebuildUserVideoProfile(ctx, userID, DefaultProfileModelVersion, now); err != nil {
+			return err
+		}
+	}
+	if s.UserTowerUpdater != nil {
+		modelVersion, err := s.activeTwoTowerModelVersion(ctx)
+		if err != nil {
+			return err
+		}
+		if err := s.UserTowerUpdater.RebuildUserTowerEmbedding(ctx, userID, modelVersion, now); err != nil {
+			return err
+		}
 	}
 	if !created || alreadyCounted {
 		return nil
@@ -245,6 +1004,45 @@ func (s Service) ReportWatch(ctx context.Context, input ReportWatchInput) error 
 		return err
 	}
 	return nil
+}
+
+func (s Service) saveRecommendationExposures(ctx context.Context, exposures []ExposureRecord) error {
+	if len(exposures) == 0 {
+		return nil
+	}
+	exposureRepo, ok := s.Repo.(ExposureRepository)
+	if !ok {
+		return nil
+	}
+	return exposureRepo.SaveRecommendationExposures(ctx, exposures)
+}
+
+func (s Service) newRequestID() string {
+	if s.NewRequestID != nil {
+		if requestID := strings.TrimSpace(s.NewRequestID()); requestID != "" {
+			return requestID
+		}
+	}
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		return hex.EncodeToString(b[:])
+	}
+	return fmt.Sprintf("%d", s.Now().UnixNano())
+}
+
+func buildExposureRecord(requestID string, userID uint64, questionID uint64, videoID uint64, segmentID uint64, rank int, score float64, strategy string, modelVersion string, now time.Time) ExposureRecord {
+	return ExposureRecord{
+		RequestID:      requestID,
+		UserID:         userID,
+		QuestionID:     questionID,
+		VideoID:        videoID,
+		VideoSegmentID: segmentID,
+		Rank:           rank,
+		Score:          score,
+		Strategy:       strategy,
+		ModelVersion:   modelVersion,
+		Now:            now,
+	}
 }
 
 func (s Service) BuildQuestionVector(ctx context.Context, questionID uint64, questionText string, targetDim int) (pgvector.Vector, error) {
@@ -341,6 +1139,26 @@ func MaxUint(a uint64, b uint64) uint64 {
 		return a
 	}
 	return b
+}
+
+func uniquePositiveUint64s(values []uint64) []uint64 {
+	seen := make(map[uint64]bool, len(values))
+	out := make([]uint64, 0, len(values))
+	for _, value := range values {
+		if value == 0 || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func gorseRankScore(rankZeroBased int) float64 {
+	if rankZeroBased < 0 {
+		rankZeroBased = 0
+	}
+	return 1 / float64(rankZeroBased+1)
 }
 
 func (s Service) degradedRecommendByQuestion(ctx context.Context, input RecommendByQuestionInput, cause error) ([]ResultItem, error) {

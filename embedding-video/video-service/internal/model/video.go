@@ -103,6 +103,8 @@ func (a *TextArray) Scan(src any) error {
 type EduVideoResource struct {
 	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
 
+	UserID uint64 `gorm:"column:user_id;not null;default:1;index" json:"user_id"`
+
 	Title       string `gorm:"column:title;size:200;not null" json:"title"`
 	Description string `gorm:"column:description;type:text" json:"description"`
 
@@ -219,3 +221,96 @@ type EduUserVideoRecommend struct {
 }
 
 func (EduUserVideoRecommend) TableName() string { return "edu_user_video_recommend" }
+
+type EduUserVideoProfile struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	UserID           uint64          `gorm:"column:user_id;not null;index" json:"user_id"`
+	ProfileVector    pgvector.Vector `gorm:"column:profile_vector;type:vector(1536)" json:"-"`
+	PositiveCount    int             `gorm:"column:positive_count;default:0" json:"positive_count"`
+	NegativeCount    int             `gorm:"column:negative_count;default:0" json:"negative_count"`
+	WatchCount       int             `gorm:"column:watch_count;default:0" json:"watch_count"`
+	SourceEventCount int             `gorm:"column:source_event_count;default:0" json:"source_event_count"`
+	LastEventTime    time.Time       `gorm:"column:last_event_time" json:"last_event_time"`
+	ModelVersion     string          `gorm:"column:model_version;type:text;not null;index" json:"model_version"`
+	Status           int16           `gorm:"column:status;default:1;index" json:"status"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduUserVideoProfile) TableName() string { return "edu_user_video_profile" }
+
+type EduRecommendExposure struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	RequestID      string    `gorm:"column:request_id;type:text;not null;index" json:"request_id"`
+	UserID         uint64    `gorm:"column:user_id;not null;index" json:"user_id"`
+	QuestionID     uint64    `gorm:"column:question_id;index" json:"question_id"`
+	VideoID        uint64    `gorm:"column:video_id;not null;index" json:"video_id"`
+	VideoSegmentID uint64    `gorm:"column:video_segment_id;not null;index" json:"video_segment_id"`
+	Rank           int       `gorm:"column:rank;not null" json:"rank"`
+	Score          float64   `gorm:"column:score;type:numeric(8,6)" json:"score"`
+	Strategy       string    `gorm:"column:strategy;type:text;not null;index" json:"strategy"`
+	ModelVersion   string    `gorm:"column:model_version;type:text;index" json:"model_version"`
+	Clicked        bool      `gorm:"column:clicked;default:false;index" json:"clicked"`
+	Watched        bool      `gorm:"column:watched;default:false;index" json:"watched"`
+	ClickedTime    time.Time `gorm:"column:clicked_time" json:"clicked_time"`
+	WatchedTime    time.Time `gorm:"column:watched_time" json:"watched_time"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime;index" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduRecommendExposure) TableName() string { return "edu_recommend_exposure" }
+
+type EduVideoItemEmbedding struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	VideoSegmentID uint64          `gorm:"column:video_segment_id;not null;index" json:"video_segment_id"`
+	VideoID        uint64          `gorm:"column:video_id;not null;index" json:"video_id"`
+	Embedding      pgvector.Vector `gorm:"column:embedding;type:vector(64)" json:"-"`
+	ModelVersion   string          `gorm:"column:model_version;type:text;not null;index" json:"model_version"`
+	Status         int16           `gorm:"column:status;default:1;index" json:"status"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduVideoItemEmbedding) TableName() string { return "edu_video_item_embedding" }
+
+type EduUserTowerEmbedding struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	UserID       uint64          `gorm:"column:user_id;not null;index" json:"user_id"`
+	TowerVector  pgvector.Vector `gorm:"column:tower_vector;type:vector(64)" json:"-"`
+	ModelVersion string          `gorm:"column:model_version;type:text;not null;index" json:"model_version"`
+	Status       int16           `gorm:"column:status;default:1;index" json:"status"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduUserTowerEmbedding) TableName() string { return "edu_user_tower_embedding" }
+
+type EduRecommendModelVersion struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	ModelName    string    `gorm:"column:model_name;type:text;not null;index" json:"model_name"`
+	ModelVersion string    `gorm:"column:model_version;type:text;not null;index" json:"model_version"`
+	ArtifactPath string    `gorm:"column:artifact_path;type:text" json:"artifact_path"`
+	MetricsJSON  string    `gorm:"column:metrics_json;type:jsonb;not null;default:'{}'" json:"metrics_json"`
+	IsActive     bool      `gorm:"column:is_active;default:false;index" json:"is_active"`
+	Status       int16     `gorm:"column:status;default:1;index" json:"status"`
+	PublishedAt  time.Time `gorm:"column:published_at" json:"published_at"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduRecommendModelVersion) TableName() string { return "edu_recommend_model_version" }

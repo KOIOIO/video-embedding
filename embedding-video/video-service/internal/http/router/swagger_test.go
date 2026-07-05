@@ -131,6 +131,7 @@ func TestLegacyAliasRoutesAreRegistered(t *testing.T) {
 		{name: "recommend toggle alias", method: http.MethodPost, path: "/api/video/recommend/0", want: http.StatusBadRequest},
 		{name: "reaction alias", method: http.MethodPost, path: "/api/video/reaction/0", want: http.StatusBadRequest},
 		{name: "reaction counts alias", method: http.MethodGet, path: "/api/video/reaction_counts/0", want: http.StatusBadRequest},
+		{name: "random segment alias", method: http.MethodGet, path: "/api/video-segment/random-play?user_id=bad", want: http.StatusBadRequest},
 		{name: "cover upload alias", method: http.MethodPost, path: "/api/video/cover/0", want: http.StatusBadRequest},
 		{name: "publish alias", method: http.MethodPost, path: "/api/video/publish/0", want: http.StatusBadRequest},
 		{name: "transcode status alias", method: http.MethodGet, path: "/api/video/status/task-404", want: http.StatusNotFound},

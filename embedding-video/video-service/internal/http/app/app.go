@@ -13,14 +13,15 @@ import (
 	"gorm.io/gorm"
 
 	"nlp-video-analysis/internal/application/videoapp"
+	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
 	"nlp-video-analysis/internal/config"
 	aiinfra "nlp-video-analysis/internal/infrastructure/ai"
+	einoai "nlp-video-analysis/internal/infrastructure/ai/eino"
 	"nlp-video-analysis/internal/infrastructure/embedding"
 	"nlp-video-analysis/internal/infrastructure/fs"
 	"nlp-video-analysis/internal/infrastructure/objectstorage"
 	"nlp-video-analysis/internal/infrastructure/persistence"
 	infraredis "nlp-video-analysis/internal/infrastructure/redis"
-	"nlp-video-analysis/internal/model"
 )
 
 type App struct {
@@ -111,7 +112,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	})
 	statusStore := infraredis.NewTranscodeStatusStore(rdb, config.TranscodeStatusPrefix(cfg))
 	videoapp.SetRuntimeCounters(infraredis.NewRuntimeCounterStore(rdb, config.RuntimeActiveCounterPrefix(cfg)))
-	primaryEmbedder := embedding.NewClient(cfg.Embedding)
+	primaryEmbedder := newRecommendationEmbedder(ctx, cfg)
 	fallbackEmbedder := aiinfra.NewFallbackEmbedder(primaryEmbedder, aiinfra.NewLocalEmbedder(config.EmbeddingDim(cfg)))
 	service := videoapp.NewService(repo, queue, vectorQueue, statusStore, store, fs.NewLocalFileStorage(), fallbackEmbedder, videoapp.Paths{
 		RawDir:          rawDir,
@@ -123,6 +124,12 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		CoverURLPrefix:  config.CoverURLPrefix(cfg),
 		HLSMasterName:   config.HLSMasterName(cfg),
 	})
+	gorseClient, recommendationEngine, gorseOptions := recommendationRuntimeFromConfig(cfg)
+	service.RecommendationEngine = recommendationEngine
+	service.GorseClient = gorseClient
+	service.GorseOptions = gorseOptions
+	service.RecentSegments = infraredis.NewRecentSegmentStore(rdb, config.RandomPlayRecentPrefix(cfg))
+	service.RecentSegmentTTL = config.RandomPlayDedupeWindow(cfg)
 	service.ReactionStore = reactionBuffer
 	service.SegmentReactionStore = segmentReactionBuffer
 
@@ -144,6 +151,54 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}, nil
 }
 
+func recommendationRuntimeFromConfig(cfg config.Config) (recommendationapp.GorseClient, string, recommendationapp.GorseOptions) {
+	engine := config.RecommendationEngine(cfg)
+	options := recommendationapp.GorseOptions{
+		CandidateLimit:    config.GorseCandidateLimit(cfg),
+		MinRecommendItems: cfg.Gorse.MinRecommendItems,
+		WriteBackEnabled:  cfg.Gorse.WriteBackEnabled,
+		ShadowMode:        cfg.Gorse.ShadowMode,
+	}
+	if engine != recommendationapp.EngineGorse {
+		return nil, engine, options
+	}
+	return recommendationapp.NewGorseHTTPClient(recommendationapp.GorseClientConfig{
+		Endpoint: config.GorseEndpoint(cfg),
+		APIKey:   cfg.Gorse.APIKey,
+		Timeout:  config.GorseTimeout(cfg),
+	}), engine, options
+}
+
+func newRecommendationEmbedder(ctx context.Context, cfg config.Config) aiinfra.Embedder {
+	if aiinfra.NormalizeProvider(config.AIProvider(cfg)) == aiinfra.ProviderEino {
+		client, err := einoai.NewEmbeddingClient(ctx, einoai.EmbeddingConfig{
+			BaseURL: cfg.Embedding.BaseURL,
+			APIKey: firstNonEmpty(
+				os.Getenv("DASHSCOPE_API_KEY"),
+				os.Getenv("OPENAI_API_KEY"),
+				os.Getenv("EMBEDDING_API_KEY"),
+				cfg.Embedding.APIKey,
+			),
+			Model: cfg.Embedding.Options.Model,
+		})
+		if err == nil {
+			return textEmbedderAdapter{client: client}
+		}
+		zap.L().Warn("eino_embedding_init_failed_fallback_legacy", zap.Error(err))
+	}
+	return embedding.NewClient(cfg.Embedding)
+}
+
+type textEmbedderAdapter struct {
+	client interface {
+		EmbedText(context.Context, string) ([]float32, error)
+	}
+}
+
+func (a textEmbedderAdapter) Embed(ctx context.Context, text string) ([]float32, error) {
+	return a.client.EmbedText(ctx, text)
+}
+
 func configureDB(db *gorm.DB, cfg config.Config) error {
 	if sqlDB, err := db.DB(); err == nil {
 		if cfg.Postgres.MaxOpenConns > 0 {
@@ -159,35 +214,20 @@ func configureDB(db *gorm.DB, cfg config.Config) error {
 			sqlDB.SetConnMaxIdleTime(time.Duration(cfg.Postgres.ConnMaxIdleTime) * time.Second)
 		}
 	}
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS vector;").Error; err != nil {
-		return err
+	return persistence.EnsureSchema(db)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if v := strings.TrimSpace(value); v != "" {
+			return v
+		}
 	}
-	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}); err != nil {
-		return err
-	}
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_embedding ON edu_video_segment USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`).Error
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_user ON edu_user_video_recommend(user_id);`).Error
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_video ON edu_user_video_recommend(video_id);`).Error
-	return persistence.EnsureIntegrity(db)
+	return ""
 }
 
 func newObjectStore(cfg config.Config) (*objectstorage.RustFS, error) {
-	accessKey := cfg.RustFS.AccessKey
-	if accessKey == "" {
-		accessKey = os.Getenv("RUSTFS_ACCESS_KEY")
-	}
-	secretKey := cfg.RustFS.SecretKey
-	if secretKey == "" {
-		secretKey = os.Getenv("RUSTFS_SECRET_KEY")
-	}
-	return objectstorage.NewRustFS(objectstorage.Config{
-		Endpoint:  cfg.RustFS.Endpoint,
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		Bucket:    cfg.RustFS.Bucket,
-		UseSSL:    cfg.RustFS.UseSSL,
-	})
+	return objectstorage.NewRustFS(config.ObjectStorageConfig(cfg))
 }
 
 func (a *App) Close(ctx context.Context) error {
