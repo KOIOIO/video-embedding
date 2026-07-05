@@ -16,6 +16,7 @@ opencode.md
 project-highlights-for-interview.md
 
 # Environment and local overrides
+# Environment and local overrides
 .env
 .env.*
 !.env.example

@@ -32,6 +32,8 @@ let activeWatchContext = null
 const segmentProgress = ref(0)
 const segmentCurrentSec = ref(0)
 const isPlaying = ref(false)
+const playbackCurrentSec = ref(0)
+const playbackDurationSec = ref(0)
 
 const normalizedSrc = computed(() => {
   if (!props.src) return ''
@@ -53,6 +55,14 @@ const segmentDurationSec = computed(() => {
   if (!isSegmentMode.value) return 0
   return Math.max(0.1, Number(props.endTimeSec) - Number(props.startTimeSec))
 })
+const playbackProgress = computed(() => {
+  const duration = isSegmentMode.value ? segmentDurationSec.value : playbackDurationSec.value
+  const current = isSegmentMode.value ? segmentCurrentSec.value : playbackCurrentSec.value
+  if (!(duration > 0)) return 0
+  return clamp(current / duration, 0, 1)
+})
+const progressCurrentLabel = computed(() => formatTime(isSegmentMode.value ? segmentCurrentSec.value : playbackCurrentSec.value))
+const progressDurationLabel = computed(() => formatTime(isSegmentMode.value ? segmentDurationSec.value : playbackDurationSec.value))
 
 function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
@@ -82,6 +92,8 @@ function clearSegmentHandlers() {
   segmentProgress.value = 0
   segmentCurrentSec.value = 0
   isPlaying.value = false
+  playbackCurrentSec.value = 0
+  playbackDurationSec.value = 0
 }
 
 function emitWatchProgress(force = false) {
@@ -115,11 +127,13 @@ function resetWatchTracking() {
   activeWatchContext = null
 }
 
-function syncSegmentUI() {
+function syncPlaybackUI() {
   const video = videoRef.value
   if (!video) return
 
   isPlaying.value = !video.paused && !video.ended
+  playbackCurrentSec.value = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0
+  playbackDurationSec.value = Number.isFinite(video.duration) ? Math.max(0, video.duration) : 0
   if (isPlaying.value) {
     startWatchTimer()
   } else {
@@ -158,7 +172,7 @@ async function seekToSegmentStart() {
     video.currentTime = start
   } catch {
   }
-  syncSegmentUI()
+  syncPlaybackUI()
   if (props.autoplay) {
     try {
       await video.play()
@@ -178,28 +192,36 @@ async function togglePlay() {
   } else {
     video.pause()
   }
-  syncSegmentUI()
+  syncPlaybackUI()
 }
 
 function onSeekInput(e) {
   const video = videoRef.value
   if (!video) return
-  if (!isSegmentMode.value) return
   const p = clamp(Number(e?.target?.value || 0), 0, 1)
-  const start = Number(props.startTimeSec || 0)
-  const end = Number(props.endTimeSec || 0)
-  const dur = Math.max(0.1, end - start)
+  const start = isSegmentMode.value ? Number(props.startTimeSec || 0) : 0
+  const dur = isSegmentMode.value ? segmentDurationSec.value : playbackDurationSec.value
+  if (!(dur > 0)) return
   try {
     video.currentTime = start + p * dur
   } catch {
   }
-  syncSegmentUI()
+  syncPlaybackUI()
 }
 
 function teardown() {
   stopWatchTimer(true)
   resetWatchTracking()
   clearSegmentHandlers()
+  const video = videoRef.value
+  if (video) {
+    video.onplay = null
+    video.onpause = null
+    video.onended = null
+    video.ontimeupdate = null
+    video.onloadedmetadata = null
+    video.ondurationchange = null
+  }
   if (hls) {
     hls.destroy()
     hls = null
@@ -270,16 +292,19 @@ async function setup() {
 
   video.onplay = () => {
     startWatchTimer()
-    syncSegmentUI()
+    syncPlaybackUI()
   }
   video.onpause = () => {
     stopWatchTimer(false)
-    syncSegmentUI()
+    syncPlaybackUI()
   }
   video.onended = () => {
     stopWatchTimer(true)
-    syncSegmentUI()
+    syncPlaybackUI()
   }
+  video.ontimeupdate = () => syncPlaybackUI()
+  video.onloadedmetadata = () => syncPlaybackUI()
+  video.ondurationchange = () => syncPlaybackUI()
 
   if (!isHlsSrc.value) {
     video.src = normalizedSrc.value
@@ -287,10 +312,10 @@ async function setup() {
       segmentOnLoadedMetadata = () => {
         void seekToSegmentStart()
       }
-      segmentOnTimeUpdate = () => syncSegmentUI()
+      segmentOnTimeUpdate = () => syncPlaybackUI()
       video.addEventListener('loadedmetadata', segmentOnLoadedMetadata)
       video.addEventListener('timeupdate', segmentOnTimeUpdate)
-      segmentInterval = setInterval(syncSegmentUI, 250)
+      segmentInterval = setInterval(syncPlaybackUI, 250)
       if (video.readyState >= 1) {
         void seekToSegmentStart()
       }
@@ -312,10 +337,10 @@ async function setup() {
       segmentOnLoadedMetadata = () => {
         void seekToSegmentStart()
       }
-      segmentOnTimeUpdate = () => syncSegmentUI()
+      segmentOnTimeUpdate = () => syncPlaybackUI()
       video.addEventListener('loadedmetadata', segmentOnLoadedMetadata)
       video.addEventListener('timeupdate', segmentOnTimeUpdate)
-      segmentInterval = setInterval(syncSegmentUI, 250)
+      segmentInterval = setInterval(syncPlaybackUI, 250)
       if (video.readyState >= 1) {
         void seekToSegmentStart()
       }
@@ -371,10 +396,10 @@ async function setup() {
     segmentOnLoadedMetadata = () => {
       void seekToSegmentStart()
     }
-    segmentOnTimeUpdate = () => syncSegmentUI()
+    segmentOnTimeUpdate = () => syncPlaybackUI()
     video.addEventListener('loadedmetadata', segmentOnLoadedMetadata)
     video.addEventListener('timeupdate', segmentOnTimeUpdate)
-    segmentInterval = setInterval(syncSegmentUI, 250)
+    segmentInterval = setInterval(syncPlaybackUI, 250)
     if (video.readyState >= 1) {
       void seekToSegmentStart()
     }
@@ -405,13 +430,23 @@ onBeforeUnmount(teardown)
         <div v-if="currentLevelLabel" class="hint">当前：{{ currentLevelLabel }}</div>
       </div>
     </div>
-    <div v-if="isSegmentMode" class="segment-bar">
+    <video ref="videoRef" class="video" controls playsinline preload="metadata"></video>
+    <div class="segment-bar" :class="{ 'native-control-strip': !isSegmentMode }">
       <button class="seg-btn" @click="togglePlay">{{ isPlaying ? '暂停' : '播放' }}</button>
-      <div class="seg-time">{{ formatTime(segmentCurrentSec) }} / {{ formatTime(segmentDurationSec) }}</div>
-      <input class="seg-range" type="range" min="0" max="1" step="0.001" :value="segmentProgress" @input="onSeekInput" />
-      <div class="seg-meta">{{ Number(props.startTimeSec) }}s ~ {{ Number(props.endTimeSec) }}s</div>
+      <div class="seg-time">{{ progressCurrentLabel }} / {{ progressDurationLabel }}</div>
+      <input
+        class="seg-range native-range"
+        type="range"
+        min="0"
+        max="1"
+        step="0.001"
+        :value="playbackProgress"
+        :disabled="!isSegmentMode && !playbackDurationSec"
+        @input="onSeekInput"
+      />
+      <div v-if="isSegmentMode" class="seg-meta">{{ Number(props.startTimeSec) }}s ~ {{ Number(props.endTimeSec) }}s</div>
+      <div v-else class="seg-meta">完整视频进度</div>
     </div>
-    <video ref="videoRef" class="video" :controls="!isSegmentMode" playsinline preload="metadata"></video>
     <div v-if="errorText" class="error">{{ errorText }}</div>
   </div>
 </template>
@@ -420,13 +455,14 @@ onBeforeUnmount(teardown)
 .player {
   width: 100%;
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  color: #f4fbfa;
 }
 
 .player-title {
   font-size: 15px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #f7fbfa;
 }
 
 .toolbar {
@@ -447,90 +483,104 @@ onBeforeUnmount(teardown)
 
 .hint {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: #b8c5c2;
 }
 
 .select {
   appearance: none;
-  border: 1px solid var(--ui-border);
-  background: var(--ui-glass);
-  backdrop-filter: blur(var(--ui-blur));
-  -webkit-backdrop-filter: blur(var(--ui-blur));
-  color: var(--ui-ink);
-  border-radius: 14px;
+  border: 1px solid rgba(223, 227, 225, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7fbfa;
+  border-radius: 8px;
   padding: 8px 12px;
-  cursor: pointer;
 }
 
 .video {
   width: 100%;
-  max-height: 520px;
+  aspect-ratio: 16 / 9;
+  max-height: min(58vh, 560px);
   background: #000;
-  border-radius: 18px;
-  box-shadow: var(--ui-shadow-soft);
+  border-radius: 8px;
+  display: block;
 }
 
 .segment-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content max-content minmax(220px, 1fr) max-content;
   gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
   padding: 10px 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: 18px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(223, 244, 241, 0.18);
+  border-radius: 8px;
+  background: rgba(6, 14, 13, 0.92);
+}
+
+.native-control-strip {
+  margin-top: -2px;
 }
 
 .seg-btn {
-  border: 1px solid var(--ui-border-strong);
-  background: var(--ui-glass);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: var(--ui-ink);
-  border-radius: 14px;
-  padding: 8px 12px;
+  min-height: 36px;
+  border: 1px solid rgba(223, 244, 241, 0.24);
+  background: #dff4f1;
+  color: #0b5f59;
+  border-radius: 7px;
+  padding: 0 12px;
   cursor: pointer;
-  box-shadow: var(--ui-shadow-soft);
-  font-weight: 600;
-  transition: transform 120ms ease, box-shadow 120ms ease;
-}
-
-.seg-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.12);
+  font-weight: 760;
 }
 
 .seg-time,
 .seg-meta {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: #c9d7d4;
+  white-space: nowrap;
 }
 
 .seg-range {
-  flex: 1;
-  min-width: 220px;
-  accent-color: var(--accent);
+  width: 100%;
+  min-width: 0;
+  accent-color: #21c7b7;
+  cursor: pointer;
+}
+
+.seg-range:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.seg-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(223, 244, 241, 0.24);
+}
+
+.seg-range::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+}
+
+.seg-range::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(223, 244, 241, 0.24);
 }
 
 .error {
-  color: var(--danger-strong);
+  color: #b42318;
   font-size: 13px;
 }
 
 @media (max-width: 560px) {
   .segment-bar {
+    grid-template-columns: 1fr;
     align-items: stretch;
   }
 
   .seg-btn {
     width: 100%;
     justify-content: center;
-  }
-
-  .seg-range {
-    min-width: 100%;
   }
 }
 </style>

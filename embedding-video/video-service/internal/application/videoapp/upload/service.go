@@ -49,6 +49,7 @@ type ArchiveFailure struct {
 type Meta struct {
 	Title       string
 	Description string
+	UserID      uint64
 }
 
 type UploadVideoInput struct {
@@ -56,6 +57,7 @@ type UploadVideoInput struct {
 	ContentType string
 	Title       string
 	Description string
+	UserID      uint64
 	Reader      io.Reader
 }
 
@@ -63,6 +65,7 @@ type UploadVideoArchiveInput struct {
 	FileName    string
 	ContentType string
 	Description string
+	UserID      uint64
 	Reader      io.Reader
 }
 
@@ -141,6 +144,7 @@ func (s Service) UploadVideo(ctx context.Context, input UploadVideoInput) (resul
 	return s.Planner.FinalizeUpload(ctx, plan, Meta{
 		Title:       input.Title,
 		Description: input.Description,
+		UserID:      input.UserID,
 	})
 }
 
@@ -184,6 +188,7 @@ func (s Service) UploadVideoArchive(ctx context.Context, input UploadVideoArchiv
 			ContentType: ContentTypeFromVideoExtension(filepath.Ext(name)),
 			Title:       strings.TrimSuffix(filepath.Base(name), filepath.Ext(name)),
 			Description: input.Description,
+			UserID:      input.UserID,
 			Reader:      rc,
 		})
 		_ = rc.Close()

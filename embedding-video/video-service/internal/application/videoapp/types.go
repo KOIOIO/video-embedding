@@ -4,6 +4,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/pgvector/pgvector-go"
+
 	domainvideo "nlp-video-analysis/internal/domain/video"
 )
 
@@ -11,6 +13,7 @@ import (
 type UploadMeta struct {
 	Title       string
 	Description string
+	UserID      uint64
 }
 
 // UploadVideoInput 描述协议层直接上传视频时传给应用层的最小输入集合。
@@ -19,6 +22,7 @@ type UploadVideoInput struct {
 	ContentType string
 	Title       string
 	Description string
+	UserID      uint64
 	Reader      io.Reader
 }
 
@@ -26,6 +30,7 @@ type UploadVideoArchiveInput struct {
 	FileName    string
 	ContentType string
 	Description string
+	UserID      uint64
 	Reader      io.Reader
 }
 
@@ -34,6 +39,7 @@ type InitiateChunkedUploadInput struct {
 	ContentType string
 	Title       string
 	Description string
+	UserID      uint64
 	FileSize    int64
 	ChunkSize   int64
 	TotalChunks int
@@ -75,6 +81,9 @@ type RecommendCandidate struct {
 	EndTimeSec     int
 	Distance       float64
 	SegmentTitle   string
+	KnowledgeTags  string
+	VideoTitle     string
+	Description    string
 	VideoURL       string
 	CoverURL       string
 	Status         int16
@@ -83,6 +92,63 @@ type RecommendCandidate struct {
 	ViewCount      int
 	CreateTime     time.Time
 	UpdateTime     time.Time
+}
+
+type UserVideoProfile struct {
+	UserID        uint64
+	ProfileVector []float32
+	ModelVersion  string
+	Status        int16
+	PositiveCount int
+}
+
+type ProfileRerankQuery struct {
+	UserID         uint64
+	QuestionVector pgvector.Vector
+	ProfileVector  pgvector.Vector
+	Limit          int
+}
+
+type ProfileRerankCandidate struct {
+	RecommendCandidate
+	ProfileDistance   float64
+	LikeCount         int
+	DoubleLikeCount   int
+	UserDisliked      bool
+	UserVideoDisliked bool
+	UserWatched       bool
+}
+
+type UserTowerEmbedding struct {
+	UserID       uint64
+	Vector       []float32
+	ModelVersion string
+	Status       int16
+}
+
+type TwoTowerQuery struct {
+	UserID       uint64
+	UserVector   pgvector.Vector
+	ModelVersion string
+	Limit        int
+}
+
+type TwoTowerCandidate struct {
+	RecommendCandidate
+}
+
+type WeakKnowledge struct {
+	KnowledgePointID uint64
+	Mastery          float64
+	Name             string
+	Description      string
+}
+
+type WeakKnowledgeVectorQuery struct {
+	UserID           uint64
+	Query            pgvector.Vector
+	Limit            int
+	RequireRecommend bool
 }
 
 // RecommendResultItem 表示推荐接口对外返回的单条结果。
@@ -120,12 +186,40 @@ type RecommendationRecord struct {
 	UpdateTime     time.Time
 }
 
+const (
+	RecommendStrategyQuestionVector = "question_vector"
+	RecommendStrategyProfileRerank  = "profile_rerank"
+	RecommendStrategyTwoTower       = "two_tower"
+	RecommendStrategyGorse          = "gorse"
+	RecommendStrategyKnowledgeMatch = "knowledge_match"
+	RecommendStrategyRandomPlay     = "random_play"
+)
+
+type RecommendationExposure struct {
+	RequestID      string
+	UserID         uint64
+	QuestionID     uint64
+	VideoID        uint64
+	VideoSegmentID uint64
+	Rank           int
+	Score          float64
+	Strategy       string
+	ModelVersion   string
+	Now            time.Time
+}
+
 // RecommendByQuestionInput 描述按题目做召回时的输入参数。
 type RecommendByQuestionInput struct {
 	QuestionID   uint64
 	QuestionText string
 	UserID       uint64
 	Limit        int
+}
+
+// RandomPlayVideoSegmentInput 描述随机/个性化播放片段的输入参数。
+type RandomPlayVideoSegmentInput struct {
+	UserID uint64
+	Limit  int
 }
 
 // ListRecommendationsInput 描述推荐列表查询接口的输入参数。

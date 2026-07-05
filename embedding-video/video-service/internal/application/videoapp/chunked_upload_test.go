@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 )
@@ -29,6 +30,7 @@ func TestChunkedUploadCompletesAndEnqueuesTranscode(t *testing.T) {
 
 	session, err := svc.InitiateChunkedUpload(context.Background(), InitiateChunkedUploadInput{
 		FileName:    "lesson.mp4",
+		UserID:      42,
 		FileSize:    10,
 		ChunkSize:   5,
 		TotalChunks: 2,
@@ -87,6 +89,9 @@ func TestChunkedUploadCompletesAndEnqueuesTranscode(t *testing.T) {
 	if repo.createdVideo == nil || repo.createdVideo.Title != "Physics" || repo.createdVideo.Description != "desc" {
 		t.Fatalf("created video = %+v", repo.createdVideo)
 	}
+	if repo.createdVideo.UserID != 42 {
+		t.Fatalf("created video userID = %d, want 42", repo.createdVideo.UserID)
+	}
 	if queue.lastTask.TaskID != "77" || queue.lastTask.RawKey == "" {
 		t.Fatalf("queued task = %+v", queue.lastTask)
 	}
@@ -131,6 +136,33 @@ func TestChunkedUploadRejectsIncompleteComplete(t *testing.T) {
 	}
 	if err.Error() != "upload is incomplete" {
 		t.Fatalf("err = %q, want upload is incomplete", err.Error())
+	}
+}
+
+func TestChunkedUploadRejectsUserWithoutUploadPermission(t *testing.T) {
+	rawDir := t.TempDir()
+	repo := &uploadHTTPTestRepo{uploadDenied: true}
+	svc := NewService(repo, nil, nil, nil, nil, nil, nil, Paths{RawDir: rawDir})
+
+	_, err := svc.InitiateChunkedUpload(context.Background(), InitiateChunkedUploadInput{
+		FileName:    "lesson.mp4",
+		UserID:      42,
+		FileSize:    10,
+		ChunkSize:   5,
+		TotalChunks: 2,
+	})
+	if err == nil {
+		t.Fatal("expected upload permission error")
+	}
+	var validationErr ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if validationErr.Error() != "user is not allowed to upload videos" {
+		t.Fatalf("unexpected validation message: %q", validationErr.Error())
+	}
+	if entries, err := os.ReadDir(filepath.Join(rawDir, ".uploads")); err == nil && len(entries) > 0 {
+		t.Fatalf("created upload session entries despite missing permission: %d", len(entries))
 	}
 }
 
@@ -196,6 +228,7 @@ func TestChunkedArchiveUploadCompletesAndImportsVideos(t *testing.T) {
 	})
 	session, err := svc.InitiateChunkedArchiveUpload(context.Background(), InitiateChunkedUploadInput{
 		FileName:    "lessons.zip",
+		UserID:      42,
 		FileSize:    int64(len(payload)),
 		ChunkSize:   int64(len(payload)),
 		TotalChunks: 1,
@@ -219,6 +252,9 @@ func TestChunkedArchiveUploadCompletesAndImportsVideos(t *testing.T) {
 	if result.Total != 3 || len(result.Uploaded) != 2 || len(result.Skipped) != 1 {
 		t.Fatalf("result = %+v, want total 3 uploaded 2 skipped 1", result)
 	}
+	if result.BatchID == "" {
+		t.Fatal("BatchID is empty")
+	}
 	if result.Uploaded[0].VideoID != 201 || result.Uploaded[1].VideoID != 202 {
 		t.Fatalf("uploaded ids = %+v", result.Uploaded)
 	}
@@ -228,6 +264,9 @@ func TestChunkedArchiveUploadCompletesAndImportsVideos(t *testing.T) {
 	if repo.createdDescriptions[0] != "batch-desc" || repo.createdDescriptions[1] != "batch-desc" {
 		t.Fatalf("created descriptions = %+v", repo.createdDescriptions)
 	}
+	if repo.createdUserIDs[0] != 42 || repo.createdUserIDs[1] != 42 {
+		t.Fatalf("created userIDs = %+v, want [42 42]", repo.createdUserIDs)
+	}
 	if len(queue.tasks) != 2 {
 		t.Fatalf("queued tasks = %d, want 2", len(queue.tasks))
 	}
@@ -236,6 +275,15 @@ func TestChunkedArchiveUploadCompletesAndImportsVideos(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(rawDir, ".uploads", session.UploadID)); !os.IsNotExist(err) {
 		t.Fatalf("expected archive upload session directory to be removed, stat err=%v", err)
+	}
+
+	repo.archiveProgress = ArchiveProcessingProgress{Total: 2, Transcoded: 1, Vectorized: 1}
+	progress, err := svc.GetArchiveProcessingProgress(context.Background(), result.BatchID)
+	if err != nil {
+		t.Fatalf("GetArchiveProcessingProgress returned error: %v", err)
+	}
+	if progress.Total != 2 || progress.Transcoded != 1 || progress.Vectorized != 1 {
+		t.Fatalf("progress = %+v, want 1/2 and 1/2", progress)
 	}
 }
 
@@ -264,12 +312,17 @@ func buildChunkedUploadZip(t *testing.T, entries map[string]string) []byte {
 	t.Helper()
 	buf := &bytes.Buffer{}
 	zw := zip.NewWriter(buf)
-	for name, content := range entries {
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
 		w, err := zw.Create(name)
 		if err != nil {
 			t.Fatalf("create zip entry: %v", err)
 		}
-		if _, err := w.Write([]byte(content)); err != nil {
+		if _, err := w.Write([]byte(entries[name])); err != nil {
 			t.Fatalf("write zip entry: %v", err)
 		}
 	}

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { clearSavedArchiveUpload, loadSavedArchiveUpload, saveArchiveUpload } from './archiveProgressStorage.js'
 import HlsPlayer from './components/HlsPlayer.vue'
 import { uploadVideoInChunks } from './chunkedUpload.js'
 import { fetchRandomPlayableSegment } from './randomSegment.js'
@@ -13,8 +14,6 @@ const REACTION_TYPES = {
   DOUBLE_LIKE: 'double_like',
   DISLIKE: 'dislike',
 }
-
-const activeTab = ref('overview')
 
 const serviceStatus = ref({ ok: false, checked: false, error: '' })
 const swaggerUrl = import.meta.env.VITE_SWAGGER_URL || '/swagger/index.html'
@@ -31,10 +30,14 @@ const selectedFile = ref(null)
 const uploadMode = ref('single')
 const uploadTitle = ref('')
 const uploadDescription = ref('')
+const uploadUserId = ref(DEBUG_USER_ID)
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const uploadError = ref('')
 const uploadResult = ref(null)
+const archiveProgress = ref(null)
+const archiveProgressError = ref('')
+let archiveProgressTimer = null
 
 const transcodeStatus = ref(null)
 const transcodeLoading = ref(false)
@@ -61,6 +64,7 @@ const editorSaving = ref(false)
 const similarLoading = ref(false)
 const similarError = ref('')
 const similarVideos = ref([])
+const similarDrawerOpen = ref(false)
 
 const currentVideoId = ref(0)
 const currentPlaySrc = ref('')
@@ -113,6 +117,12 @@ const uploadButtonLabel = computed(() => {
 const archiveVideos = computed(() => (Array.isArray(uploadResult.value?.videos) ? uploadResult.value.videos : []))
 const archiveErrors = computed(() => (Array.isArray(uploadResult.value?.errors) ? uploadResult.value.errors : []))
 const archiveSkippedFiles = computed(() => (Array.isArray(uploadResult.value?.skipped_files) ? uploadResult.value.skipped_files : []))
+const archiveBatchId = computed(() => String(uploadResult.value?.batch_id || ''))
+const archiveProgressTotal = computed(() => Number(archiveProgress.value?.total || uploadResult.value?.uploaded || 0) || 0)
+const archiveTranscoded = computed(() => Number(archiveProgress.value?.transcoded || 0) || 0)
+const archiveVectorized = computed(() => Number(archiveProgress.value?.vectorized || 0) || 0)
+const archiveTranscodePercent = computed(() => progressPercent(archiveTranscoded.value, archiveProgressTotal.value))
+const archiveVectorPercent = computed(() => progressPercent(archiveVectorized.value, archiveProgressTotal.value))
 const questionTotalPages = computed(() => {
   const total = Number(questionTotal.value || 0)
   return Math.max(1, Math.ceil(total / questionPageSize))
@@ -181,6 +191,12 @@ async function requestJson(url, init) {
 
 function videoIdOf(video) {
   return Number(video?.id || video?.video_id || video || 0) || 0
+}
+
+function progressPercent(done, total) {
+  const denominator = Math.max(0, Number(total || 0))
+  if (!denominator) return 0
+  return Math.min(100, Math.max(0, Math.round((Number(done || 0) / denominator) * 100)))
 }
 
 function normalizeReactionCounts(data) {
@@ -268,6 +284,7 @@ async function refreshSegmentReactionCountsForItems(list) {
     try {
       await fetchSegmentReactionCounts(id)
     } catch {
+      // Segment reaction counts are supplemental in the debug console.
     }
   }))
 }
@@ -286,6 +303,7 @@ async function refreshReactionCountsForVideos(list) {
     try {
       await fetchVideoReactionCounts(id)
     } catch {
+      // Counts are supplemental for the debug console; keep the video list usable.
     }
   }))
 }
@@ -356,8 +374,18 @@ function setUploadMode(mode) {
   uploadMode.value = mode
   selectedFile.value = null
   uploadError.value = ''
-  uploadResult.value = null
   uploadProgress.value = 0
+  if (mode !== 'archive') {
+    uploadResult.value = null
+    archiveProgress.value = null
+    archiveProgressError.value = ''
+    stopArchiveProgressPolling()
+  } else if (!restoreArchiveProgress()) {
+    uploadResult.value = null
+    archiveProgress.value = null
+    archiveProgressError.value = ''
+    stopArchiveProgressPolling()
+  }
   transcodeStatus.value = null
   transcodeError.value = ''
 }
@@ -366,6 +394,13 @@ function stopPolling() {
   if (statusTimer) {
     clearInterval(statusTimer)
     statusTimer = null
+  }
+}
+
+function stopArchiveProgressPolling() {
+  if (archiveProgressTimer) {
+    clearInterval(archiveProgressTimer)
+    archiveProgressTimer = null
   }
 }
 
@@ -464,7 +499,6 @@ function setFullPlayer(src, title) {
   currentSegmentEnd.value = 0
   currentWatchContext.value = null
   currentRandomSegment.value = null
-  activeTab.value = 'overview'
 }
 
 function setSegmentPlayer(src, title, startSec, endSec, watchContext = null) {
@@ -474,7 +508,6 @@ function setSegmentPlayer(src, title, startSec, endSec, watchContext = null) {
   currentSegmentEnd.value = Number(endSec || 0)
   currentWatchContext.value = watchContext
   currentRandomSegment.value = null
-  activeTab.value = 'overview'
 }
 
 async function playRandomSegment() {
@@ -551,6 +584,30 @@ async function fetchTranscodeStatus(taskId) {
   }
 }
 
+async function fetchArchiveProgress(batchId) {
+  if (!batchId) return
+  try {
+    const data = await requestJson(`${API_BASE}/videos/archive/batches/${encodeURIComponent(batchId)}/progress`)
+    archiveProgress.value = data
+    archiveProgressError.value = ''
+    const total = Number(data?.total || 0) || 0
+    if (total > 0 && Number(data?.transcoded || 0) >= total && Number(data?.vectorized || 0) >= total) {
+      stopArchiveProgressPolling()
+      void fetchVideos()
+    }
+  } catch (error) {
+    archiveProgressError.value = String(error?.message || error)
+  }
+}
+
+function startArchiveProgressPolling(batchId) {
+  stopArchiveProgressPolling()
+  void fetchArchiveProgress(batchId)
+  archiveProgressTimer = setInterval(() => {
+    void fetchArchiveProgress(batchId)
+  }, 5000)
+}
+
 function startPolling(taskId) {
   stopPolling()
   void fetchTranscodeStatus(taskId)
@@ -561,7 +618,13 @@ function startPolling(taskId) {
 
 function handleUploadSuccess(data) {
   uploadResult.value = data
+  archiveProgress.value = null
+  archiveProgressError.value = ''
   const firstArchiveVideo = Array.isArray(data?.videos) ? data.videos[0] : null
+  if (data?.batch_id) {
+    saveArchiveUpload(data)
+    startArchiveProgressPolling(String(data.batch_id))
+  }
   if (data?.task_id) {
     startPolling(data.task_id)
   } else if (firstArchiveVideo?.task_id) {
@@ -579,12 +642,16 @@ async function uploadVideo() {
   uploadError.value = ''
   uploadProgress.value = 0
   uploadResult.value = null
+  archiveProgress.value = null
+  archiveProgressError.value = ''
+  stopArchiveProgressPolling()
   transcodeStatus.value = null
   transcodeError.value = ''
   if (!selectedFile.value) {
     uploadError.value = isArchiveUpload.value ? '请选择一个 ZIP 压缩包' : '请选择一个视频文件'
     return
   }
+  if (isArchiveUpload.value) clearSavedArchiveUpload()
 
   uploading.value = true
   try {
@@ -592,6 +659,7 @@ async function uploadVideo() {
       apiBase: API_BASE,
       kind: isArchiveUpload.value ? 'archive' : 'video',
       file: selectedFile.value,
+      userId: uploadUserId.value,
       title: uploadTitle.value,
       description: uploadDescription.value,
       chunkSize: VIDEO_UPLOAD_CHUNK_SIZE,
@@ -607,6 +675,26 @@ async function uploadVideo() {
   } finally {
     uploading.value = false
   }
+}
+
+function restoreArchiveProgress() {
+  const saved = loadSavedArchiveUpload()
+  if (!saved?.batch_id) return false
+  uploadMode.value = 'archive'
+  uploadResult.value = saved
+  archiveProgress.value = null
+  archiveProgressError.value = ''
+  startArchiveProgressPolling(saved.batch_id)
+  return true
+}
+
+function clearArchiveProgressView() {
+  clearSavedArchiveUpload()
+  stopArchiveProgressPolling()
+  archiveProgress.value = null
+  archiveProgressError.value = ''
+  uploadResult.value = null
+  uploadProgress.value = 0
 }
 
 async function playVideo(videoId) {
@@ -935,393 +1023,318 @@ onMounted(() => {
   void fetchVideos()
   void fetchQuestions(1)
   startSystemMetricsPolling()
+  restoreArchiveProgress()
 })
 
 onBeforeUnmount(() => {
   stopPolling()
+  stopArchiveProgressPolling()
   stopSystemMetricsPolling()
 })
 </script>
 
 <template>
-  <div class="console-page">
-    <header class="hero-shell">
-      <div class="hero-decor" aria-hidden="true">
-        <span class="hero-bubble hero-bubble-a"></span>
-        <span class="hero-bubble hero-bubble-b"></span>
-        <span class="hero-bubble hero-bubble-c"></span>
-      </div>
-      <div class="hero-copy">
-        <p class="eyebrow">HTTP Backend Test Console</p>
-        <h1>智能教学视频服务 联调面板</h1>
-        <p class="hero-text">
-          面向智能教学视频分析与推荐系统的轻卡通联调工作台，覆盖上传、转码、播放、题库、推荐与观看记录上报。
-        </p>
-        <div class="hero-metrics" aria-label="console overview">
-          <div class="hero-pill">
-            <span class="hero-pill-label">视频资源</span>
-            <strong>{{ videos.length }}</strong>
-          </div>
-          <div class="hero-pill">
-            <span class="hero-pill-label">题库总数</span>
-            <strong>{{ questionTotal }}</strong>
-          </div>
-          <div class="hero-pill">
-            <span class="hero-pill-label">当前播放</span>
-            <strong>{{ canPlay ? '进行中' : '待选择' }}</strong>
-          </div>
+  <div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="视频管理导航">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true">HS</span>
+        <div>
+          <strong>视频管理后台</strong>
+          <span>HLS Admin</span>
         </div>
       </div>
-      <div class="hero-actions">
-        <a class="ghost-link" :href="swaggerUrl" target="_blank" rel="noreferrer">打开 Swagger</a>
-        <button class="secondary-btn" @click="fetchHealth">刷新健康状态</button>
-      </div>
-      <div class="status-ribbon" :class="serviceStatus.ok ? 'ok' : serviceStatus.checked ? 'bad' : 'idle'">
-        <span class="dot"></span>
-        <span v-if="!serviceStatus.checked">未检测</span>
-        <span v-else-if="serviceStatus.ok">HTTP 服务可达</span>
-        <span v-else>服务异常：{{ serviceStatus.error || 'healthz 不可用' }}</span>
-      </div>
-    </header>
 
-    <nav class="tab-nav" role="tablist" aria-label="功能导航">
-      <button type="button" class="tab-btn" :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">概览</button>
-      <button type="button" class="tab-btn" :class="{ active: activeTab === 'videos' }" @click="activeTab = 'videos'">视频管理</button>
-      <button type="button" class="tab-btn" :class="{ active: activeTab === 'questions' }" @click="activeTab = 'questions'">题库推荐</button>
-    </nav>
+      <nav class="side-nav">
+        <a href="#overview" class="side-nav-item active">总览</a>
+        <a href="#upload" class="side-nav-item">上传转码</a>
+        <a href="#playback" class="side-nav-item">播放调试</a>
+        <a href="#videos" class="side-nav-item">视频资源</a>
+        <a href="#questions" class="side-nav-item">题库推荐</a>
+      </nav>
 
-    <div v-if="activeTab === 'overview'" class="tab-content">
-      <section class="panel metrics-panel">
-        <div class="panel-head">
-          <div>
-            <p class="panel-tag">System Metrics</p>
-            <h2>服务器 CPU / 内存监控</h2>
-          </div>
-          <div class="panel-actions">
-            <button class="secondary-btn" :disabled="systemMetricsLoading" @click="fetchSystemMetrics">刷新监控</button>
-          </div>
+      <div class="sidebar-card">
+        <span class="sidebar-label">HTTP 服务</span>
+        <div class="status-ribbon" :class="serviceStatus.ok ? 'ok' : serviceStatus.checked ? 'bad' : 'idle'">
+          <span class="dot"></span>
+          <span v-if="!serviceStatus.checked">未检测</span>
+          <span v-else-if="serviceStatus.ok">服务可达</span>
+          <span v-else>{{ serviceStatus.error || 'healthz 不可用' }}</span>
         </div>
-        <p class="muted-line section-intro">展示后端所在机器的整机 CPU / 内存状态，以及当前 Go 进程的内存与 goroutine 数量。</p>
-        <p v-if="systemMetricsError" class="feedback error">{{ systemMetricsError }}</p>
-        <div v-if="systemMetrics" class="metrics-grid chart-grid">
-          <article class="metric-card chart-card">
-            <div class="metric-head">
-              <span class="metric-label">CPU 使用率</span>
-              <strong class="metric-value">{{ Number(systemMetrics.cpu_percent || 0).toFixed(1) }}%</strong>
-            </div>
-            <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
-              <polyline :points="cpuPolyline" />
-            </svg>
-          </article>
-          <article class="metric-card chart-card">
-            <div class="metric-head">
-              <span class="metric-label">内存使用率</span>
-              <strong class="metric-value">{{ Number(systemMetrics.memory_used_percent || 0).toFixed(1) }}%</strong>
-            </div>
-            <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
-              <polyline :points="memoryPolyline" />
-            </svg>
-          </article>
-          <article class="metric-card chart-card">
-            <div class="metric-head">
-              <span class="metric-label">Go 进程内存</span>
-              <strong class="metric-value">{{ formatBytes(systemMetrics.process_memory_bytes) }}</strong>
-            </div>
-            <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
-              <polyline :points="processMemoryPolyline" />
-            </svg>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">整机内存</span>
-            <strong class="metric-value">{{ formatBytes(systemMetrics.memory_used_bytes) }} / {{ formatBytes(systemMetrics.memory_total_bytes) }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">Goroutine 数</span>
-            <strong class="metric-value">{{ systemMetrics.goroutines }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">最近更新时间</span>
-            <strong class="metric-value">{{ systemMetrics.timestamp || '-' }}</strong>
-          </article>
+        <button class="secondary-btn sidebar-action" @click="fetchHealth">刷新健康状态</button>
+      </div>
+    </aside>
+
+    <div class="console-page admin-main">
+      <header id="overview" class="admin-topbar">
+        <div class="page-heading">
+          <p class="eyebrow">Video Embedding</p>
+          <h1>视频运营与联调中心</h1>
+          <p class="hero-text">
+            面向 <code>video-service</code> 的管理后台，集中处理上传、转码、播放、推荐与题库联调。
+          </p>
         </div>
-        <div v-if="systemMetrics?.active_counts" class="metrics-grid active-grid">
-          <article class="metric-card">
-            <span class="metric-label">转码任务并发</span>
-            <strong class="metric-value">{{ systemMetrics.active_counts.transcode_tasks_active || 0 }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">向量化任务并发</span>
-            <strong class="metric-value">{{ systemMetrics.active_counts.vector_tasks_active || 0 }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">粗切分并发</span>
-            <strong class="metric-value">{{ systemMetrics.active_counts.vector_coarse_clip_active || 0 }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">粗上传并发</span>
-            <strong class="metric-value">{{ systemMetrics.active_counts.vector_coarse_upload_active || 0 }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">粗 ASR 并发</span>
-            <strong class="metric-value">{{ systemMetrics.active_counts.vector_coarse_asr_active || 0 }}</strong>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">Refine ASR 并发</span>
-            <strong class="metric-value">{{ systemMetrics.active_counts.vector_refine_asr_active || 0 }}</strong>
-          </article>
+        <div class="topbar-actions">
+          <a class="ghost-link" :href="swaggerUrl" target="_blank" rel="noreferrer">打开 Swagger</a>
+          <button class="secondary-btn" @click="fetchVideos">刷新视频</button>
         </div>
-        <div v-else-if="systemMetricsLoading" class="feedback muted">监控指标加载中…</div>
-        <div v-else class="empty-state small">暂无监控数据</div>
+      </header>
+
+      <section class="overview-grid" aria-label="后台总览">
+        <article class="overview-card primary">
+          <span class="overview-label">视频资源</span>
+          <strong>{{ videos.length }}</strong>
+          <small>当前已加载的视频卡片</small>
+        </article>
+        <article class="overview-card">
+          <span class="overview-label">题库总数</span>
+          <strong>{{ questionTotal }}</strong>
+          <small>分页 {{ questionPage }} / {{ questionTotalPages }}</small>
+        </article>
+        <article class="overview-card">
+          <span class="overview-label">当前播放</span>
+          <strong>{{ canPlay ? '进行中' : '待选择' }}</strong>
+          <small>{{ currentPlayTitle || '未选择视频或片段' }}</small>
+        </article>
+        <article class="overview-card">
+          <span class="overview-label">上传模式</span>
+          <strong>{{ isArchiveUpload ? 'ZIP 批量' : '单视频' }}</strong>
+          <small>{{ uploading ? `上传 ${uploadProgress}%` : '等待任务' }}</small>
+        </article>
       </section>
 
-      <section class="panel wide-panel">
+    <section class="panel metrics-panel">
+      <div class="panel-head">
+        <div>
+          <p class="panel-tag">System Metrics</p>
+          <h2>服务器 CPU / 内存监控</h2>
+        </div>
+        <div class="panel-actions">
+          <button class="secondary-btn" :disabled="systemMetricsLoading" @click="fetchSystemMetrics">刷新监控</button>
+        </div>
+      </div>
+      <p class="muted-line section-intro">展示后端所在机器的整机 CPU / 内存状态，以及当前 Go 进程的内存与 goroutine 数量。</p>
+      <p v-if="systemMetricsError" class="feedback error">{{ systemMetricsError }}</p>
+      <div v-if="systemMetrics" class="metrics-grid chart-grid">
+        <article class="metric-card chart-card">
+          <div class="metric-head">
+            <span class="metric-label">CPU 使用率</span>
+            <strong class="metric-value">{{ Number(systemMetrics.cpu_percent || 0).toFixed(1) }}%</strong>
+          </div>
+          <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <polyline :points="cpuPolyline" />
+          </svg>
+        </article>
+        <article class="metric-card chart-card">
+          <div class="metric-head">
+            <span class="metric-label">内存使用率</span>
+            <strong class="metric-value">{{ Number(systemMetrics.memory_used_percent || 0).toFixed(1) }}%</strong>
+          </div>
+          <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <polyline :points="memoryPolyline" />
+          </svg>
+        </article>
+        <article class="metric-card chart-card">
+          <div class="metric-head">
+            <span class="metric-label">Go 进程内存</span>
+            <strong class="metric-value">{{ formatBytes(systemMetrics.process_memory_bytes) }}</strong>
+          </div>
+          <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <polyline :points="processMemoryPolyline" />
+          </svg>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">整机内存</span>
+          <strong class="metric-value">{{ formatBytes(systemMetrics.memory_used_bytes) }} / {{ formatBytes(systemMetrics.memory_total_bytes) }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Goroutine 数</span>
+          <strong class="metric-value">{{ systemMetrics.goroutines }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">最近更新时间</span>
+          <strong class="metric-value">{{ systemMetrics.timestamp || '-' }}</strong>
+        </article>
+      </div>
+      <div v-if="systemMetrics?.active_counts" class="metrics-grid active-grid">
+        <article class="metric-card">
+          <span class="metric-label">转码任务并发</span>
+          <strong class="metric-value">{{ systemMetrics.active_counts.transcode_tasks_active || 0 }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">向量化任务并发</span>
+          <strong class="metric-value">{{ systemMetrics.active_counts.vector_tasks_active || 0 }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">粗切分并发</span>
+          <strong class="metric-value">{{ systemMetrics.active_counts.vector_coarse_clip_active || 0 }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">粗上传并发</span>
+          <strong class="metric-value">{{ systemMetrics.active_counts.vector_coarse_upload_active || 0 }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">粗 ASR 并发</span>
+          <strong class="metric-value">{{ systemMetrics.active_counts.vector_coarse_asr_active || 0 }}</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Refine ASR 并发</span>
+          <strong class="metric-value">{{ systemMetrics.active_counts.vector_refine_asr_active || 0 }}</strong>
+        </article>
+      </div>
+      <div v-else-if="systemMetricsLoading" class="feedback muted">监控指标加载中…</div>
+      <div v-else class="empty-state small">暂无监控数据</div>
+    </section>
+
+    <main class="dashboard-grid">
+      <div class="dashboard-column dashboard-content">
+      <section id="upload" class="panel upload-panel">
         <div class="panel-head">
           <div>
-            <p class="panel-tag">Playback</p>
-            <h2>视频播放器</h2>
-          </div>
-          <div class="panel-actions">
-            <button class="primary-btn" :disabled="randomSegmentLoading" @click="playRandomSegment">
-              {{ randomSegmentLoading ? '随机中…' : '随机播放片段' }}
-            </button>
-            <button class="secondary-btn" :disabled="!lastVideoId" @click="playVideo(lastVideoId)">播放最新上传</button>
+            <p class="panel-tag">Upload</p>
+            <h2>上传视频与转码跟踪</h2>
           </div>
         </div>
-        <p class="muted-line section-intro">优先展示当前选中的完整视频或推荐片段，方便你在联调时快速验证播放链路。</p>
-        <p v-if="randomSegmentError" class="feedback error">{{ randomSegmentError }}</p>
 
-        <div v-if="canPlay" class="player-frame">
-          <HlsPlayer
-            :src="currentPlaySrc"
-            :title="currentPlayTitle"
-            :start-time-sec="currentSegmentStart"
-            :end-time-sec="currentSegmentEnd"
-            :watch-context="currentWatchContext"
-            @watch-progress="onCurrentWatchProgress"
-          />
-        </div>
-        <div v-else class="empty-state">选择视频或推荐片段后开始播放。</div>
-
-        <div v-if="currentRandomSegment" class="random-segment-strip">
-          <div>
-            <div class="random-segment-title">{{ currentRandomSegment.title || '-' }}</div>
-            <div class="recommend-meta">
-              随机片段 {{ formatSegmentRange(currentRandomSegment.start_time_sec, currentRandomSegment.end_time_sec) }}
-              · Segment {{ currentRandomSegment.video_segment_id }}
-            </div>
-          </div>
-          <div class="reaction-strip compact-reactions segment-reactions">
-            <button
-              type="button"
-              class="reaction-btn"
-              :class="{ active: activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.LIKE }"
-              :disabled="isSegmentReactionLoading(currentRandomSegment)"
-              :aria-pressed="activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.LIKE"
-              @click="submitSegmentReaction(currentRandomSegment, REACTION_TYPES.LIKE)"
-            >
-              赞 {{ segmentReactionCountsFor(currentRandomSegment).like_count }}
+        <div class="stack">
+          <div class="segmented-control" role="tablist" aria-label="上传模式">
+            <button type="button" :class="{ active: !isArchiveUpload }" @click="setUploadMode('single')">
+              单个视频
             </button>
-            <button
-              type="button"
-              class="reaction-btn"
-              :class="{ active: activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DOUBLE_LIKE }"
-              :disabled="isSegmentReactionLoading(currentRandomSegment)"
-              :aria-pressed="activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DOUBLE_LIKE"
-              @click="submitSegmentReaction(currentRandomSegment, REACTION_TYPES.DOUBLE_LIKE)"
-            >
-              双赞 {{ segmentReactionCountsFor(currentRandomSegment).double_like_count }}
-            </button>
-            <button
-              type="button"
-              class="reaction-btn dislike"
-              :class="{ active: activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DISLIKE }"
-              :disabled="isSegmentReactionLoading(currentRandomSegment)"
-              :aria-pressed="activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DISLIKE"
-              @click="submitSegmentReaction(currentRandomSegment, REACTION_TYPES.DISLIKE)"
-            >
-              倒赞
+            <button type="button" :class="{ active: isArchiveUpload }" @click="setUploadMode('archive')">
+              ZIP 批量
             </button>
           </div>
-          <p v-if="segmentReactionErrorFor(currentRandomSegment)" class="feedback error reaction-error">{{ segmentReactionErrorFor(currentRandomSegment) }}</p>
+          <label class="field-stack">
+            <span class="field-label">{{ uploadFileLabel }}</span>
+            <input class="field file-field" type="file" :accept="uploadFileAccept" @change="onFileChange" />
+          </label>
+          <label class="field-stack">
+            <span class="field-label">上传用户 ID</span>
+            <input class="field" v-model.number="uploadUserId" type="number" min="1" step="1" placeholder="1" />
+          </label>
+          <label class="field-stack" v-if="!isArchiveUpload">
+            <span class="field-label">视频标题</span>
+            <input class="field" v-model="uploadTitle" placeholder="给视频起一个好辨认的标题（可选）" />
+          </label>
+          <label class="field-stack">
+            <span class="field-label">{{ isArchiveUpload ? '批量描述' : '视频描述' }}</span>
+            <textarea class="field textarea" v-model="uploadDescription" rows="3" placeholder="补充来源、主题或测试说明（可选）"></textarea>
+          </label>
+          <div class="button-row">
+            <button class="primary-btn" :disabled="uploading || !selectedFile" @click="uploadVideo">
+              {{ uploadButtonLabel }}
+            </button>
+            <button class="secondary-btn" :disabled="!lastTaskId || transcodeLoading" @click="fetchTranscodeStatus(lastTaskId)">
+              刷新转码状态
+            </button>
+          </div>
         </div>
 
-        <div class="subpanel">
-          <div class="subpanel-head">
-            <h3>相似视频</h3>
-            <button class="secondary-btn" :disabled="!currentVideoId || similarLoading" @click="fetchSimilar(currentVideoId)">刷新相似视频</button>
-          </div>
-          <p v-if="similarError" class="feedback error">{{ similarError }}</p>
-          <div v-if="similarLoading" class="feedback muted">加载中…</div>
-          <div v-else-if="similarVideos.length" class="video-list compact-list">
-            <article v-for="video in similarVideos" :key="`similar-${video.id}`" class="video-row">
-              <div class="video-cover">
-                <img v-if="video.cover_url" :src="video.cover_url" alt="cover" />
-                <span v-else>NO COVER</span>
-              </div>
-              <div class="video-meta">
-                <div class="video-title">{{ video.title || '-' }}</div>
-                <div class="muted-line">view_count {{ video.view_count || 0 }}</div>
-                <div class="reaction-strip compact-reactions">
-                  <button
-                    type="button"
-                    class="reaction-btn"
-                    :class="{ active: activeReactionFor(video) === REACTION_TYPES.LIKE }"
-                    :disabled="isReactionLoading(video)"
-                    :aria-pressed="activeReactionFor(video) === REACTION_TYPES.LIKE"
-                    @click="submitVideoReaction(video, REACTION_TYPES.LIKE)"
-                  >
-                    赞 {{ reactionCountsFor(video).like_count }}
-                  </button>
-                  <button
-                    type="button"
-                    class="reaction-btn"
-                    :class="{ active: activeReactionFor(video) === REACTION_TYPES.DOUBLE_LIKE }"
-                    :disabled="isReactionLoading(video)"
-                    :aria-pressed="activeReactionFor(video) === REACTION_TYPES.DOUBLE_LIKE"
-                    @click="submitVideoReaction(video, REACTION_TYPES.DOUBLE_LIKE)"
-                  >
-                    双赞 {{ reactionCountsFor(video).double_like_count }}
-                  </button>
-                  <button
-                    type="button"
-                    class="reaction-btn dislike"
-                    :class="{ active: activeReactionFor(video) === REACTION_TYPES.DISLIKE }"
-                    :disabled="isReactionLoading(video)"
-                    :aria-pressed="activeReactionFor(video) === REACTION_TYPES.DISLIKE"
-                    @click="submitVideoReaction(video, REACTION_TYPES.DISLIKE)"
-                  >
-                    倒赞
-                  </button>
-                </div>
-              </div>
-              <div class="mini-actions">
-                <button class="tiny-btn" @click="playVideo(video.id)">播放</button>
-              </div>
-            </article>
-          </div>
-          <div v-else class="empty-state small">暂无相似视频</div>
+        <div v-if="uploading" class="progress-track">
+          <div class="progress-fill" :style="{ width: `${uploadProgress}%` }"></div>
         </div>
-      </section>
-    </div>
+        <p v-if="uploadError" class="feedback error">{{ uploadError }}</p>
 
-    <div v-else-if="activeTab === 'videos'" class="tab-content">
-      <main class="dashboard-grid">
-        <section class="panel upload-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-tag">Upload</p>
-              <h2>上传视频与转码跟踪</h2>
-            </div>
-          </div>
+        <div class="kv-grid" v-if="uploadResult && !isArchiveUpload">
+          <div>video_id</div>
+          <div>{{ uploadResult.video_id || '-' }}</div>
+          <div>task_id</div>
+          <div>{{ uploadResult.task_id || '-' }}</div>
+          <div>raw_url</div>
+          <div><a class="inline-link" :href="uploadResult.raw_url" target="_blank">{{ uploadResult.raw_url || '-' }}</a></div>
+          <div>hls_url</div>
+          <div><a class="inline-link" :href="uploadResult.hls_url" target="_blank">{{ uploadResult.hls_url || '-' }}</a></div>
+        </div>
 
-          <div class="stack">
-            <div class="segmented-control" role="tablist" aria-label="上传模式">
-              <button type="button" :class="{ active: !isArchiveUpload }" @click="setUploadMode('single')">
-                单个视频
-              </button>
-              <button type="button" :class="{ active: isArchiveUpload }" @click="setUploadMode('archive')">
-                ZIP 批量
-              </button>
-            </div>
-            <label class="field-stack">
-              <span class="field-label">{{ uploadFileLabel }}</span>
-              <input class="field file-field" type="file" :accept="uploadFileAccept" @change="onFileChange" />
-            </label>
-            <label class="field-stack" v-if="!isArchiveUpload">
-              <span class="field-label">视频标题</span>
-              <input class="field" v-model="uploadTitle" placeholder="给视频起一个好辨认的标题（可选）" />
-            </label>
-            <label class="field-stack">
-              <span class="field-label">{{ isArchiveUpload ? '批量描述' : '视频描述' }}</span>
-              <textarea class="field textarea" v-model="uploadDescription" rows="3" placeholder="补充来源、主题或测试说明（可选）"></textarea>
-            </label>
-            <div class="button-row">
-              <button class="primary-btn" :disabled="uploading || !selectedFile" @click="uploadVideo">
-                {{ uploadButtonLabel }}
-              </button>
-              <button class="secondary-btn" :disabled="!lastTaskId || transcodeLoading" @click="fetchTranscodeStatus(lastTaskId)">
-                刷新转码状态
-              </button>
-            </div>
-          </div>
-
-          <div v-if="uploading" class="progress-track">
-            <div class="progress-fill" :style="{ width: `${uploadProgress}%` }"></div>
-          </div>
-          <p v-if="uploadError" class="feedback error">{{ uploadError }}</p>
-
-          <div class="kv-grid" v-if="uploadResult && !isArchiveUpload">
-            <div>video_id</div>
-            <div>{{ uploadResult.video_id || '-' }}</div>
-            <div>task_id</div>
-            <div>{{ uploadResult.task_id || '-' }}</div>
-            <div>raw_url</div>
-            <div><a class="inline-link" :href="uploadResult.raw_url" target="_blank">{{ uploadResult.raw_url || '-' }}</a></div>
-            <div>hls_url</div>
-            <div><a class="inline-link" :href="uploadResult.hls_url" target="_blank">{{ uploadResult.hls_url || '-' }}</a></div>
-          </div>
-
-          <div class="subpanel" v-if="uploadResult && isArchiveUpload">
+        <div class="subpanel" v-if="uploadResult && isArchiveUpload">
+          <div class="subpanel-title-row">
             <h3>ZIP 导入结果</h3>
-            <div class="kv-grid compact">
-              <div>total</div>
-              <div>{{ uploadResult.total ?? '-' }}</div>
-              <div>uploaded</div>
-              <div>{{ uploadResult.uploaded ?? 0 }}</div>
-              <div>failed</div>
-              <div>{{ uploadResult.failed ?? 0 }}</div>
-              <div>skipped</div>
-              <div>{{ uploadResult.skipped ?? 0 }}</div>
-            </div>
+            <button type="button" class="text-btn" @click="clearArchiveProgressView">清除当前批次</button>
+          </div>
+          <div class="kv-grid compact">
+            <div>total</div>
+            <div>{{ uploadResult.total ?? '-' }}</div>
+            <div>batch_id</div>
+            <div>{{ archiveBatchId || '-' }}</div>
+            <div>uploaded</div>
+            <div>{{ uploadResult.uploaded ?? 0 }}</div>
+            <div>failed</div>
+            <div>{{ uploadResult.failed ?? 0 }}</div>
+            <div>skipped</div>
+            <div>{{ uploadResult.skipped ?? 0 }}</div>
+          </div>
 
-            <div class="archive-list" v-if="archiveVideos.length">
-              <div class="archive-row" v-for="video in archiveVideos" :key="video.video_id || video.task_id">
-                <strong>{{ video.file_name || video.video_id }}</strong>
-                <span>video_id {{ video.video_id }}</span>
-                <a class="inline-link" :href="video.raw_url" target="_blank">raw</a>
+          <div class="archive-progress" v-if="archiveBatchId">
+            <div class="archive-progress-row">
+              <div class="archive-progress-head">
+                <span>转码进度</span>
+                <strong>{{ archiveTranscoded }} / {{ archiveProgressTotal }}</strong>
+              </div>
+              <div class="mini-progress-track" aria-label="ZIP 转码进度">
+                <div class="mini-progress-fill transcode" :style="{ width: `${archiveTranscodePercent}%` }"></div>
               </div>
             </div>
-
-            <p v-if="archiveSkippedFiles.length" class="feedback muted">
-              已跳过：{{ archiveSkippedFiles.join('、') }}
-            </p>
-            <p v-for="item in archiveErrors" :key="item.file_name" class="feedback error">
-              {{ item.file_name }}：{{ item.error }}
-            </p>
+            <div class="archive-progress-row">
+              <div class="archive-progress-head">
+                <span>向量化进度</span>
+                <strong>{{ archiveVectorized }} / {{ archiveProgressTotal }}</strong>
+              </div>
+              <div class="mini-progress-track" aria-label="ZIP 向量化进度">
+                <div class="mini-progress-fill vector" :style="{ width: `${archiveVectorPercent}%` }"></div>
+              </div>
+            </div>
+            <p v-if="archiveProgressError" class="feedback error">{{ archiveProgressError }}</p>
           </div>
 
-          <div class="subpanel" v-if="transcodeStatus || transcodeError">
-            <h3>转码状态</h3>
-            <p v-if="transcodeError" class="feedback error">{{ transcodeError }}</p>
-            <div v-else-if="transcodeStatus" class="kv-grid compact">
-              <div>status</div>
-              <div>{{ transcodeStatus.status || '-' }}</div>
-              <div>message</div>
-              <div>{{ transcodeStatus.message || '-' }}</div>
-              <div>hls_url</div>
-              <div><a class="inline-link" :href="transcodeStatus.hls_url" target="_blank">{{ transcodeStatus.hls_url || '-' }}</a></div>
+          <div class="archive-list" v-if="archiveVideos.length">
+            <div class="archive-row" v-for="video in archiveVideos" :key="video.video_id || video.task_id">
+              <strong>{{ video.file_name || video.video_id }}</strong>
+              <span>video_id {{ video.video_id }}</span>
+              <a class="inline-link" :href="video.raw_url" target="_blank">raw</a>
             </div>
           </div>
-        </section>
 
-        <section class="panel wide-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-tag">Videos</p>
-              <h2>视频资源列表</h2>
-            </div>
-            <div class="panel-actions">
-              <button class="secondary-btn" :disabled="videosLoading" @click="fetchVideos">刷新列表</button>
-            </div>
+          <p v-if="archiveSkippedFiles.length" class="feedback muted">
+            已跳过：{{ archiveSkippedFiles.join('、') }}
+          </p>
+          <p v-for="item in archiveErrors" :key="item.file_name" class="feedback error">
+            {{ item.file_name }}：{{ item.error }}
+          </p>
+        </div>
+
+        <div class="subpanel" v-if="transcodeStatus || transcodeError">
+          <h3>转码状态</h3>
+          <p v-if="transcodeError" class="feedback error">{{ transcodeError }}</p>
+          <div v-else-if="transcodeStatus" class="kv-grid compact">
+            <div>status</div>
+            <div>{{ transcodeStatus.status || '-' }}</div>
+            <div>message</div>
+            <div>{{ transcodeStatus.message || '-' }}</div>
+            <div>hls_url</div>
+            <div><a class="inline-link" :href="transcodeStatus.hls_url" target="_blank">{{ transcodeStatus.hls_url || '-' }}</a></div>
           </div>
-          <p class="muted-line section-intro">封面、发布、推荐和元数据编辑集中在同一张卡片里，减少来回跳转。</p>
+        </div>
+      </section>
 
-          <p v-if="videosError" class="feedback error">{{ videosError }}</p>
-          <div v-if="videosLoading" class="feedback muted">正在加载视频列表…</div>
+      <section id="videos" class="panel wide-panel video-management-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-tag">Videos</p>
+            <h2>视频资源列表</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="secondary-btn" :disabled="videosLoading" @click="fetchVideos">刷新列表</button>
+          </div>
+        </div>
+        <p class="muted-line section-intro">封面、发布、推荐和元数据编辑集中在同一张卡片里，减少来回跳转。</p>
 
-          <div v-if="videos.length" class="video-list">
+        <p v-if="videosError" class="feedback error">{{ videosError }}</p>
+        <div v-if="videosLoading" class="feedback muted">正在加载视频列表…</div>
+
+        <div v-if="videos.length" class="video-list-scroll" aria-label="视频资源文件列表">
+          <div class="video-list">
             <article v-for="video in videos" :key="video.id || video.video_id" class="video-card">
-              <label class="video-cover uploader">
+              <label class="video-cover uploader" aria-label="上传视频封面">
                 <img v-if="video.cover_url" :src="video.cover_url" alt="cover" />
                 <span v-else>UPLOAD COVER</span>
                 <input type="file" accept="image/*" hidden @change="(event) => uploadCover(video, event)" />
@@ -1389,7 +1402,7 @@ onBeforeUnmount(() => {
                 </div>
                 <p v-if="reactionErrorFor(video)" class="feedback error reaction-error">{{ reactionErrorFor(video) }}</p>
 
-                <div class="button-row wrap">
+                <div class="button-row wrap card-actions">
                   <template v-if="isEditing(video)">
                     <button class="primary-btn small" :disabled="editorSaving || !editorTitle.trim()" @click="saveVideo(video)">
                       {{ editorSaving ? '保存中…' : '保存' }}
@@ -1407,13 +1420,11 @@ onBeforeUnmount(() => {
               </div>
             </article>
           </div>
-          <div v-else-if="!videosLoading" class="empty-state">暂无视频资源</div>
-        </section>
-      </main>
-    </div>
+        </div>
+        <div v-else-if="!videosLoading" class="empty-state">暂无视频资源</div>
+      </section>
 
-    <div v-else class="tab-content">
-      <section class="panel wide-panel">
+      <section id="questions" class="panel wide-panel question-panel">
         <div class="panel-head">
           <div>
             <p class="panel-tag">Questions</p>
@@ -1532,11 +1543,11 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="panel wide-panel">
+      <section class="panel wide-panel free-query-panel">
         <div class="panel-head">
           <div>
             <p class="panel-tag">Free Query</p>
-          <h2>自由问题检索</h2>
+            <h2>自由问题检索</h2>
           </div>
         </div>
 
@@ -1611,6 +1622,155 @@ onBeforeUnmount(() => {
           <div v-if="!recommendItems.length && !recommendLoading" class="empty-state">暂无检索结果</div>
         </div>
       </section>
+      </div>
+
+      <div class="dashboard-column dashboard-content">
+      <section id="playback" class="panel player-panel" :class="{ 'drawer-open': similarDrawerOpen }">
+        <div class="panel-head player-head">
+          <div>
+            <p class="panel-tag">Playback</p>
+            <h2>视频播放器</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="primary-btn" :disabled="randomSegmentLoading" @click="playRandomSegment">
+              {{ randomSegmentLoading ? '随机中…' : '随机播放片段' }}
+            </button>
+            <button class="secondary-btn" :disabled="!lastVideoId" @click="playVideo(lastVideoId)">播放最新上传</button>
+            <button
+              type="button"
+              class="secondary-btn"
+              :aria-expanded="similarDrawerOpen"
+              @click="similarDrawerOpen = !similarDrawerOpen"
+            >
+              {{ similarDrawerOpen ? '收起相似视频' : `展开相似视频 ${similarVideos.length || ''}` }}
+            </button>
+          </div>
+        </div>
+        <p class="muted-line section-intro">优先展示当前选中的完整视频或推荐片段，右侧抽屉用于快速浏览相似视频。</p>
+        <p v-if="randomSegmentError" class="feedback error">{{ randomSegmentError }}</p>
+
+        <div class="player-workspace">
+          <div class="player-main">
+            <div class="player-stage">
+              <div v-if="canPlay" class="player-frame">
+                <HlsPlayer
+                  :src="currentPlaySrc"
+                  :title="currentPlayTitle"
+                  :start-time-sec="currentSegmentStart"
+                  :end-time-sec="currentSegmentEnd"
+                  :watch-context="currentWatchContext"
+                  @watch-progress="onCurrentWatchProgress"
+                />
+              </div>
+              <div v-else class="empty-state player-empty">选择视频或推荐片段后开始播放。</div>
+
+              <aside v-if="similarDrawerOpen" class="similar-drawer" aria-label="相似视频列表">
+                <div class="similar-drawer-head">
+                  <div>
+                    <h3>相似视频</h3>
+                    <p class="muted-line">{{ similarVideos.length }} 条结果</p>
+                  </div>
+                  <button class="secondary-btn small" :disabled="!currentVideoId || similarLoading" @click="fetchSimilar(currentVideoId)">刷新</button>
+                </div>
+                <p v-if="similarError" class="feedback error">{{ similarError }}</p>
+                <div v-if="similarLoading" class="feedback muted">加载中…</div>
+                <div v-else-if="similarVideos.length" class="similar-scroll">
+                  <article v-for="video in similarVideos" :key="`similar-${video.id}`" class="similar-card">
+                    <div class="similar-cover">
+                      <img v-if="video.cover_url" :src="video.cover_url" alt="cover" />
+                      <span v-else>NO COVER</span>
+                    </div>
+                    <div class="similar-meta">
+                      <div class="video-title">{{ video.title || '-' }}</div>
+                      <div class="muted-line">view_count {{ video.view_count || 0 }}</div>
+                      <div class="reaction-strip compact-reactions">
+                        <button
+                          type="button"
+                          class="reaction-btn"
+                          :class="{ active: activeReactionFor(video) === REACTION_TYPES.LIKE }"
+                          :disabled="isReactionLoading(video)"
+                          :aria-pressed="activeReactionFor(video) === REACTION_TYPES.LIKE"
+                          @click="submitVideoReaction(video, REACTION_TYPES.LIKE)"
+                        >
+                          赞 {{ reactionCountsFor(video).like_count }}
+                        </button>
+                        <button
+                          type="button"
+                          class="reaction-btn"
+                          :class="{ active: activeReactionFor(video) === REACTION_TYPES.DOUBLE_LIKE }"
+                          :disabled="isReactionLoading(video)"
+                          :aria-pressed="activeReactionFor(video) === REACTION_TYPES.DOUBLE_LIKE"
+                          @click="submitVideoReaction(video, REACTION_TYPES.DOUBLE_LIKE)"
+                        >
+                          双赞 {{ reactionCountsFor(video).double_like_count }}
+                        </button>
+                        <button
+                          type="button"
+                          class="reaction-btn dislike"
+                          :class="{ active: activeReactionFor(video) === REACTION_TYPES.DISLIKE }"
+                          :disabled="isReactionLoading(video)"
+                          :aria-pressed="activeReactionFor(video) === REACTION_TYPES.DISLIKE"
+                          @click="submitVideoReaction(video, REACTION_TYPES.DISLIKE)"
+                        >
+                          倒赞
+                        </button>
+                      </div>
+                      <button class="tiny-btn" @click="playVideo(video.id)">播放</button>
+                    </div>
+                  </article>
+                </div>
+                <div v-else class="empty-state small">暂无相似视频</div>
+              </aside>
+            </div>
+
+            <div v-if="currentRandomSegment" class="random-segment-strip">
+              <div>
+                <div class="random-segment-title">{{ currentRandomSegment.title || '-' }}</div>
+                <div class="recommend-meta">
+                  随机片段 {{ formatSegmentRange(currentRandomSegment.start_time_sec, currentRandomSegment.end_time_sec) }}
+                  · Segment {{ currentRandomSegment.video_segment_id }}
+                </div>
+              </div>
+              <div class="reaction-strip compact-reactions segment-reactions">
+                <button
+                  type="button"
+                  class="reaction-btn"
+                  :class="{ active: activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.LIKE }"
+                  :disabled="isSegmentReactionLoading(currentRandomSegment)"
+                  :aria-pressed="activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.LIKE"
+                  @click="submitSegmentReaction(currentRandomSegment, REACTION_TYPES.LIKE)"
+                >
+                  赞 {{ segmentReactionCountsFor(currentRandomSegment).like_count }}
+                </button>
+                <button
+                  type="button"
+                  class="reaction-btn"
+                  :class="{ active: activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DOUBLE_LIKE }"
+                  :disabled="isSegmentReactionLoading(currentRandomSegment)"
+                  :aria-pressed="activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DOUBLE_LIKE"
+                  @click="submitSegmentReaction(currentRandomSegment, REACTION_TYPES.DOUBLE_LIKE)"
+                >
+                  双赞 {{ segmentReactionCountsFor(currentRandomSegment).double_like_count }}
+                </button>
+                <button
+                  type="button"
+                  class="reaction-btn dislike"
+                  :class="{ active: activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DISLIKE }"
+                  :disabled="isSegmentReactionLoading(currentRandomSegment)"
+                  :aria-pressed="activeSegmentReactionFor(currentRandomSegment) === REACTION_TYPES.DISLIKE"
+                  @click="submitSegmentReaction(currentRandomSegment, REACTION_TYPES.DISLIKE)"
+                >
+                  倒赞
+                </button>
+              </div>
+              <p v-if="segmentReactionErrorFor(currentRandomSegment)" class="feedback error reaction-error">{{ segmentReactionErrorFor(currentRandomSegment) }}</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+      </div>
+    </main>
     </div>
   </div>
 </template>

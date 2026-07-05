@@ -75,9 +75,10 @@ RedisKeys:
   SegmentReactionUser: "segment:reaction:user:"
   TranscodeStatus: "video:transcode:status:"
   RuntimeActiveCounter: "video:runtime:active:"
+  RandomPlayRecent: "video:random_play:recent:"
 
 Postgres:
-  DSN: "host=localhost user=postgres password=postgres dbname=hengshui-tablet port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+  DSN: ""
   MaxOpenConns: 20
   MaxIdleConns: 10
   ConnMaxLifetime: 300
@@ -85,9 +86,9 @@ Postgres:
 
 RustFS:
   Endpoint: "localhost:9000"
-  AccessKey: "minioadmin"
-  SecretKey: "minioadmin"
-  Bucket: "hengshui-tablet-cloud-drive"
+  AccessKey: ""
+  SecretKey: ""
+  Bucket: "video-embedding-storage"
   UseSSL: false
 
 
@@ -103,7 +104,7 @@ VectorWorker:
   CoarseSegmentSec: 40          # 拉大粗切基础分片，减少硬性切分点
   RefineMinSegmentSec: 12
   RefineMaxSegmentSec: 90       # 放宽上限，允许连贯内容更长
-  LLMModel: "qwen3.6-plus"
+  LLMModel: "qwen3.7-plus"
   LLMTimeoutMinutes: 5
   TailAlignmentConfigured: true
   TailAlignmentEnabled: true
@@ -134,6 +135,25 @@ WorkerPools:
   vector.refine_asr:
     Size: 30
 
+Recommendation:
+  Engine: "gorse" # knowledge_match | gorse | two_tower
+  RandomPlayDedupeWindowSec: 1800
+
+Gorse:
+  Endpoint: "http://localhost:8087"
+  APIKey: ""
+  TimeoutSeconds: 2
+  ShadowMode: false
+  SyncEnabled: true
+  WriteBackEnabled: true
+  CandidateLimit: 100
+  SyncIntervalMins: 60
+  EnableGate: true
+  MinFeedbackCount: 20
+  MinRecommendItems: 1
+  CleanupEnabled: true
+  DataRetentionDays: 30
+
 asr:
   options:
     ws-model: fun-asr-realtime-2026-02-28
@@ -142,12 +162,13 @@ asr:
       - fun-asr-realtime-2025-09-15
   base-url: "https://dashscope.aliyuncs.com/compatible-mode"
   ws-url: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
-  api-key: "sk-3eb4190dab584fed99bee42ca2e5f8b1"
+  api-key: ""
 
 embedding:
   options:
     model: text-embedding-v4
   base-url: "https://dashscope.aliyuncs.com/compatible-mode"
-  api-key: "sk-3eb4190dab584fed99bee42ca2e5f8b1"
+  api-key: ""
 AI:
+  Provider: "legacy"
   EmbeddingDim: 1536

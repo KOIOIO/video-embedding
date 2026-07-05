@@ -17,6 +17,7 @@ func (s *Service) UploadVideo(ctx context.Context, input UploadVideoInput) (Uplo
 		ContentType: input.ContentType,
 		Title:       input.Title,
 		Description: input.Description,
+		UserID:      input.UserID,
 		Reader:      input.Reader,
 	})
 	if err != nil {
@@ -34,6 +35,13 @@ func (s *Service) UploadVideoArchive(ctx context.Context, input UploadVideoArchi
 	}
 	if !isZipFileName(input.FileName) {
 		return ArchiveUploadResult{}, InvalidArgumentError("zip archive is required")
+	}
+	userID := input.UserID
+	if userID == 0 {
+		userID = DefaultUploadUserID
+	}
+	if err := s.ensureUploadAllowed(ctx, userID); err != nil {
+		return ArchiveUploadResult{}, err
 	}
 
 	uploadID, err := newChunkedUploadID()
@@ -60,7 +68,7 @@ func (s *Service) UploadVideoArchive(ctx context.Context, input UploadVideoArchi
 		return ArchiveUploadResult{}, closeErr
 	}
 
-	return s.importVideoArchiveFile(ctx, archivePath, input.Description)
+	return s.importVideoArchiveFile(ctx, archivePath, input.Description, userID)
 }
 
 // UploadVideoCover 把封面写入对象存储后，通过既有业务逻辑更新 cover_url。
@@ -186,6 +194,7 @@ func (a uploadPlannerAdapter) FinalizeUpload(ctx context.Context, plan uploadapp
 	}, UploadMeta{
 		Title:       meta.Title,
 		Description: meta.Description,
+		UserID:      meta.UserID,
 	})
 	if err != nil {
 		return uploadapp.Result{}, err

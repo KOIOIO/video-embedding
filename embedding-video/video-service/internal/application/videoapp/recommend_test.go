@@ -2,11 +2,13 @@ package videoapp
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/pgvector/pgvector-go"
 
+	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
 	domainvideo "nlp-video-analysis/internal/domain/video"
 )
 
@@ -15,12 +17,22 @@ type stubVideoRepository struct {
 	getSegmentEmbeddingDimFunc       func(context.Context) (int, error)
 	getQuestionEmbeddingTextByIDFunc func(context.Context, uint64) (string, error)
 	findRecommendedSegmentsFunc      func(context.Context, pgvector.Vector, int) ([]RecommendCandidate, error)
+	findWeakKnowledgeSegmentsFunc    func(context.Context, uint64, int, int) ([]RecommendCandidate, error)
+	listWeakKnowledgeFunc            func(context.Context, uint64, int) ([]WeakKnowledge, error)
+	findWeakKnowledgeVectorFunc      func(context.Context, uint64, pgvector.Vector, int) ([]RecommendCandidate, error)
 	findRandomPlayableSegmentFunc    func(context.Context) (RecommendResultItem, bool, error)
+	findRandomExcludingFunc          func(context.Context, []uint64) (RecommendResultItem, bool, error)
 	saveUserVideoRecommendationFunc  func(context.Context, uint64, uint64, uint64, uint64, float64, time.Time) error
 	getVideoIDBySegmentIDFunc        func(context.Context, uint64) (uint64, error)
 	hasWatchedVideoForQuestionFunc   func(context.Context, uint64, uint64, uint64) (bool, error)
 	incrementViewCountFunc           func(context.Context, uint64) (int, bool, error)
 	saveWatchRecordFunc              func(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error)
+	saveRecommendationExposuresFunc  func(context.Context, []RecommendationExposure) error
+	markRecommendationExposureFunc   func(context.Context, uint64, uint64, uint64, time.Time) error
+	getUserTowerEmbeddingFunc        func(context.Context, uint64, string) (UserTowerEmbedding, bool, error)
+	findTwoTowerSegmentsFunc         func(context.Context, TwoTowerQuery) ([]TwoTowerCandidate, error)
+	getActiveTwoTowerVersionFunc     func(context.Context) (string, bool, error)
+	hydrateSegmentsFunc              func(context.Context, uint64, []uint64) ([]RecommendCandidate, error)
 }
 
 func (s *stubVideoRepository) Create(context.Context, *domainvideo.Video) error {
@@ -101,11 +113,35 @@ func (s *stubVideoRepository) FindRecommendedSegments(ctx context.Context, query
 	}
 	panic("unexpected call")
 }
+func (s *stubVideoRepository) FindRecommendedSegmentsByWeakKnowledge(ctx context.Context, userID uint64, limit int, weakLimit int) ([]RecommendCandidate, error) {
+	if s.findWeakKnowledgeSegmentsFunc != nil {
+		return s.findWeakKnowledgeSegmentsFunc(ctx, userID, limit, weakLimit)
+	}
+	return nil, nil
+}
+func (s *stubVideoRepository) ListWeakKnowledge(ctx context.Context, userID uint64, limit int) ([]WeakKnowledge, error) {
+	if s.listWeakKnowledgeFunc != nil {
+		return s.listWeakKnowledgeFunc(ctx, userID, limit)
+	}
+	return nil, nil
+}
+func (s *stubVideoRepository) FindRecommendedSegmentsByWeakKnowledgeVector(ctx context.Context, input WeakKnowledgeVectorQuery) ([]RecommendCandidate, error) {
+	if s.findWeakKnowledgeVectorFunc != nil {
+		return s.findWeakKnowledgeVectorFunc(ctx, input.UserID, input.Query, input.Limit)
+	}
+	return nil, nil
+}
 func (s *stubVideoRepository) FindRandomPlayableSegment(ctx context.Context) (RecommendResultItem, bool, error) {
 	if s.findRandomPlayableSegmentFunc != nil {
 		return s.findRandomPlayableSegmentFunc(ctx)
 	}
 	panic("unexpected call")
+}
+func (s *stubVideoRepository) FindRandomPlayableSegmentExcluding(ctx context.Context, excludedSegmentIDs []uint64) (RecommendResultItem, bool, error) {
+	if s.findRandomExcludingFunc != nil {
+		return s.findRandomExcludingFunc(ctx, excludedSegmentIDs)
+	}
+	return s.FindRandomPlayableSegment(ctx)
 }
 func (s *stubVideoRepository) SaveUserVideoRecommendation(ctx context.Context, userID uint64, questionID uint64, videoID uint64, segmentID uint64, score float64, now time.Time) error {
 	if s.saveUserVideoRecommendationFunc != nil {
@@ -137,6 +173,42 @@ func (s *stubVideoRepository) SaveWatchRecord(ctx context.Context, userID uint64
 	}
 	panic("unexpected call")
 }
+func (s *stubVideoRepository) SaveRecommendationExposures(ctx context.Context, exposures []RecommendationExposure) error {
+	if s.saveRecommendationExposuresFunc != nil {
+		return s.saveRecommendationExposuresFunc(ctx, exposures)
+	}
+	return nil
+}
+func (s *stubVideoRepository) MarkRecommendationExposureWatched(ctx context.Context, userID uint64, questionID uint64, segmentID uint64, now time.Time) error {
+	if s.markRecommendationExposureFunc != nil {
+		return s.markRecommendationExposureFunc(ctx, userID, questionID, segmentID, now)
+	}
+	return nil
+}
+func (s *stubVideoRepository) GetUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error) {
+	if s.getUserTowerEmbeddingFunc != nil {
+		return s.getUserTowerEmbeddingFunc(ctx, userID, modelVersion)
+	}
+	return UserTowerEmbedding{}, false, nil
+}
+func (s *stubVideoRepository) FindRecommendedSegmentsForTwoTower(ctx context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error) {
+	if s.findTwoTowerSegmentsFunc != nil {
+		return s.findTwoTowerSegmentsFunc(ctx, input)
+	}
+	return nil, nil
+}
+func (s *stubVideoRepository) GetActiveTwoTowerModelVersion(ctx context.Context) (string, bool, error) {
+	if s.getActiveTwoTowerVersionFunc != nil {
+		return s.getActiveTwoTowerVersionFunc(ctx)
+	}
+	return "", false, nil
+}
+func (s *stubVideoRepository) HydrateRecommendedSegmentsByID(ctx context.Context, userID uint64, ids []uint64) ([]RecommendCandidate, error) {
+	if s.hydrateSegmentsFunc != nil {
+		return s.hydrateSegmentsFunc(ctx, userID, ids)
+	}
+	return nil, nil
+}
 
 func TestRandomPlayVideoSegmentReturnsRepositoryResult(t *testing.T) {
 	svc := NewService(&stubVideoRepository{
@@ -159,7 +231,7 @@ func TestRandomPlayVideoSegmentReturnsRepositoryResult(t *testing.T) {
 		},
 	}, nil, nil, nil, nil, nil, nil, Paths{})
 
-	item, found, err := svc.RandomPlayVideoSegment(context.Background())
+	item, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{})
 	if err != nil {
 		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
 	}
@@ -177,12 +249,395 @@ func TestRandomPlayVideoSegmentReturnsRepositoryResult(t *testing.T) {
 func TestRandomPlayVideoSegmentReportsMissingWhenRepositoryDoesNotSupportIt(t *testing.T) {
 	svc := &Service{}
 
-	_, found, err := svc.RandomPlayVideoSegment(context.Background())
+	_, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{})
 	if err != nil {
 		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
 	}
 	if found {
 		t.Fatal("expected found=false")
+	}
+}
+
+func TestRandomPlayVideoSegmentFallbackRecordsRecommendationExposure(t *testing.T) {
+	now := time.Date(2026, 6, 23, 13, 0, 0, 0, time.UTC)
+	var saved struct {
+		userID     uint64
+		questionID uint64
+		videoID    uint64
+		segmentID  uint64
+		score      float64
+	}
+	var exposures []RecommendationExposure
+	svc := NewService(&stubVideoRepository{
+		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {
+			return RecommendResultItem{
+				VideoID:        11,
+				VideoSegmentID: 101,
+				RecommendScore: 0.42,
+				StartTimeSec:   10,
+				EndTimeSec:     40,
+				TitleOverride:  "segment title",
+				Video: domainvideo.Video{
+					ID:          11,
+					Title:       "video title",
+					VideoURL:    "/videos/raw/2026/06/09/playable.mp4",
+					CoverURL:    "/covers/11.jpg",
+					Status:      domainvideo.StatusDone,
+					IsPublished: true,
+				},
+			}, true, nil
+		},
+		saveUserVideoRecommendationFunc: func(_ context.Context, userID uint64, questionID uint64, videoID uint64, segmentID uint64, score float64, _ time.Time) error {
+			saved.userID = userID
+			saved.questionID = questionID
+			saved.videoID = videoID
+			saved.segmentID = segmentID
+			saved.score = score
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(_ context.Context, rows []RecommendationExposure) error {
+			exposures = append(exposures, rows...)
+			return nil
+		},
+	}, nil, nil, nil, nil, nil, nil, Paths{})
+	svc.Now = func() time.Time { return now }
+
+	item, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{UserID: 7})
+	if err != nil {
+		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if item.VideoSegmentID != 101 || item.IsWatched || item.WatchDuration != 0 {
+		t.Fatalf("unexpected fallback item: %+v", item)
+	}
+	if saved.userID != 7 || saved.questionID != 0 || saved.videoID != 11 || saved.segmentID != 101 || saved.score != 0.42 {
+		t.Fatalf("unexpected saved recommendation: %+v", saved)
+	}
+	if len(exposures) != 1 {
+		t.Fatalf("expected one exposure, got %d", len(exposures))
+	}
+	if !strings.HasPrefix(exposures[0].RequestID, "random-play-") || exposures[0].Strategy != RecommendStrategyRandomPlay || exposures[0].QuestionID != 0 {
+		t.Fatalf("unexpected exposure: %+v", exposures[0])
+	}
+}
+
+func TestRandomPlayVideoSegmentFallbackExcludesRecentlyReturnedSegments(t *testing.T) {
+	recent := &stubRecentSegmentStore{recent: []uint64{101}}
+	var excluded []uint64
+	svc := NewService(&stubVideoRepository{
+		findRandomExcludingFunc: func(_ context.Context, excludedSegmentIDs []uint64) (RecommendResultItem, bool, error) {
+			excluded = append([]uint64(nil), excludedSegmentIDs...)
+			return RecommendResultItem{
+				VideoID:        12,
+				VideoSegmentID: 102,
+				RecommendScore: 0.4,
+				Video: domainvideo.Video{
+					ID:          12,
+					Title:       "fresh video",
+					VideoURL:    "/raw/12.mp4",
+					Status:      domainvideo.StatusDone,
+					IsPublished: true,
+				},
+			}, true, nil
+		},
+		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {
+			t.Fatal("unfiltered random fallback should not be used when exclusion has a result")
+			return RecommendResultItem{}, false, nil
+		},
+		saveUserVideoRecommendationFunc: func(context.Context, uint64, uint64, uint64, uint64, float64, time.Time) error {
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(context.Context, []RecommendationExposure) error {
+			return nil
+		},
+	}, nil, nil, nil, nil, nil, nil, Paths{})
+	svc.RecentSegments = recent
+	svc.RecentSegmentTTL = 30 * time.Minute
+
+	item, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{UserID: 6})
+	if err != nil {
+		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
+	}
+	if !found || item.VideoSegmentID != 102 {
+		t.Fatalf("item=%+v found=%v, want segment 102", item, found)
+	}
+	if len(excluded) != 1 || excluded[0] != 101 {
+		t.Fatalf("excluded = %v, want [101]", excluded)
+	}
+	if len(recent.marked) != 1 || recent.marked[0] != 102 {
+		t.Fatalf("marked recent = %v, want [102]", recent.marked)
+	}
+}
+
+func TestRandomPlayVideoSegmentUsesTwoTowerAndRecordsRecommendation(t *testing.T) {
+	now := time.Date(2026, 6, 23, 12, 30, 0, 0, time.UTC)
+	var saved struct {
+		userID     uint64
+		questionID uint64
+		videoID    uint64
+		segmentID  uint64
+		score      float64
+	}
+	var exposures []RecommendationExposure
+	randomFallbackCalls := 0
+	svc := NewService(&stubVideoRepository{
+		getActiveTwoTowerVersionFunc: func(context.Context) (string, bool, error) {
+			return "two_tower_v2", true, nil
+		},
+		getUserTowerEmbeddingFunc: func(_ context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error) {
+			if userID != 7 || modelVersion != "two_tower_v2" {
+				t.Fatalf("unexpected tower lookup: userID=%d modelVersion=%q", userID, modelVersion)
+			}
+			return UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: modelVersion, Status: 1}, true, nil
+		},
+		findTwoTowerSegmentsFunc: func(_ context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error) {
+			if input.UserID != 7 || input.ModelVersion != "two_tower_v2" || input.Limit != 100 {
+				t.Fatalf("unexpected two tower query: %+v", input)
+			}
+			return []TwoTowerCandidate{{RecommendCandidate: RecommendCandidate{
+				VideoID:        11,
+				VideoSegmentID: 101,
+				StartTimeSec:   10,
+				EndTimeSec:     40,
+				Distance:       0.25,
+				SegmentTitle:   "personalized segment",
+				VideoURL:       "/videos/raw/2026/06/09/playable.mp4",
+				CoverURL:       "/covers/11.jpg",
+				Status:         int16(domainvideo.StatusDone),
+				IsPublished:    true,
+			}}}, nil
+		},
+		saveUserVideoRecommendationFunc: func(_ context.Context, userID uint64, questionID uint64, videoID uint64, segmentID uint64, score float64, _ time.Time) error {
+			saved.userID = userID
+			saved.questionID = questionID
+			saved.videoID = videoID
+			saved.segmentID = segmentID
+			saved.score = score
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(_ context.Context, rows []RecommendationExposure) error {
+			exposures = append(exposures, rows...)
+			return nil
+		},
+		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {
+			randomFallbackCalls++
+			return RecommendResultItem{}, false, nil
+		},
+	}, nil, nil, nil, nil, nil, nil, Paths{})
+	svc.Now = func() time.Time { return now }
+	svc.RecommendationEngine = "two_tower"
+
+	item, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{UserID: 7})
+	if err != nil {
+		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if randomFallbackCalls != 0 {
+		t.Fatalf("expected no random fallback, got %d calls", randomFallbackCalls)
+	}
+	if item.VideoSegmentID != 101 || item.QuestionID != 0 || item.IsWatched || item.WatchDuration != 0 {
+		t.Fatalf("unexpected item: %+v", item)
+	}
+	if saved.userID != 7 || saved.questionID != 0 || saved.videoID != 11 || saved.segmentID != 101 {
+		t.Fatalf("unexpected saved recommendation: %+v", saved)
+	}
+	if saved.score <= 0 {
+		t.Fatalf("expected positive saved score, got %v", saved.score)
+	}
+	if len(exposures) != 1 {
+		t.Fatalf("expected one exposure, got %d", len(exposures))
+	}
+	if exposures[0].UserID != 7 || exposures[0].QuestionID != 0 || exposures[0].VideoSegmentID != 101 || exposures[0].Strategy != RecommendStrategyTwoTower || exposures[0].ModelVersion != "two_tower_v2" {
+		t.Fatalf("unexpected exposure: %+v", exposures[0])
+	}
+}
+
+func TestExternalTwoTowerItemIDsUsesTwoTowerWithoutSideEffects(t *testing.T) {
+	saveCalls := 0
+	exposureCalls := 0
+	svc := NewService(&stubVideoRepository{
+		getActiveTwoTowerVersionFunc: func(context.Context) (string, bool, error) {
+			return "two_tower_v2", true, nil
+		},
+		getUserTowerEmbeddingFunc: func(_ context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error) {
+			if userID != 7 || modelVersion != "two_tower_v2" {
+				t.Fatalf("unexpected tower lookup: userID=%d modelVersion=%q", userID, modelVersion)
+			}
+			return UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: modelVersion, Status: 1}, true, nil
+		},
+		findTwoTowerSegmentsFunc: func(_ context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error) {
+			if input.UserID != 7 || input.ModelVersion != "two_tower_v2" || input.Limit != 100 {
+				t.Fatalf("unexpected two tower query: %+v", input)
+			}
+			return []TwoTowerCandidate{
+				{RecommendCandidate: RecommendCandidate{VideoSegmentID: 101, VideoID: 11, Distance: 0.25}},
+				{RecommendCandidate: RecommendCandidate{VideoSegmentID: 102, VideoID: 12, Distance: 0.10}},
+				{RecommendCandidate: RecommendCandidate{VideoSegmentID: 103, VideoID: 13, Distance: 0.40}},
+			}, nil
+		},
+		saveUserVideoRecommendationFunc: func(context.Context, uint64, uint64, uint64, uint64, float64, time.Time) error {
+			saveCalls++
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(context.Context, []RecommendationExposure) error {
+			exposureCalls++
+			return nil
+		},
+		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {
+			t.Fatal("external two tower should not use random fallback")
+			return RecommendResultItem{}, false, nil
+		},
+	}, nil, nil, nil, nil, nil, nil, Paths{})
+	svc.RecommendationEngine = "gorse"
+	svc.GorseClient = &videoAppFakeGorseClient{ids: []uint64{999}}
+
+	ids, err := svc.ExternalTwoTowerItemIDs(context.Background(), RandomPlayVideoSegmentInput{UserID: 7, Limit: 2})
+	if err != nil {
+		t.Fatalf("ExternalTwoTowerItemIDs returned error: %v", err)
+	}
+	want := []uint64{102, 101}
+	if len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] {
+		t.Fatalf("ids = %v, want %v", ids, want)
+	}
+	if saveCalls != 0 || exposureCalls != 0 {
+		t.Fatalf("external two tower must not write recommendations or exposures: save=%d exposure=%d", saveCalls, exposureCalls)
+	}
+}
+
+func TestRandomPlayVideoSegmentUsesKnowledgeMatchByDefault(t *testing.T) {
+	now := time.Date(2026, 6, 26, 12, 20, 0, 0, time.UTC)
+	var savedSegmentID uint64
+	var exposures []RecommendationExposure
+	randomFallbackCalls := 0
+	embedder := &stubEmbedder{vector: []float32{1, 2, 3}}
+	svc := NewService(&stubVideoRepository{
+		getSegmentEmbeddingDimFunc: func(context.Context) (int, error) {
+			return 3, nil
+		},
+		listWeakKnowledgeFunc: func(_ context.Context, userID uint64, limit int) ([]WeakKnowledge, error) {
+			if userID != 7 || limit != 10 {
+				t.Fatalf("unexpected weak knowledge inputs: userID=%d limit=%d", userID, limit)
+			}
+			return []WeakKnowledge{{KnowledgePointID: 1, Mastery: 0.1, Name: "一次函数", Description: "图像与斜率"}}, nil
+		},
+		findWeakKnowledgeVectorFunc: func(_ context.Context, userID uint64, query pgvector.Vector, limit int) ([]RecommendCandidate, error) {
+			if userID != 7 || limit != recommendationapp.WeakKnowledgeRecallLimit {
+				t.Fatalf("unexpected vector inputs: userID=%d limit=%d", userID, limit)
+			}
+			if got := query.Slice(); len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 3 {
+				t.Fatalf("query vector = %#v, want embedder vector", got)
+			}
+			return []RecommendCandidate{{
+				VideoID:        11,
+				VideoSegmentID: 101,
+				StartTimeSec:   10,
+				EndTimeSec:     40,
+				Distance:       0.1,
+				SegmentTitle:   "一次函数图像",
+				VideoURL:       "/raw/11.mp4",
+				Status:         int16(domainvideo.StatusDone),
+				IsPublished:    true,
+				IsRecommend:    true,
+			}}, nil
+		},
+		saveUserVideoRecommendationFunc: func(_ context.Context, _ uint64, _ uint64, _ uint64, segmentID uint64, _ float64, _ time.Time) error {
+			savedSegmentID = segmentID
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(_ context.Context, rows []RecommendationExposure) error {
+			exposures = append(exposures, rows...)
+			return nil
+		},
+		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {
+			randomFallbackCalls++
+			return RecommendResultItem{}, false, nil
+		},
+	}, nil, nil, nil, nil, nil, embedder, Paths{})
+	svc.Now = func() time.Time { return now }
+
+	item, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{UserID: 7, Limit: 1})
+	if err != nil {
+		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
+	}
+	if !found || item.VideoSegmentID != 101 || item.TitleOverride != "一次函数图像" {
+		t.Fatalf("item=%+v found=%v, want knowledge match segment 101", item, found)
+	}
+	if randomFallbackCalls != 0 {
+		t.Fatalf("expected no random fallback, got %d calls", randomFallbackCalls)
+	}
+	if savedSegmentID != 101 {
+		t.Fatalf("savedSegmentID=%d, want 101", savedSegmentID)
+	}
+	if len(embedder.texts) != 1 || !strings.Contains(embedder.texts[0], "一次函数") || !strings.Contains(embedder.texts[0], "图像与斜率") {
+		t.Fatalf("embedder texts=%#v, want weak knowledge text", embedder.texts)
+	}
+	if len(exposures) != 1 || exposures[0].Strategy != RecommendStrategyKnowledgeMatch || exposures[0].ModelVersion != "knowledge_match_v1" {
+		t.Fatalf("exposures=%+v, want knowledge_match strategy", exposures)
+	}
+}
+
+func TestRandomPlayVideoSegmentUsesConfiguredGorseClient(t *testing.T) {
+	now := time.Date(2026, 6, 26, 11, 30, 0, 0, time.UTC)
+	var savedSegmentID uint64
+	var exposures []RecommendationExposure
+	gorse := &videoAppFakeGorseClient{ids: []uint64{101}}
+	svc := NewService(&stubVideoRepository{
+		hydrateSegmentsFunc: func(_ context.Context, userID uint64, ids []uint64) ([]RecommendCandidate, error) {
+			if userID != 7 || len(ids) != 1 || ids[0] != 101 {
+				t.Fatalf("unexpected hydrate inputs: userID=%d ids=%v", userID, ids)
+			}
+			return []RecommendCandidate{{
+				VideoID:        11,
+				VideoSegmentID: 101,
+				StartTimeSec:   10,
+				EndTimeSec:     40,
+				SegmentTitle:   "gorse segment",
+				VideoURL:       "/raw/11.mp4",
+				Status:         int16(domainvideo.StatusDone),
+				IsPublished:    true,
+				IsRecommend:    true,
+			}}, nil
+		},
+		saveUserVideoRecommendationFunc: func(_ context.Context, _ uint64, _ uint64, _ uint64, segmentID uint64, _ float64, _ time.Time) error {
+			savedSegmentID = segmentID
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(_ context.Context, rows []RecommendationExposure) error {
+			exposures = append(exposures, rows...)
+			return nil
+		},
+		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {
+			t.Fatal("random fallback should not be used")
+			return RecommendResultItem{}, false, nil
+		},
+	}, nil, nil, nil, nil, nil, nil, Paths{})
+	svc.Now = func() time.Time { return now }
+	svc.RecommendationEngine = "gorse"
+	svc.GorseClient = gorse
+	svc.GorseOptions = recommendationapp.GorseOptions{CandidateLimit: 3, WriteBackEnabled: true}
+
+	item, found, err := svc.RandomPlayVideoSegment(context.Background(), RandomPlayVideoSegmentInput{UserID: 7, Limit: 1})
+	if err != nil {
+		t.Fatalf("RandomPlayVideoSegment returned error: %v", err)
+	}
+	if !found || item.VideoSegmentID != 101 || item.TitleOverride != "gorse segment" {
+		t.Fatalf("item=%+v found=%v, want gorse segment 101", item, found)
+	}
+	if gorse.userID != 7 || gorse.n != 3 {
+		t.Fatalf("gorse call userID=%d n=%d, want 7 3", gorse.userID, gorse.n)
+	}
+	if savedSegmentID != 101 {
+		t.Fatalf("savedSegmentID=%d, want 101", savedSegmentID)
+	}
+	if len(exposures) != 1 || exposures[0].Strategy != RecommendStrategyGorse {
+		t.Fatalf("exposures=%+v, want gorse strategy", exposures)
+	}
+	if len(gorse.feedback) != 1 || gorse.feedback[0].FeedbackType != "exposure" {
+		t.Fatalf("feedback=%+v, want exposure", gorse.feedback)
 	}
 }
 
@@ -249,7 +704,7 @@ func TestRecommendByQuestion_PersistsTextOnlyHistory(t *testing.T) {
 			savedQuestionID = questionID
 			return nil
 		},
-	}, nil, nil, nil, nil, nil, stubEmbedder{vector: []float32{1, 2, 3}}, Paths{})
+	}, nil, nil, nil, nil, nil, &stubEmbedder{vector: []float32{1, 2, 3}}, Paths{})
 
 	items, err := svc.RecommendByQuestion(context.Background(), RecommendByQuestionInput{QuestionText: "free text", UserID: 7, Limit: 3})
 	if err != nil {
@@ -312,6 +767,47 @@ func TestRecommendByQuestion_PersistsQuestionIDHistory(t *testing.T) {
 	}
 }
 
+func TestRecommendByQuestion_PersistsExposureLog(t *testing.T) {
+	var exposures []RecommendationExposure
+	svc := NewService(&stubVideoRepository{
+		getSegmentEmbeddingDimFunc: func(context.Context) (int, error) {
+			return 3, nil
+		},
+		findRecommendedSegmentsFunc: func(_ context.Context, query pgvector.Vector, limit int) ([]RecommendCandidate, error) {
+			return []RecommendCandidate{{
+				VideoID:        21,
+				VideoSegmentID: 31,
+				Distance:       0.1,
+				Status:         int16(domainvideo.StatusDone),
+				VideoURL:       "/videos/raw/2026/04/28/by-id.mp4",
+			}}, nil
+		},
+		getQuestionEmbeddingTextByIDFunc: func(context.Context, uint64) (string, error) {
+			return "[1,2,3]", nil
+		},
+		saveUserVideoRecommendationFunc: func(_ context.Context, _ uint64, _ uint64, _ uint64, _ uint64, _ float64, _ time.Time) error {
+			return nil
+		},
+		saveRecommendationExposuresFunc: func(_ context.Context, rows []RecommendationExposure) error {
+			exposures = append(exposures, rows...)
+			return nil
+		},
+	}, nil, nil, nil, nil, nil, nil, Paths{})
+
+	if _, err := svc.RecommendByQuestion(context.Background(), RecommendByQuestionInput{QuestionID: 99, UserID: 7, Limit: 3}); err != nil {
+		t.Fatalf("recommend by question id: %v", err)
+	}
+	if len(exposures) != 1 {
+		t.Fatalf("expected one exposure, got %d", len(exposures))
+	}
+	if exposures[0].UserID != 7 || exposures[0].QuestionID != 99 || exposures[0].VideoID != 21 || exposures[0].VideoSegmentID != 31 {
+		t.Fatalf("unexpected exposure: %+v", exposures[0])
+	}
+	if exposures[0].Rank != 1 || exposures[0].Strategy != RecommendStrategyQuestionVector {
+		t.Fatalf("unexpected exposure metadata: %+v", exposures[0])
+	}
+}
+
 func TestResolvePlaybackURL_DerivesHLSFromDoneRecommendationVideoState(t *testing.T) {
 	svc := NewService(nil, nil, nil, stubStatusStore{}, nil, nil, nil, Paths{HLSURLPrefix: "/videos/hls"})
 
@@ -329,6 +825,8 @@ func TestResolvePlaybackURL_DerivesHLSFromDoneRecommendationVideoState(t *testin
 func TestReportWatch_IncrementsParentVideoViewCount(t *testing.T) {
 	var incrementedVideoID uint64
 	var savedVideoID uint64
+	var markedUserID uint64
+	var markedSegmentID uint64
 	svc := NewService(&stubVideoRepository{
 		getVideoIDBySegmentIDFunc: func(_ context.Context, segmentID uint64) (uint64, error) {
 			if segmentID != 204 {
@@ -353,6 +851,14 @@ func TestReportWatch_IncrementsParentVideoViewCount(t *testing.T) {
 			savedVideoID = videoID
 			return true, nil
 		},
+		markRecommendationExposureFunc: func(_ context.Context, userID uint64, questionID uint64, segmentID uint64, _ time.Time) error {
+			if questionID != 3 {
+				t.Fatalf("unexpected exposure questionID: %d", questionID)
+			}
+			markedUserID = userID
+			markedSegmentID = segmentID
+			return nil
+		},
 	}, nil, nil, nil, nil, nil, nil, Paths{})
 
 	err := svc.ReportWatch(context.Background(), ReportWatchInput{QuestionID: 3, UserID: 7, VideoSegmentID: 204, IsWatched: true, WatchDuration: 45})
@@ -364,6 +870,9 @@ func TestReportWatch_IncrementsParentVideoViewCount(t *testing.T) {
 	}
 	if savedVideoID != 17 {
 		t.Fatalf("expected saved watch record videoID 17, got %d", savedVideoID)
+	}
+	if markedUserID != 7 || markedSegmentID != 204 {
+		t.Fatalf("expected exposure marked for user 7 segment 204, got userID=%d segmentID=%d", markedUserID, markedSegmentID)
 	}
 }
 
@@ -442,12 +951,78 @@ func TestReportWatch_DoesNotIncrementViewCountForDifferentSegmentOfSameVideo(t *
 type stubEmbedder struct {
 	vector []float32
 	err    error
+	texts  []string
 }
 
-func (s stubEmbedder) Embed(context.Context, string) ([]float32, error) {
+type videoAppFakeGorseClient struct {
+	userID   uint64
+	n        int
+	ids      []uint64
+	feedback []recommendationapp.GorseFeedback
+}
+
+type stubRecentSegmentStore struct {
+	recent     []uint64
+	marked     []uint64
+	lastUserID uint64
+	lastTTL    time.Duration
+}
+
+func (s *stubRecentSegmentStore) FilterRecent(ctx context.Context, userID uint64, segmentIDs []uint64) (map[uint64]bool, error) {
+	s.lastUserID = userID
+	recent := make(map[uint64]bool, len(s.recent))
+	for _, segmentID := range s.recent {
+		recent[segmentID] = true
+	}
+	out := make(map[uint64]bool)
+	for _, segmentID := range segmentIDs {
+		if recent[segmentID] {
+			out[segmentID] = true
+		}
+	}
+	return out, nil
+}
+
+func (s *stubRecentSegmentStore) ListRecent(ctx context.Context, userID uint64) ([]uint64, error) {
+	s.lastUserID = userID
+	return append([]uint64(nil), s.recent...), nil
+}
+
+func (s *stubRecentSegmentStore) MarkReturned(ctx context.Context, userID uint64, segmentID uint64, ttl time.Duration) error {
+	s.lastUserID = userID
+	s.lastTTL = ttl
+	s.marked = append(s.marked, segmentID)
+	return nil
+}
+
+func (c *videoAppFakeGorseClient) Recommend(_ context.Context, userID uint64, n int) ([]uint64, error) {
+	c.userID = userID
+	c.n = n
+	return c.ids, nil
+}
+
+func (c *videoAppFakeGorseClient) PutFeedback(_ context.Context, feedback []recommendationapp.GorseFeedback) error {
+	c.feedback = append(c.feedback, feedback...)
+	return nil
+}
+
+func (c *videoAppFakeGorseClient) UpsertUsers(context.Context, []recommendationapp.GorseUser) error {
+	return nil
+}
+
+func (c *videoAppFakeGorseClient) UpsertItems(context.Context, []recommendationapp.GorseItem) error {
+	return nil
+}
+
+func (c *videoAppFakeGorseClient) PatchItem(context.Context, recommendationapp.GorseItem) error {
+	return nil
+}
+
+func (s *stubEmbedder) Embed(_ context.Context, text string) ([]float32, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
+	s.texts = append(s.texts, text)
 	return s.vector, nil
 }
 

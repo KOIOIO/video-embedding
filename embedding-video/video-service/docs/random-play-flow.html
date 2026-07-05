@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>随机播放推荐链路图</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f8f4eb;
+      --ink: #1d2522;
+      --muted: #69716b;
+      --line: #6f756e;
+      --api: #177e89;
+      --gorse: #4f6f52;
+      --tower: #8f4b2e;
+      --fallback: #b43e52;
+      --data: #7658a6;
+      --redis: #b1811d;
+      --white: #fffdf8;
+      --shadow: 0 18px 45px rgba(29, 37, 34, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(29, 37, 34, 0.035) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(29, 37, 34, 0.03) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      color: var(--ink);
+      font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    main {
+      width: min(1360px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 38px 0 44px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(30px, 4vw, 54px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      max-width: 880px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    .priority {
+      min-width: 330px;
+      padding: 16px 18px;
+      border: 1px solid rgba(29, 37, 34, 0.12);
+      background: rgba(255, 253, 248, 0.86);
+      box-shadow: var(--shadow);
+    }
+
+    .priority strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .priority ol {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 18px 0 22px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border: 1px solid rgba(29, 37, 34, 0.12);
+      background: rgba(255, 253, 248, 0.7);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend i {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .canvas {
+      overflow-x: auto;
+      padding: 18px;
+      border: 1px solid rgba(29, 37, 34, 0.14);
+      background: rgba(255, 253, 248, 0.78);
+      box-shadow: var(--shadow);
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      min-width: 1180px;
+      height: auto;
+    }
+
+    .lane {
+      fill: rgba(255, 253, 248, 0.58);
+      stroke: rgba(29, 37, 34, 0.12);
+      stroke-width: 1;
+    }
+
+    .lane-label {
+      font-size: 18px;
+      font-weight: 700;
+      fill: var(--ink);
+    }
+
+    .node {
+      fill: var(--white);
+      stroke-width: 2.4;
+      filter: drop-shadow(0 12px 16px rgba(29, 37, 34, 0.12));
+    }
+
+    .node.api { stroke: var(--api); }
+    .node.gorse { stroke: var(--gorse); }
+    .node.tower { stroke: var(--tower); }
+    .node.fallback { stroke: var(--fallback); }
+    .node.data { stroke: var(--data); }
+    .node.redis { stroke: var(--redis); }
+    .node.db { stroke: #59635d; }
+
+    .badge {
+      fill: var(--ink);
+      opacity: 0.08;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 800;
+      fill: var(--ink);
+    }
+
+    .small-title {
+      font-size: 17px;
+      font-weight: 800;
+      fill: var(--ink);
+    }
+
+    .desc {
+      font-size: 13px;
+      fill: var(--muted);
+    }
+
+    .tiny {
+      font-size: 12px;
+      fill: var(--muted);
+    }
+
+    .code {
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      font-size: 12px;
+      fill: #36403b;
+    }
+
+    .arrow {
+      fill: none;
+      stroke: var(--line);
+      stroke-width: 2.2;
+      marker-end: url(#arrow);
+      color: var(--line);
+    }
+
+    .arrow.api { stroke: var(--api); color: var(--api); }
+    .arrow.gorse { stroke: var(--gorse); color: var(--gorse); }
+    .arrow.tower { stroke: var(--tower); color: var(--tower); }
+    .arrow.fallback { stroke: var(--fallback); color: var(--fallback); }
+    .arrow.data { stroke: var(--data); color: var(--data); }
+    .arrow.redis { stroke: var(--redis); color: var(--redis); }
+
+    .label-pill {
+      fill: var(--paper);
+      stroke: rgba(29, 37, 34, 0.12);
+    }
+
+    .label {
+      font-size: 12px;
+      font-weight: 700;
+      fill: var(--ink);
+    }
+
+    .note {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .note article {
+      padding: 15px 16px;
+      border: 1px solid rgba(29, 37, 34, 0.12);
+      background: rgba(255, 253, 248, 0.8);
+    }
+
+    .note h2 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .note p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .principles {
+      margin-top: 18px;
+      padding: 20px;
+      border: 1px solid rgba(29, 37, 34, 0.14);
+      background: rgba(255, 253, 248, 0.72);
+      box-shadow: var(--shadow);
+    }
+
+    .principles > h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    .principles > p {
+      margin: 0 0 16px;
+      max-width: 960px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    .principle-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .principle-card {
+      padding: 16px;
+      border: 1px solid rgba(29, 37, 34, 0.12);
+      background: rgba(255, 253, 248, 0.86);
+      border-left: 5px solid var(--line);
+    }
+
+    .principle-card.gorse { border-left-color: var(--gorse); }
+    .principle-card.tower { border-left-color: var(--tower); }
+    .principle-card.fallback { border-left-color: var(--fallback); }
+    .principle-card.redis { border-left-color: var(--redis); }
+    .principle-card.risk {
+      border-left-color: var(--fallback);
+      background: rgba(180, 62, 82, 0.06);
+    }
+
+    .principle-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .principle-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .principle-card p + p {
+      margin-top: 8px;
+    }
+
+    .principle-card strong {
+      color: var(--ink);
+    }
+
+    @media (max-width: 900px) {
+      main {
+        width: min(100vw - 24px, 1360px);
+        padding-top: 24px;
+      }
+
+      header {
+        grid-template-columns: 1fr;
+      }
+
+      .priority {
+        min-width: 0;
+      }
+
+      .note {
+        grid-template-columns: 1fr;
+      }
+
+      .principle-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>随机播放推荐链路图</h1>
+        <p class="subtitle">
+          当前配置是后端先调用 Gorse，Gorse 内部优先 collaborative；如果 Gorse 需要 fallback，第一层会调用 external/two_tower。后端拿到候选片段 ID 后，还会做可播放、发布、推荐开关、已看、点踩和最近播放过滤。
+        </p>
+      </div>
+      <aside class="priority">
+        <strong>当前推荐优先级</strong>
+        <ol>
+          <li>Gorse collaborative</li>
+          <li>Gorse fallback: external/two_tower</li>
+          <li>后端 knowledge_match</li>
+          <li>后端数据库随机片段</li>
+        </ol>
+      </aside>
+    </header>
+
+    <div class="legend" aria-label="图例">
+      <span><i style="background: var(--api);"></i>HTTP/API</span>
+      <span><i style="background: var(--gorse);"></i>Gorse</span>
+      <span><i style="background: var(--tower);"></i>双塔 external</span>
+      <span><i style="background: var(--fallback);"></i>后端兜底</span>
+      <span><i style="background: var(--data);"></i>数据输入/训练</span>
+      <span><i style="background: var(--redis);"></i>Redis 最近去重</span>
+    </div>
+
+    <section class="canvas" aria-label="随机播放推荐链路图">
+      <svg viewBox="0 0 1440 1040" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">随机播放推荐链路图</title>
+        <desc id="diagram-desc">展示 random-play 从请求、Gorse、双塔 external、后端过滤到反馈回流的完整链路。</desc>
+
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+
+        <rect class="lane" x="24" y="28" width="1392" height="330" rx="8"></rect>
+        <text class="lane-label" x="44" y="64">1. 在线请求主链路</text>
+
+        <rect class="node api" x="58" y="100" width="190" height="108" rx="8"></rect>
+        <text class="title" x="78" y="134">前端/客户端</text>
+        <text class="code" x="78" y="160">GET /api/video-segments/</text>
+        <text class="code" x="78" y="178">random-play?user_id=7</text>
+        <text class="desc" x="78" y="198">user_id 不传默认 6</text>
+
+        <rect class="node api" x="298" y="100" width="196" height="108" rx="8"></rect>
+        <text class="title" x="318" y="134">HTTP Handler</text>
+        <text class="desc" x="318" y="160">解析 user_id</text>
+        <text class="desc" x="318" y="180">Limit 固定为 1</text>
+        <text class="code" x="318" y="200">RandomPlayVideoSegment</text>
+
+        <rect class="node api" x="544" y="100" width="218" height="108" rx="8"></rect>
+        <text class="title" x="564" y="134">推荐服务入口</text>
+        <text class="desc" x="564" y="160">读取 Recommendation.Engine</text>
+        <text class="code" x="564" y="180">Engine = gorse</text>
+        <text class="desc" x="564" y="200">优先请求 Gorse</text>
+
+        <rect class="node gorse" x="814" y="100" width="198" height="108" rx="8"></rect>
+        <text class="title" x="834" y="134">Gorse API</text>
+        <text class="code" x="834" y="160">/api/recommend/{user}</text>
+        <text class="code" x="834" y="180">?n=100</text>
+        <text class="desc" x="834" y="200">返回 video_segment_id</text>
+
+        <rect class="node db" x="1064" y="100" width="240" height="108" rx="8"></rect>
+        <text class="title" x="1084" y="134">后端 hydrate/filter</text>
+        <text class="desc" x="1084" y="160">查 edu_video_segment/resource</text>
+        <text class="desc" x="1084" y="180">过滤未发布、不可播、已看</text>
+        <text class="desc" x="1084" y="200">过滤 dislike 和最近返回</text>
+
+        <rect class="node api" x="1138" y="246" width="190" height="82" rx="8"></rect>
+        <text class="title" x="1158" y="280">返回播放片段</text>
+        <text class="desc" x="1158" y="304">video_id / segment_id</text>
+        <text class="desc" x="1158" y="322">start/end/play_url</text>
+
+        <path class="arrow api" d="M248 154 H294"></path>
+        <path class="arrow api" d="M494 154 H540"></path>
+        <path class="arrow gorse" d="M762 154 H810"></path>
+        <path class="arrow gorse" d="M1012 154 H1060"></path>
+        <path class="arrow api" d="M1184 208 V242"></path>
+
+        <rect class="label-pill" x="774" y="124" width="30" height="24" rx="12"></rect>
+        <text class="label" x="782" y="141">先</text>
+
+        <rect class="lane" x="24" y="390" width="1392" height="250" rx="8"></rect>
+        <text class="lane-label" x="44" y="426">2. Gorse 内部选择：内置优先，双塔作为 external fallback</text>
+
+        <rect class="node gorse" x="74" y="472" width="220" height="100" rx="8"></rect>
+        <text class="title" x="94" y="506">Gorse 数据池</text>
+        <text class="desc" x="94" y="532">users / items / feedback</text>
+        <text class="desc" x="94" y="552">item_id = video_segment_id</text>
+
+        <rect class="node gorse" x="364" y="472" width="220" height="100" rx="8"></rect>
+        <text class="title" x="384" y="506">collaborative</text>
+        <text class="code" x="384" y="532">type = mf</text>
+        <text class="desc" x="384" y="552">Gorse 内置协同过滤</text>
+
+        <rect class="node tower" x="654" y="472" width="238" height="100" rx="8"></rect>
+        <text class="title" x="674" y="506">external/two_tower</text>
+        <text class="code" x="674" y="532">/api/internal/recommendations/</text>
+        <text class="code" x="674" y="550">external/two-tower</text>
+
+        <rect class="node gorse" x="964" y="472" width="244" height="100" rx="8"></rect>
+        <text class="title" x="984" y="506">其他 Gorse fallback</text>
+        <text class="desc" x="984" y="532">latest / popular_weekly</text>
+        <text class="desc" x="984" y="552">item-to-item/neighbors</text>
+
+        <path class="arrow gorse" d="M294 522 H360"></path>
+        <path class="arrow tower" d="M584 522 H650"></path>
+        <path class="arrow gorse" d="M892 522 H960"></path>
+
+        <rect class="label-pill" x="603" y="490" width="34" height="24" rx="12"></rect>
+        <text class="label" x="610" y="507">缺</text>
+
+        <path class="arrow fallback" d="M762 210 C760 278, 650 294, 650 360 C650 375, 650 384, 650 394"></path>
+        <rect class="label-pill" x="592" y="288" width="130" height="28" rx="14"></rect>
+        <text class="label" x="606" y="307">Gorse 不可用/无结果</text>
+
+        <rect class="node fallback" x="520" y="672" width="210" height="96" rx="8"></rect>
+        <text class="title" x="540" y="706">knowledge_match</text>
+        <text class="desc" x="540" y="732">弱知识点 + 文本 embedding</text>
+        <text class="desc" x="540" y="752">后端推荐兜底</text>
+
+        <rect class="node fallback" x="810" y="672" width="210" height="96" rx="8"></rect>
+        <text class="title" x="830" y="706">数据库随机</text>
+        <text class="code" x="830" y="732">ORDER BY RANDOM()</text>
+        <text class="desc" x="830" y="752">大表高峰有雪崩风险</text>
+
+        <path class="arrow fallback" d="M650 640 V668"></path>
+        <path class="arrow fallback" d="M730 720 H806"></path>
+
+        <rect class="lane" x="24" y="800" width="1392" height="210" rx="8"></rect>
+        <text class="lane-label" x="44" y="836">3. 推荐依据数据输入与反馈回流</text>
+
+        <rect class="node data" x="62" y="874" width="236" height="94" rx="8"></rect>
+        <text class="small-title" x="82" y="904">Postgres 原始数据</text>
+        <text class="desc" x="82" y="928">sys_user / 学习画像 / 答题</text>
+        <text class="desc" x="82" y="948">视频片段 / 曝光 / 观看 / 反应</text>
+
+        <rect class="node data" x="358" y="874" width="214" height="94" rx="8"></rect>
+        <text class="small-title" x="378" y="904">worker: gorsesync</text>
+        <text class="desc" x="378" y="928">LoadUsers / LoadItems</text>
+        <text class="desc" x="378" y="948">LoadFeedback 写入 Gorse</text>
+
+        <rect class="node tower" x="632" y="874" width="238" height="94" rx="8"></rect>
+        <text class="small-title" x="652" y="904">双塔训练流水线</text>
+        <text class="desc" x="652" y="928">导样本 -> 训练 -> gate</text>
+        <text class="desc" x="652" y="948">导入 user/item embedding</text>
+
+        <rect class="node tower" x="930" y="874" width="236" height="94" rx="8"></rect>
+        <text class="small-title" x="950" y="904">双塔在线向量表</text>
+        <text class="desc" x="950" y="928">edu_user_tower_embedding</text>
+        <text class="desc" x="950" y="948">edu_video_item_embedding</text>
+
+        <rect class="node redis" x="1210" y="874" width="168" height="94" rx="8"></rect>
+        <text class="small-title" x="1230" y="904">Redis 最近去重</text>
+        <text class="desc" x="1230" y="928">用户维度 set</text>
+        <text class="desc" x="1230" y="948">TTL 1800 秒</text>
+
+        <path class="arrow data" d="M298 921 H354"></path>
+        <path class="arrow data" d="M572 921 H628"></path>
+        <path class="arrow tower" d="M870 921 H926"></path>
+
+        <path class="arrow data" d="M465 874 C465 770, 184 700, 184 576"></path>
+        <path class="arrow tower" d="M1048 874 C1048 756, 773 712, 773 576"></path>
+        <path class="arrow redis" d="M1294 874 C1294 780, 1286 650, 1202 592 C1138 548, 1068 620, 1164 242"></path>
+
+        <path class="arrow data" d="M1242 328 C1260 756, 286 746, 180 874"></path>
+        <rect class="label-pill" x="1048" y="718" width="154" height="28" rx="14"></rect>
+        <text class="label" x="1062" y="737">曝光/观看/点赞回流</text>
+      </svg>
+    </section>
+
+    <section class="note">
+      <article>
+        <h2>为什么不是纯随机</h2>
+        <p>接口名字叫 random-play，但有 user_id 时先走推荐服务。只有 Gorse、知识点匹配都拿不到可用片段时，才会真正查库随机选一个。</p>
+      </article>
+      <article>
+        <h2>双塔现在的位置</h2>
+        <p>当前不是后端直接优先双塔，而是 Gorse fallback 里的 external/two_tower。Gorse 需要兜底时才会调用后端双塔接口。</p>
+      </article>
+      <article>
+        <h2>最终谁保证可播放</h2>
+        <p>模型只给候选片段 ID。后端 hydrate/filter 会保证视频已发布、可播放、未删除、未看过、未点踩，并记录曝光和最近返回。</p>
+      </article>
+    </section>
+
+    <section class="principles" aria-label="推荐算法内部基础原理">
+      <h2>推荐算法内部基础原理</h2>
+      <p>
+        随机播放实际是一条多级召回链路：前面的算法负责尽量给出更个性化的候选片段，后面的算法负责在数据不足、服务不可用或候选被过滤光时兜底。所有策略最终都只产出候选 segment_id，真正的业务可播放性由后端统一过滤和曝光记录保证。
+      </p>
+
+      <div class="principle-grid">
+        <article class="principle-card gorse">
+          <h3>Gorse collaborative：从群体行为里找相似偏好</h3>
+          <p><strong>输入：</strong>gorsesync 把用户、视频片段、观看、曝光、点赞、点踩等反馈同步进 Gorse，item_id 对应 video_segment_id。</p>
+          <p><strong>原理：</strong>协同过滤不只看片段文本，而是看“哪些用户和哪些片段发生过类似互动”。如果两个用户的观看/点赞模式相近，系统会把其中一个用户喜欢但另一个还没看过的片段排到前面。</p>
+          <p><strong>在链路中的作用：</strong>当前配置优先请求 Gorse，后端拿到 Gorse 返回的片段 ID 后，再按原顺序 hydrate/filter，并把曝光写回 Gorse 作为下一轮反馈。</p>
+        </article>
+
+        <article class="principle-card tower">
+          <h3>external/two_tower：用户向量和片段向量做近邻匹配</h3>
+          <p><strong>输入：</strong>训练流水线把用户行为和片段内容训练成两套 embedding：user tower 表示用户当前兴趣，item tower 表示视频片段特征。</p>
+          <p><strong>原理：</strong>在线推荐时取用户向量，在 item embedding 表里找距离最近的片段。距离越小，代表模型认为用户兴趣和片段内容越匹配，分数会换算成 1 / (1 + distance)。</p>
+          <p><strong>在链路中的作用：</strong>它当前不是后端主入口，而是 Gorse 的 external fallback。Gorse 协同过滤数据不足或需要补候选时，才会调用这个后端接口返回片段 ID。</p>
+        </article>
+
+        <article class="principle-card fallback">
+          <h3>knowledge_match：用薄弱知识点召回相关片段</h3>
+          <p><strong>输入：</strong>后端读取用户掌握度较低的知识点，把知识点名称和描述拼成查询文本，再生成 embedding。</p>
+          <p><strong>原理：</strong>用这个“薄弱知识画像向量”去匹配视频片段的内容向量，优先召回语义上能补弱项的片段；召回后还会用知识点词命中做一次轻量重排，标题和知识标签命中权重更高。</p>
+          <p><strong>在链路中的作用：</strong>当 Gorse 没有可用结果时，后端会走这一层。它更偏教学补弱，不依赖协同行为，因此适合作为冷启动或稀疏用户的兜底。</p>
+        </article>
+
+        <article class="principle-card risk">
+          <h3>数据库随机：最后兜底，也是高峰风险点</h3>
+          <p><strong>输入：</strong>业务库里已经发布、未删除、转码完成、片段可播放的视频片段集合。</p>
+          <p><strong>原理：</strong>当前实现会在可播放池上执行 ORDER BY RANDOM() LIMIT 1；如果用户有最近返回记录，会先排除 Redis 最近去重集合里的片段，减少短时间重复播放。</p>
+          <p><strong>风险：</strong>ORDER BY RANDOM() 需要给候选行生成随机值再排序。数据到几百万级、上游推荐全部失效且流量涌入时，数据库 IO 和 CPU 会被随机排序打满，兜底路径可能反过来触发雪崩。</p>
+          <p><strong>定位：</strong>它只能作为低流量防止空结果的临时兜底，不应承担高峰期主保护。生产上更稳的做法是预热可播放片段池、用随机游标/随机 id seek、维护采样表或把兜底候选放进 Redis。</p>
+        </article>
+
+        <article class="principle-card redis">
+          <h3>统一过滤和反馈：把模型候选变成可播结果</h3>
+          <p><strong>过滤：</strong>无论候选来自 Gorse、双塔还是知识点匹配，后端都会过滤未发布、不可播放、未转码完成、已看、点踩、关闭推荐和最近返回的片段。</p>
+          <p><strong>回流：</strong>最终返回的片段会记录 recommendation exposure；播放、点赞、点踩等行为再回到 Postgres，并由 gorsesync 同步给 Gorse，形成下一轮训练和推荐依据。</p>
+        </article>
+
+        <article class="principle-card gorse">
+          <h3>为什么按这个顺序降级</h3>
+          <p><strong>Gorse 优先：</strong>它能综合群体互动、用户标签、物品标签和反馈，适合在线主推荐。</p>
+          <p><strong>双塔补候选：</strong>它适合用训练好的向量做快速召回，但当前被放在 Gorse external fallback 中，避免两套在线主链路互相竞争。</p>
+          <p><strong>知识点和随机兜底：</strong>前者保证教学相关性；后者只保证低流量下尽量不空返。越往后个性化越弱，数据库随机在大表高峰下还会牺牲稳定性，需要尽快替换成轻量采样兜底。</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

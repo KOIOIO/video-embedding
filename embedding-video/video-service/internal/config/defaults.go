@@ -38,9 +38,18 @@ const (
 	defaultSegmentReactionUserPrefix   = "segment:reaction:user:"
 	defaultTranscodeStatusPrefix       = "video:transcode:status:"
 	defaultRuntimeActiveCounterPrefix  = "video:runtime:active:"
+	defaultRandomPlayRecentPrefix      = "video:random_play:recent:"
 	defaultEmbeddingDim                = 1536
+	defaultAIProvider                  = "legacy"
 	defaultDashscopeCompatBaseURL      = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	defaultDashscopeWSURL              = "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
+	defaultRecommendationEngine        = "knowledge_match"
+	defaultRandomPlayDedupeWindowSec   = 1800
+	defaultGorseEndpoint               = "http://localhost:8087"
+	defaultGorseTimeoutSeconds         = 2
+	defaultGorseCandidateLimit         = 100
+	defaultGorseSyncIntervalMins       = 60
+	defaultGorseDataRetentionDays      = 30
 )
 
 func HTTPAddr(cfg Config) string {
@@ -95,15 +104,15 @@ func CORSMaxAge(cfg Config) string {
 }
 
 func RawPath(cfg Config) string {
-	return firstConfigValue(cfg.Video.RawPath, filepath.Join(os.TempDir(), "nlp-video-analysis", "tmp", "raw"))
+	return firstConfigValue(cfg.Video.RawPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "raw"))
 }
 
 func HLSPath(cfg Config) string {
-	return firstConfigValue(cfg.Video.HlsPath, filepath.Join(os.TempDir(), "nlp-video-analysis", "tmp", "hls"))
+	return firstConfigValue(cfg.Video.HlsPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "hls"))
 }
 
 func VectorTempPath(cfg Config) string {
-	return firstConfigValue(cfg.Storage.VectorTempPath, filepath.Join(os.TempDir(), "nlp-video-analysis", "tmp", "video_vectorize"))
+	return firstConfigValue(cfg.Storage.VectorTempPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "video_vectorize"))
 }
 
 func RawObjectPrefix(cfg Config) string {
@@ -190,11 +199,74 @@ func RuntimeActiveCounterPrefix(cfg Config) string {
 	return firstConfigValue(cfg.RedisKeys.RuntimeActiveCounter, defaultRuntimeActiveCounterPrefix)
 }
 
+func RandomPlayRecentPrefix(cfg Config) string {
+	return firstConfigValue(cfg.RedisKeys.RandomPlayRecent, defaultRandomPlayRecentPrefix)
+}
+
 func EmbeddingDim(cfg Config) int {
 	if cfg.AI.EmbeddingDim > 0 {
 		return cfg.AI.EmbeddingDim
 	}
 	return defaultEmbeddingDim
+}
+
+func AIProvider(cfg Config) string {
+	provider := strings.ToLower(strings.TrimSpace(cfg.AI.Provider))
+	if provider == "" {
+		return defaultAIProvider
+	}
+	return provider
+}
+
+func RecommendationEngine(cfg Config) string {
+	engine := strings.ToLower(strings.TrimSpace(cfg.Recommendation.Engine))
+	if engine == "" {
+		return defaultRecommendationEngine
+	}
+	return engine
+}
+
+func RandomPlayDedupeWindow(cfg Config) time.Duration {
+	seconds := cfg.Recommendation.RandomPlayDedupeWindowSec
+	if seconds <= 0 {
+		seconds = defaultRandomPlayDedupeWindowSec
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func GorseEndpoint(cfg Config) string {
+	return strings.TrimRight(firstConfigValue(cfg.Gorse.Endpoint, defaultGorseEndpoint), "/")
+}
+
+func GorseTimeout(cfg Config) time.Duration {
+	seconds := cfg.Gorse.TimeoutSeconds
+	if seconds <= 0 {
+		seconds = defaultGorseTimeoutSeconds
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func GorseCandidateLimit(cfg Config) int {
+	if cfg.Gorse.CandidateLimit > 0 {
+		return cfg.Gorse.CandidateLimit
+	}
+	return defaultGorseCandidateLimit
+}
+
+func GorseSyncInterval(cfg Config) time.Duration {
+	minutes := cfg.Gorse.SyncIntervalMins
+	if minutes <= 0 {
+		minutes = defaultGorseSyncIntervalMins
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+func GorseDataTTL(cfg Config) time.Duration {
+	days := cfg.Gorse.DataRetentionDays
+	if days <= 0 {
+		days = defaultGorseDataRetentionDays
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 func DashscopeCompatBaseURL() string {

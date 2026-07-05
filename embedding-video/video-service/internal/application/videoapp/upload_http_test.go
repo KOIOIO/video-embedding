@@ -90,6 +90,68 @@ func TestUploadVideoSuccessRemovesTempFileAfterFinalize(t *testing.T) {
 	if result.VideoID != 88 {
 		t.Fatalf("unexpected video id: %d", result.VideoID)
 	}
+	if repo.createdVideo == nil || repo.createdVideo.UserID != DefaultUploadUserID {
+		t.Fatalf("created video userID = %d, want %d", repo.createdVideo.UserID, DefaultUploadUserID)
+	}
+}
+
+func TestUploadVideoPersistsProvidedUserID(t *testing.T) {
+	fixedNow := time.Date(2026, 5, 21, 12, 30, 0, 123456789, time.UTC)
+	repo := &uploadHTTPTestRepo{createdID: 89}
+	svc := NewService(repo, &uploadHTTPTestQueue{}, nil, &uploadHTTPTestStatusStore{}, &uploadHTTPTestObjectStore{}, &uploadHTTPTestFS{}, nil, Paths{
+		RawDir:       "/tmp/raw",
+		HLSDir:       "/tmp/hls",
+		RawURLPrefix: "/videos/raw",
+		HLSURLPrefix: "/videos/hls",
+	})
+	svc.Now = func() time.Time { return fixedNow }
+
+	if _, err := svc.UploadVideo(context.Background(), UploadVideoInput{
+		FileName: "lesson.mp4",
+		UserID:   42,
+		Reader:   bytes.NewBufferString("video-bytes"),
+	}); err != nil {
+		t.Fatalf("UploadVideo returned error: %v", err)
+	}
+
+	if repo.createdVideo == nil || repo.createdVideo.UserID != 42 {
+		t.Fatalf("created video userID = %d, want 42", repo.createdVideo.UserID)
+	}
+}
+
+func TestUploadVideoRejectsUserWithoutUploadPermission(t *testing.T) {
+	fixedNow := time.Date(2026, 5, 21, 12, 30, 0, 123456789, time.UTC)
+	repo := &uploadHTTPTestRepo{uploadDenied: true}
+	store := &uploadHTTPTestObjectStore{}
+	svc := NewService(repo, &uploadHTTPTestQueue{}, nil, &uploadHTTPTestStatusStore{}, store, &uploadHTTPTestFS{}, nil, Paths{
+		RawDir:       "/tmp/raw",
+		HLSDir:       "/tmp/hls",
+		RawURLPrefix: "/videos/raw",
+		HLSURLPrefix: "/videos/hls",
+	})
+	svc.Now = func() time.Time { return fixedNow }
+
+	_, err := svc.UploadVideo(context.Background(), UploadVideoInput{
+		FileName: "lesson.mp4",
+		UserID:   42,
+		Reader:   bytes.NewBufferString("video-bytes"),
+	})
+	if err == nil {
+		t.Fatal("expected upload permission error")
+	}
+	var validationErr ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if validationErr.Error() != "user is not allowed to upload videos" {
+		t.Fatalf("unexpected validation message: %q", validationErr.Error())
+	}
+	if repo.createdVideo != nil {
+		t.Fatalf("created video despite missing permission: %+v", repo.createdVideo)
+	}
+	if store.putFileObjectKey != "" {
+		t.Fatalf("uploaded object despite missing permission: %q", store.putFileObjectKey)
+	}
 }
 
 func TestUploadVideoRemovesTempFileWhenFinalizeFails(t *testing.T) {
@@ -194,8 +256,57 @@ func TestUploadVideoArchiveUploadsVideosAndSkipsUnsafeOrNonVideoEntries(t *testi
 	if repo.createdDescriptions[0] != "batch-desc" || repo.createdDescriptions[1] != "batch-desc" {
 		t.Fatalf("created descriptions = %+v", repo.createdDescriptions)
 	}
+	if repo.createdUserIDs[0] != DefaultUploadUserID || repo.createdUserIDs[1] != DefaultUploadUserID {
+		t.Fatalf("created userIDs = %+v, want all %d", repo.createdUserIDs, DefaultUploadUserID)
+	}
 	if len(queue.tasks) != 2 {
 		t.Fatalf("queued tasks = %d, want 2", len(queue.tasks))
+	}
+}
+
+func TestUploadVideoArchiveRejectsUserWithoutUploadPermission(t *testing.T) {
+	repo := &uploadHTTPTestRepo{uploadDenied: true}
+	store := &uploadHTTPTestObjectStore{}
+	svc := NewService(repo, &uploadHTTPTestQueue{}, nil, &uploadHTTPTestStatusStore{}, store, &uploadHTTPTestFS{}, nil, Paths{
+		RawDir:       "/tmp/raw",
+		HLSDir:       "/tmp/hls",
+		RawURLPrefix: "/videos/raw",
+		HLSURLPrefix: "/videos/hls",
+	})
+
+	archive := &bytes.Buffer{}
+	zw := zip.NewWriter(archive)
+	w, err := zw.Create("lesson.mp4")
+	if err != nil {
+		t.Fatalf("create zip entry: %v", err)
+	}
+	if _, err := w.Write([]byte("video-bytes")); err != nil {
+		t.Fatalf("write zip entry: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	_, err = svc.UploadVideoArchive(context.Background(), UploadVideoArchiveInput{
+		FileName: "lessons.zip",
+		UserID:   42,
+		Reader:   bytes.NewReader(archive.Bytes()),
+	})
+	if err == nil {
+		t.Fatal("expected upload permission error")
+	}
+	var validationErr ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if validationErr.Error() != "user is not allowed to upload videos" {
+		t.Fatalf("unexpected validation message: %q", validationErr.Error())
+	}
+	if repo.createdVideo != nil {
+		t.Fatalf("created video despite missing permission: %+v", repo.createdVideo)
+	}
+	if store.putFileObjectKey != "" {
+		t.Fatalf("uploaded object despite missing permission: %q", store.putFileObjectKey)
 	}
 }
 
@@ -357,6 +468,7 @@ type uploadHTTPTestRepo struct {
 	createdVideo        *domainvideo.Video
 	createdTitles       []string
 	createdDescriptions []string
+	createdUserIDs      []uint64
 	getByIDOK           bool
 	getByIDErr          error
 	updateCoverOK       bool
@@ -364,12 +476,17 @@ type uploadHTTPTestRepo struct {
 	lastCoverURL        string
 	lastStatusID        uint64
 	lastStatus          domainvideo.Status
+	archiveProgress     ArchiveProcessingProgress
+	progressVideoIDs    []uint64
+	uploadPermissionErr error
+	uploadDenied        bool
 }
 
 func (r *uploadHTTPTestRepo) Create(_ context.Context, v *domainvideo.Video) error {
 	r.createdVideo = v
 	r.createdTitles = append(r.createdTitles, v.Title)
 	r.createdDescriptions = append(r.createdDescriptions, v.Description)
+	r.createdUserIDs = append(r.createdUserIDs, v.UserID)
 	if len(r.nextIDs) > 0 {
 		v.ID = r.nextIDs[0]
 		r.nextIDs = r.nextIDs[1:]
@@ -383,6 +500,12 @@ func (*uploadHTTPTestRepo) List(context.Context, ListFilter) ([]domainvideo.Vide
 }
 func (*uploadHTTPTestRepo) ListRecommendPool(context.Context) ([]domainvideo.Video, error) {
 	panic("unexpected call")
+}
+func (r *uploadHTTPTestRepo) CanUploadVideo(context.Context, uint64) (bool, error) {
+	if r.uploadPermissionErr != nil {
+		return false, r.uploadPermissionErr
+	}
+	return !r.uploadDenied, nil
 }
 func (r *uploadHTTPTestRepo) GetByID(context.Context, uint64) (domainvideo.Video, bool, error) {
 	if r.getByIDErr != nil {
@@ -453,6 +576,9 @@ func (*uploadHTTPTestRepo) GetQuestionByID(context.Context, uint64) (QuestionIte
 func (*uploadHTTPTestRepo) FindRecommendedSegments(context.Context, pgvector.Vector, int) ([]RecommendCandidate, error) {
 	panic("unexpected call")
 }
+func (*uploadHTTPTestRepo) FindRecommendedSegmentsByWeakKnowledge(context.Context, uint64, int, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 func (*uploadHTTPTestRepo) SaveUserVideoRecommendation(context.Context, uint64, uint64, uint64, uint64, float64, time.Time) error {
 	panic("unexpected call")
 }
@@ -467,6 +593,10 @@ func (*uploadHTTPTestRepo) HasWatchedVideoForQuestion(context.Context, uint64, u
 }
 func (*uploadHTTPTestRepo) SaveWatchRecord(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error) {
 	panic("unexpected call")
+}
+func (r *uploadHTTPTestRepo) GetArchiveProcessingProgress(_ context.Context, videoIDs []uint64) (ArchiveProcessingProgress, error) {
+	r.progressVideoIDs = append([]uint64(nil), videoIDs...)
+	return r.archiveProgress, nil
 }
 
 type uploadHTTPTestStatusStore struct {

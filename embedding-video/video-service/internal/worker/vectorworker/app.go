@@ -5,12 +5,13 @@ import (
 	"errors"
 	"nlp-video-analysis/internal/application/videoapp"
 	"nlp-video-analysis/internal/config"
+	aiinfra "nlp-video-analysis/internal/infrastructure/ai"
+	einoai "nlp-video-analysis/internal/infrastructure/ai/eino"
 	"nlp-video-analysis/internal/infrastructure/objectstorage"
 	"nlp-video-analysis/internal/infrastructure/persistence"
 	infraredis "nlp-video-analysis/internal/infrastructure/redis"
 	"nlp-video-analysis/internal/infrastructure/transcode"
 	"nlp-video-analysis/internal/lifecycle"
-	"nlp-video-analysis/internal/model"
 	"nlp-video-analysis/internal/worker/antspool"
 	"nlp-video-analysis/internal/worker/vectorworker/tasks"
 	"os"
@@ -50,10 +51,46 @@ func resolvePoolSize(pools config.WorkerPoolsConfig, name string, fallback int) 
 	return fallback
 }
 
+func newVectorAIClient(ctx context.Context, cfg config.Config) (vectorAIClient, error) {
+	legacyClient, err := newOpenAICompatClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if aiinfra.NormalizeProvider(config.AIProvider(cfg)) != aiinfra.ProviderEino {
+		return legacyClient, nil
+	}
+	apiKey := firstNonEmpty(
+		os.Getenv("DASHSCOPE_API_KEY"),
+		os.Getenv("OPENAI_API_KEY"),
+		os.Getenv("ASR_API_KEY"),
+		cfg.ASR.APIKey,
+		cfg.Embedding.APIKey,
+	)
+	chatClient, chatErr := einoai.NewChatClient(ctx, einoai.ChatConfig{
+		BaseURL: legacyClient.compatBaseURL,
+		APIKey:  apiKey,
+	})
+	embedClient, embedErr := einoai.NewEmbeddingClient(ctx, einoai.EmbeddingConfig{
+		BaseURL: legacyClient.compatBaseURL,
+		APIKey:  apiKey,
+		Model:   legacyClient.embedModel,
+	})
+	if chatErr != nil || embedErr != nil {
+		if chatErr != nil {
+			zap.L().Warn("eino_chat_init_failed_fallback_legacy", zap.Error(chatErr))
+		}
+		if embedErr != nil {
+			zap.L().Warn("eino_embedding_init_failed_fallback_legacy", zap.Error(embedErr))
+		}
+		return legacyClient, nil
+	}
+	return newComposedVectorAIClient(legacyClient, chatClient, embedClient), nil
+}
+
 // Register 向生命周期容器注册向量化 worker。
 // 它负责装配 ASR、LLM、Embedding、对象存储和队列消费主循环。
 func Register(app *lifecycle.App, cfg config.Config) {
-	client, err := newOpenAICompatClient(cfg)
+	client, err := newVectorAIClient(app.Context(), cfg)
 	if err != nil {
 		if shouldSkipVectorWorker(err) {
 			zap.L().Warn("vector_worker_disabled",
@@ -96,31 +133,11 @@ func Register(app *lifecycle.App, cfg config.Config) {
 		}
 		app.AddCloser(func(ctx context.Context) error { return sqlDB.Close() })
 	}
-	_ = db.Exec("CREATE EXTENSION IF NOT EXISTS vector;").Error
-	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}); err != nil {
-		zap.L().Fatal("db_migrate_failed", zap.String("worker", "vector"), zap.String("err", err.Error()))
-	}
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
-	_ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_embedding ON edu_video_segment USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`).Error
-	if err := persistence.EnsureIntegrity(db); err != nil {
+	if err := persistence.EnsureSchema(db); err != nil {
 		zap.L().Fatal("db_integrity_failed", zap.String("worker", "vector"), zap.String("err", err.Error()))
 	}
 
-	accessKey := cfg.RustFS.AccessKey
-	if accessKey == "" {
-		accessKey = os.Getenv("RUSTFS_ACCESS_KEY")
-	}
-	secretKey := cfg.RustFS.SecretKey
-	if secretKey == "" {
-		secretKey = os.Getenv("RUSTFS_SECRET_KEY")
-	}
-	store, err := objectstorage.NewRustFS(objectstorage.Config{
-		Endpoint:  cfg.RustFS.Endpoint,
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		Bucket:    cfg.RustFS.Bucket,
-		UseSSL:    cfg.RustFS.UseSSL,
-	})
+	store, err := objectstorage.NewRustFS(config.ObjectStorageConfig(cfg))
 	if err != nil {
 		zap.L().Fatal("rustfs_init_failed", zap.String("worker", "vector"), zap.String("err", err.Error()))
 	}
@@ -296,6 +313,7 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	if taskTimeout <= 0 {
 		taskTimeout = 3 * time.Hour
 	}
+	queue.SetPendingMinIdle(taskTimeout + time.Minute)
 	stageAdapter := newTopLevelVectorStageAdapter(mode, stageRepo, stageQueues.queue(VectorStagePrepare))
 	for i := 0; i < workerCount; i++ {
 		id := i

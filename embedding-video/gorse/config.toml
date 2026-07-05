@@ -1,0 +1,95 @@
+[database]
+cache_store = "postgres://postgres:postgres@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
+data_store = "postgres://postgres:postgres@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
+vector_store = "sqlite:///var/lib/gorse/blob/vector.db"
+table_prefix = "video_gorse_"
+cache_table_prefix = "video_gorse_cache_"
+data_table_prefix = "video_gorse_data_"
+
+[database.postgres]
+max_open_conns = 16
+max_idle_conns = 8
+conn_max_lifetime = "5m"
+
+[master]
+host = "0.0.0.0"
+port = 8086
+http_host = "0.0.0.0"
+http_port = 8088
+dashboard_user_name = "admin"
+dashboard_password = "admin123"
+
+[server]
+api_key = ""
+default_n = 10
+auto_insert_user = true
+auto_insert_item = false
+cache_expire = "10s"
+
+[recommend]
+cache_size = 100
+cache_expire = "72h"
+context_size = 100
+active_user_ttl = 0
+
+[recommend.data_source]
+positive_feedback_types = ["like", "double_like", "watch>=0.6"]
+read_feedback_types = ["exposure", "watch"]
+negative_feedback_types = ["dislike"]
+positive_feedback_ttl = 0
+item_ttl = 0
+
+[[recommend.non-personalized]]
+name = "popular_weekly"
+score = "count(feedback, .FeedbackType == 'like') + count(feedback, .FeedbackType == 'double_like') + count(feedback, .FeedbackType == 'watch')"
+filter = "(now() - item.Timestamp).Hours() < 168"
+
+[[recommend.item-to-item]]
+name = "neighbors"
+type = "embedding"
+column = "item.Labels.embedding"
+
+[[recommend.user-to-user]]
+name = "neighbors"
+type = "items"
+
+[[recommend.external]]
+name = "two_tower"
+script = """
+function pull(url) {
+  try {
+    var response = fetch(url);
+    if (response.ok) {
+      return response.body;
+    }
+  } catch (e) {}
+  return "";
+}
+
+var path = "/api/internal/recommendations/external/two-tower?user_id=" + user_id + "&n=100";
+pull("http://backend:8083" + path) ||
+  "[]";
+"""
+
+[recommend.collaborative]
+type = "mf"
+fit_period = "60m"
+fit_epoch = 100
+optimize_period = "360m"
+optimize_trials = 10
+
+[recommend.ranker]
+type = "none"
+recommenders = [
+  "collaborative"
+]
+fit_period = "60m"
+fit_epoch = 100
+optimize_period = "360m"
+optimize_trials = 10
+
+[recommend.fallback]
+recommenders = ["external/two_tower", "latest", "non-personalized/popular_weekly", "item-to-item/neighbors"]
+
+[blob]
+uri = "/var/lib/gorse/blob"

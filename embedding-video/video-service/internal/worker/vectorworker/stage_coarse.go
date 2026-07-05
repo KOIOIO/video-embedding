@@ -69,14 +69,14 @@ func (h *coarseStageHandler) Handle(ctx context.Context, task VectorStageTask) e
 type productionCoarseStageProcessor struct {
 	store         *objectstorage.RustFS
 	ff            *transcode.FFmpegTranscoder
-	client        *openAICompatClient
+	client        vectorAIClient
 	tmpRoot       string
 	asrWorkers    int
 	coarseWorkers int
 	stageRecorder *vectorStageRecorder
 }
 
-func newProductionCoarseStageProcessor(store *objectstorage.RustFS, ff *transcode.FFmpegTranscoder, client *openAICompatClient, tmpRoot string, asrWorkers int, coarseWorkers int, stageRecorder *vectorStageRecorder) *productionCoarseStageProcessor {
+func newProductionCoarseStageProcessor(store *objectstorage.RustFS, ff *transcode.FFmpegTranscoder, client vectorAIClient, tmpRoot string, asrWorkers int, coarseWorkers int, stageRecorder *vectorStageRecorder) *productionCoarseStageProcessor {
 	return &productionCoarseStageProcessor{
 		store:         store,
 		ff:            ff,

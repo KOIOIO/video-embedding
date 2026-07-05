@@ -1,5 +1,5 @@
 const DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024
-const STORAGE_KEY_PREFIX = 'nlp-video-upload'
+const STORAGE_KEY_PREFIX = 'video-upload'
 
 export function buildUploadSessionKey(file) {
   return [
@@ -14,6 +14,7 @@ export async function uploadVideoInChunks({
   apiBase,
   kind = 'video',
   file,
+  userId = 1,
   title = '',
   description = '',
   chunkSize = DEFAULT_CHUNK_SIZE,
@@ -27,6 +28,7 @@ export async function uploadVideoInChunks({
 
   let normalizedChunkSize = Math.max(1, Number(chunkSize || DEFAULT_CHUNK_SIZE))
   let totalChunks = Math.max(1, Math.ceil(Number(file.size || 0) / normalizedChunkSize))
+  const normalizedUserId = Math.max(1, Math.floor(Number(userId || 1)))
   const key = buildUploadSessionKey(file)
   const isArchive = kind === 'archive'
   let uploadID = storage?.getItem(key) || ''
@@ -50,6 +52,7 @@ export async function uploadVideoInChunks({
         content_type: file.type || '',
         title: String(title || '').trim(),
         description: String(description || ''),
+        user_id: normalizedUserId,
         file_size: Number(file.size || 0),
         chunk_size: normalizedChunkSize,
         total_chunks: totalChunks,

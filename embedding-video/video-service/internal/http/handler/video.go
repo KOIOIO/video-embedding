@@ -195,12 +195,28 @@ func (h *VideoHandler) GetSegmentReactionCounts(c *gin.Context) {
 // @Summary Random play video segment
 // @Tags videos
 // @Produce json
+// @Param user_id query int false "User ID for two-tower personalized recommendation"
 // @Success 200 {object} dto.RandomVideoSegmentResponse
+// @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/video-segments/random-play [get]
 func (h *VideoHandler) RandomPlayVideoSegment(c *gin.Context) {
 	h.inner.RandomPlayVideoSegment(c)
+}
+
+// ExternalTwoTowerRecommendations godoc
+// @Summary Get two-tower item IDs for Gorse external recommender
+// @Tags internal
+// @Produce json
+// @Param user_id query int true "User ID"
+// @Param n query int false "Number of item IDs, capped at 500"
+// @Success 200 {array} string
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/internal/recommendations/external/two-tower [get]
+func (h *VideoHandler) ExternalTwoTowerRecommendations(c *gin.Context) {
+	h.inner.ExternalTwoTowerRecommendations(c)
 }
 
 // GetTranscodeStatus godoc
