@@ -2,13 +2,18 @@
 
 这个目录存放仓库级文档、架构材料和演示文稿。
 
-当前主要内容：
+## 子目录
 
-- `presentations/`：视频服务架构评审演示文稿及生成脚本。
+- `superpowers/specs/`：设计规范文档
+- `superpowers/plans/`：实施计划文档
 
-服务级文档请优先查看：
+## 服务级文档
+
+各服务的详细文档请查看：
 
 - `../video-service/README.md`
 - `../video-service/docs/`
-- `../two-tower-training/README.md`
+- `../recbole-training/README.md`
+- `../recommendation-console/README.md`
 - `../hls-web/README.md`
+- `../legacy-video/README.md`
