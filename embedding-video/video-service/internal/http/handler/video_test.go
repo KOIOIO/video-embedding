@@ -39,7 +39,7 @@ type stubVideoApp struct {
 	submitSegmentReactionFunc    func(context.Context, uint64, uint64, videoapp.VideoReactionType) (videoapp.VideoReactionResult, bool, error)
 	getSegmentReactionCountsFunc func(context.Context, uint64) (videoapp.VideoReactionCounts, bool, error)
 	randomPlaySegmentFunc        func(context.Context, videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error)
-	externalTwoTowerFunc         func(context.Context, videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
+	externalRecBoleFunc         func(context.Context, videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
 
 	listVideosCalls            int
 	listVideosFilter           videoapp.ListFilter
@@ -64,8 +64,8 @@ type stubVideoApp struct {
 	getSegmentReactionCountsID uint64
 	randomPlaySegmentCalls     int
 	randomPlaySegmentInput     videoapp.RandomPlayVideoSegmentInput
-	externalTwoTowerCalls      int
-	externalTwoTowerInput      videoapp.RandomPlayVideoSegmentInput
+	externalRecBoleCalls      int
+	externalRecBoleInput      videoapp.RandomPlayVideoSegmentInput
 }
 
 func (s *stubVideoApp) ListVideos(ctx context.Context, filter videoapp.ListFilter) ([]domainvideo.Video, error) {
@@ -211,11 +211,11 @@ func (s *stubVideoApp) RandomPlayVideoSegment(ctx context.Context, input videoap
 	return videoapp.RecommendResultItem{}, false, nil
 }
 
-func (s *stubVideoApp) ExternalTwoTowerItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error) {
-	s.externalTwoTowerCalls++
-	s.externalTwoTowerInput = input
-	if s.externalTwoTowerFunc != nil {
-		return s.externalTwoTowerFunc(ctx, input)
+func (s *stubVideoApp) ExternalRecBoleItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error) {
+	s.externalRecBoleCalls++
+	s.externalRecBoleInput = input
+	if s.externalRecBoleFunc != nil {
+		return s.externalRecBoleFunc(ctx, input)
 	}
 	return nil, nil
 }
@@ -908,11 +908,13 @@ func TestRandomPlayVideoSegment_ReturnsPlayableSegment(t *testing.T) {
 				t.Fatalf("expected user_id 7 to be passed, got %d", input.UserID)
 			}
 			return videoapp.RecommendResultItem{
-				VideoID:        11,
-				VideoSegmentID: 101,
-				StartTimeSec:   10,
-				EndTimeSec:     40,
-				TitleOverride:  "segment title",
+				VideoID:          11,
+				VideoSegmentID:   101,
+				UserReacted:      true,
+				UserReactionType: videoapp.VideoReactionDoubleLike,
+				StartTimeSec:     10,
+				EndTimeSec:       40,
+				TitleOverride:    "segment title",
 				Video: domainvideo.Video{
 					ID:          11,
 					Title:       "video title",
@@ -955,11 +957,13 @@ func TestRandomPlayVideoSegment_ReturnsPlayableSegment(t *testing.T) {
 	assertBodyContains(t, w.Body.Bytes(), `"title":"segment title"`)
 	assertBodyContains(t, w.Body.Bytes(), `"cover_url":"/covers/11.jpg"`)
 	assertBodyContains(t, w.Body.Bytes(), `"play_url":"/videos/hls/2026/06/09/playable/master.m3u8"`)
+	assertBodyContains(t, w.Body.Bytes(), `"user_reacted":true`)
+	assertBodyContains(t, w.Body.Bytes(), `"user_reaction_type":"double_like"`)
 }
 
-func TestExternalTwoTowerRecommendations_ReturnsStringIDs(t *testing.T) {
+func TestExternalRecBoleRecommendations_ReturnsStringIDs(t *testing.T) {
 	stub := &stubVideoApp{
-		externalTwoTowerFunc: func(_ context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error) {
+		externalRecBoleFunc: func(_ context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error) {
 			if input.UserID != 7 || input.Limit != 3 {
 				t.Fatalf("input = %+v, want user 7 limit 3", input)
 			}
@@ -969,17 +973,17 @@ func TestExternalTwoTowerRecommendations_ReturnsStringIDs(t *testing.T) {
 	h := handler.NewVideoHandler(stub)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/internal/recommendations/external/two-tower?user_id=7&n=3", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/internal/recommendations/external/recbole?user_id=7&n=3", nil)
 	router := gin.New()
-	router.GET("/api/internal/recommendations/external/two-tower", h.ExternalTwoTowerRecommendations)
+	router.GET("/api/internal/recommendations/external/recbole", h.ExternalRecBoleRecommendations)
 
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if stub.externalTwoTowerCalls != 1 {
-		t.Fatalf("external calls = %d, want 1", stub.externalTwoTowerCalls)
+	if stub.externalRecBoleCalls != 1 {
+		t.Fatalf("external calls = %d, want 1", stub.externalRecBoleCalls)
 	}
 	var ids []string
 	if err := json.Unmarshal(w.Body.Bytes(), &ids); err != nil {
@@ -991,22 +995,22 @@ func TestExternalTwoTowerRecommendations_ReturnsStringIDs(t *testing.T) {
 	}
 }
 
-func TestExternalTwoTowerRecommendations_ReturnsEmptyForMissingUserID(t *testing.T) {
+func TestExternalRecBoleRecommendations_ReturnsEmptyForMissingUserID(t *testing.T) {
 	stub := &stubVideoApp{}
 	h := handler.NewVideoHandler(stub)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/internal/recommendations/external/two-tower", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/internal/recommendations/external/recbole", nil)
 	router := gin.New()
-	router.GET("/api/internal/recommendations/external/two-tower", h.ExternalTwoTowerRecommendations)
+	router.GET("/api/internal/recommendations/external/recbole", h.ExternalRecBoleRecommendations)
 
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if stub.externalTwoTowerCalls != 0 {
-		t.Fatalf("external calls = %d, want 0", stub.externalTwoTowerCalls)
+	if stub.externalRecBoleCalls != 0 {
+		t.Fatalf("external calls = %d, want 0", stub.externalRecBoleCalls)
 	}
 	assertBodyContains(t, w.Body.Bytes(), `[]`)
 }

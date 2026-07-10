@@ -94,8 +94,6 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	worker.CoverURLPrefix = config.CoverURLPrefix(cfg)
 	reactionWorker := videoapp.NewVideoReactionWorker(reactionQueue, repo)
 	segmentReactionWorker := videoapp.NewSegmentReactionWorker(segmentReactionQueue, repo)
-	reactionWorker.ProfileUpdater = repo
-	segmentReactionWorker.ProfileUpdater = repo
 
 	zap.L().Info("transcode_worker_start",
 		zap.String("queue_key", queueKey),

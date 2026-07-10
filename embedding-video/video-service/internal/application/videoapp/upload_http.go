@@ -108,10 +108,6 @@ func rollbackObject(ctx context.Context, store ObjectStore, objectKey string) {
 	uploadapp.RollbackObject(ctx, objectStoreAdapter{store: store}, objectKey)
 }
 
-func contentTypeFromExtension(ext string) string {
-	return uploadapp.ContentTypeFromExtension(ext)
-}
-
 func newUploadService(s *Service) uploadapp.Service {
 	return uploadapp.Service{
 		Repo:            uploadRepositoryAdapter{repo: s.Repo, owner: s},
@@ -235,25 +231,5 @@ func mapUploadResultFromApp(result uploadapp.Result) UploadResult {
 		RawURL:  result.RawURL,
 		HLSURL:  result.HLSURL,
 		Name:    result.Name,
-	}
-}
-
-func mapArchiveResultFromApp(result uploadapp.ArchiveResult) ArchiveUploadResult {
-	uploaded := make([]UploadResult, 0, len(result.Uploaded))
-	for _, item := range result.Uploaded {
-		uploaded = append(uploaded, mapUploadResultFromApp(item))
-	}
-	failed := make([]ArchiveUploadFailure, 0, len(result.Failed))
-	for _, item := range result.Failed {
-		failed = append(failed, ArchiveUploadFailure{
-			FileName: item.FileName,
-			Error:    item.Error,
-		})
-	}
-	return ArchiveUploadResult{
-		Total:    result.Total,
-		Uploaded: uploaded,
-		Failed:   failed,
-		Skipped:  result.Skipped,
 	}
 }

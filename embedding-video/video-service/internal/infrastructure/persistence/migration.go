@@ -20,10 +20,10 @@ func EnsureSchema(db *gorm.DB) error {
 		if err := tx.Exec("CREATE EXTENSION IF NOT EXISTS vector;").Error; err != nil {
 			return err
 		}
-		if err := tx.AutoMigrate(&model.SysUser{}, &model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduVideoItemEmbedding{}, &model.EduUserTowerEmbedding{}, &model.EduRecommendModelVersion{}); err != nil {
+		if err := EnsureRecSysSchema(tx); err != nil {
 			return err
 		}
-		if err := seedSysUser(tx); err != nil {
+		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}); err != nil {
 			return err
 		}
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
@@ -70,18 +70,4 @@ func runWithMigrationAdvisoryLock(lock func() error, unlock func() error, migrat
 	migrateErr := migrate()
 	unlockErr := unlock()
 	return errors.Join(migrateErr, unlockErr)
-}
-
-func seedSysUser(db *gorm.DB) error {
-	var count int64
-	if err := db.Model(&model.SysUser{}).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	return db.Create(&model.SysUser{
-		ID:       1,
-		UserType: 3,
-	}).Error
 }

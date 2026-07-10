@@ -78,16 +78,16 @@ func TestRecommendationRuntimeFromConfigCreatesGorseClientWhenExplicitlyEnabled(
 	}
 }
 
-func TestRecommendationRuntimeFromConfigLeavesClientNilForTwoTowerEngine(t *testing.T) {
+func TestRecommendationRuntimeFromConfigLeavesClientNilForRecBoleEngine(t *testing.T) {
 	client, engine, options := recommendationRuntimeFromConfig(config.Config{
-		Recommendation: config.RecommendationConfig{Engine: "two_tower"},
+		Recommendation: config.RecommendationConfig{Engine: "recbole"},
 	})
 
 	if client != nil {
 		t.Fatalf("client = %T, want nil", client)
 	}
-	if engine != recommendationapp.EngineTwoTower {
-		t.Fatalf("engine = %q, want two_tower", engine)
+	if engine != recommendationapp.EngineRecBole {
+		t.Fatalf("engine = %q, want recbole", engine)
 	}
 	if options.CandidateLimit == 0 {
 		t.Fatal("expected default options to be populated")

@@ -1,4 +1,4 @@
-package twotowertrainer
+package recboletrainer
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const twoTowerTrainerEnabledEnv = "TWO_TOWER_TRAINER_ENABLED"
+const recBoleTrainerEnabledEnv = "RECBOLE_TRAINER_ENABLED"
 
 type DailyTime struct {
 	Hour   int
@@ -39,7 +39,7 @@ type Scheduler struct {
 
 func Register(app *lifecycle.App, cfg config.Config) {
 	if !EnabledFromEnv() {
-		zap.L().Info("two_tower_trainer_disabled", zap.String("env", twoTowerTrainerEnabledEnv))
+		zap.L().Info("recbole_trainer_disabled", zap.String("env", recBoleTrainerEnabledEnv))
 		return
 	}
 	RegisterScheduler(app, cfg)
@@ -48,17 +48,17 @@ func Register(app *lifecycle.App, cfg config.Config) {
 func RegisterScheduler(app *lifecycle.App, cfg config.Config) {
 	serviceRoot, err := os.Getwd()
 	if err != nil {
-		zap.L().Error("two_tower_trainer_workdir_failed", zap.Error(err))
+		zap.L().Error("recbole_trainer_workdir_failed", zap.Error(err))
 		return
 	}
 	repoRoot := filepath.Dir(serviceRoot)
-	trainingDir := filepath.Join(repoRoot, "two-tower-training")
+	trainingDir := filepath.Join(repoRoot, "recbole-training")
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		loc = time.FixedZone("Asia/Shanghai", 8*60*60)
 	}
 	scheduler := &Scheduler{
-		ScriptPath: filepath.Join(trainingDir, "scripts", "run_two_tower_pipeline.sh"),
+		ScriptPath: filepath.Join(trainingDir, "scripts", "run_recbole_pipeline.sh"),
 		WorkDir:    trainingDir,
 		ConfigFile: selectedConfigFile(),
 		Location:   loc,
@@ -70,7 +70,7 @@ func RegisterScheduler(app *lifecycle.App, cfg config.Config) {
 }
 
 func EnabledFromEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(twoTowerTrainerEnabledEnv))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(recBoleTrainerEnabledEnv))) {
 	case "1", "true", "yes", "on":
 		return true
 	default:
@@ -98,7 +98,7 @@ func defaultSchedule() []DailyTime {
 
 func (s *Scheduler) Run(ctx context.Context) error {
 	if s == nil {
-		return errors.New("two tower trainer scheduler is nil")
+		return errors.New("RecBole trainer scheduler is nil")
 	}
 	if s.Now == nil {
 		s.Now = time.Now
@@ -107,12 +107,12 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		s.Location = time.Local
 	}
 	if len(s.Schedule) == 0 {
-		return errors.New("two tower trainer schedule is empty")
+		return errors.New("RecBole trainer schedule is empty")
 	}
 	for {
 		now := s.Now().In(s.Location)
 		next := nextRunAt(now, s.Schedule)
-		zap.L().Info("two_tower_trainer_next_run", zap.Time("next_run_at", next), zap.String("config", s.ConfigFile))
+		zap.L().Info("recbole_trainer_next_run", zap.Time("next_run_at", next), zap.String("config", s.ConfigFile))
 		timer := time.NewTimer(time.Until(next))
 		select {
 		case <-ctx.Done():
@@ -121,14 +121,14 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-timer.C:
 		}
 		if err := s.runOnce(ctx); err != nil {
-			zap.L().Error("two_tower_trainer_run_failed", zap.Error(err))
+			zap.L().Error("recbole_trainer_run_failed", zap.Error(err))
 		}
 	}
 }
 
 func (s *Scheduler) runOnce(ctx context.Context) error {
 	if !s.tryStart() {
-		zap.L().Warn("two_tower_trainer_skip_overlapping_run")
+		zap.L().Warn("recbole_trainer_skip_overlapping_run")
 		return nil
 	}
 	defer s.finish()
@@ -145,7 +145,7 @@ func (s *Scheduler) runOnce(ctx context.Context) error {
 	cmd.Env = append(os.Environ(), "CONFIG_FILE="+s.ConfigFile)
 	output, err := cmd.CombinedOutput()
 	if len(output) > 0 {
-		zap.L().Info("two_tower_trainer_output", zap.ByteString("output", output))
+		zap.L().Info("recbole_trainer_output", zap.ByteString("output", output))
 	}
 	if err != nil {
 		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
@@ -153,7 +153,7 @@ func (s *Scheduler) runOnce(ctx context.Context) error {
 		}
 		return err
 	}
-	zap.L().Info("two_tower_trainer_run_succeeded")
+	zap.L().Info("recbole_trainer_run_succeeded")
 	return nil
 }
 

@@ -119,21 +119,21 @@ type ProfileRerankCandidate struct {
 	UserWatched       bool
 }
 
-type UserTowerEmbedding struct {
+type UserRecBoleEmbedding struct {
 	UserID       uint64
 	Vector       []float32
 	ModelVersion string
 	Status       int16
 }
 
-type TwoTowerQuery struct {
+type RecBoleQuery struct {
 	UserID       uint64
 	UserVector   pgvector.Vector
 	ModelVersion string
 	Limit        int
 }
 
-type TwoTowerCandidate struct {
+type RecBoleCandidate struct {
 	RecommendCandidate
 }
 
@@ -153,16 +153,20 @@ type WeakKnowledgeVectorQuery struct {
 
 // RecommendResultItem 表示推荐接口对外返回的单条结果。
 type RecommendResultItem struct {
-	QuestionID     uint64
-	VideoID        uint64
-	VideoSegmentID uint64
-	RecommendScore float64
-	IsWatched      bool
-	WatchDuration  int
-	StartTimeSec   int
-	EndTimeSec     int
-	Video          domainvideo.Video
-	TitleOverride  string
+	QuestionID            uint64
+	VideoID               uint64
+	VideoSegmentID        uint64
+	UserReacted           bool
+	UserReactionType      VideoReactionType
+	RecommendScore        float64
+	RecommendStrategy     string
+	RecommendModelVersion string
+	IsWatched             bool
+	WatchDuration         int
+	StartTimeSec          int
+	EndTimeSec            int
+	Video                 domainvideo.Video
+	TitleOverride         string
 }
 
 // RecommendationRecord 表示已保存的推荐记录及其展示信息。
@@ -189,7 +193,7 @@ type RecommendationRecord struct {
 const (
 	RecommendStrategyQuestionVector = "question_vector"
 	RecommendStrategyProfileRerank  = "profile_rerank"
-	RecommendStrategyTwoTower       = "two_tower"
+	RecommendStrategyRecBole        = "recbole"
 	RecommendStrategyGorse          = "gorse"
 	RecommendStrategyKnowledgeMatch = "knowledge_match"
 	RecommendStrategyRandomPlay     = "random_play"

@@ -74,6 +74,24 @@ func (b *VideoReactionBuffer) HasUserReaction(ctx context.Context, videoID uint6
 	return exists > 0, nil
 }
 
+func (b *VideoReactionBuffer) GetUserReaction(ctx context.Context, videoID uint64, userID uint64) (videoapp.VideoReactionType, bool, bool, error) {
+	value, err := b.rdb.Get(ctx, b.userKey(videoID, userID)).Result()
+	if err == goredis.Nil {
+		return "", false, false, nil
+	}
+	if err != nil {
+		return "", false, false, err
+	}
+	if value == "" || value == noReactionValue {
+		return "", false, true, nil
+	}
+	reactionType := videoapp.VideoReactionType(value)
+	if !reactionType.IsValid() {
+		return "", false, true, fmt.Errorf("invalid cached reaction type: %s", value)
+	}
+	return reactionType, true, true, nil
+}
+
 func (b *VideoReactionBuffer) Submit(ctx context.Context, videoID uint64, userID uint64, reactionType videoapp.VideoReactionType, seed videoapp.VideoReactionCounts, seedUserReaction videoapp.VideoReactionType, seedUserActive bool) (videoapp.VideoReactionResult, error) {
 	if err := b.ensureGroup(ctx); err != nil {
 		return videoapp.VideoReactionResult{}, err
@@ -489,7 +507,11 @@ end
 local active = 1
 if oldType == newType then
   active = 0
-  redis.call('DEL', userKey)
+  if ttlSeconds > 0 then
+    redis.call('SET', userKey, '` + noReactionValue + `', 'EX', ttlSeconds)
+  else
+    redis.call('SET', userKey, '` + noReactionValue + `')
+  end
   redis.call('HINCRBY', countsKey, oldType, -1)
 else
   if oldType ~= '` + noReactionValue + `' then

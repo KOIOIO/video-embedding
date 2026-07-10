@@ -73,11 +73,11 @@ func BuildQuestionRankedItems(candidates []Candidate, limit int) []ResultItem {
 	return items
 }
 
-func BuildTwoTowerRankedItems(candidates []TwoTowerCandidate, limit int) []ResultItem {
+func BuildRecBoleRankedItems(candidates []RecBoleCandidate, limit int) []ResultItem {
 	if limit <= 0 {
 		limit = len(candidates)
 	}
-	sorted := append([]TwoTowerCandidate(nil), candidates...)
+	sorted := append([]RecBoleCandidate(nil), candidates...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].Distance < sorted[j].Distance
 	})

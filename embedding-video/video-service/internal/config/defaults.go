@@ -39,12 +39,14 @@ const (
 	defaultTranscodeStatusPrefix       = "video:transcode:status:"
 	defaultRuntimeActiveCounterPrefix  = "video:runtime:active:"
 	defaultRandomPlayRecentPrefix      = "video:random_play:recent:"
+	defaultRandomPlayBucketPrefix      = "video:random_play:bucket:"
 	defaultEmbeddingDim                = 1536
 	defaultAIProvider                  = "legacy"
 	defaultDashscopeCompatBaseURL      = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	defaultDashscopeWSURL              = "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
 	defaultRecommendationEngine        = "knowledge_match"
 	defaultRandomPlayDedupeWindowSec   = 1800
+	defaultRandomPlayRecentMaxSize     = 200
 	defaultGorseEndpoint               = "http://localhost:8087"
 	defaultGorseTimeoutSeconds         = 2
 	defaultGorseCandidateLimit         = 100
@@ -104,15 +106,15 @@ func CORSMaxAge(cfg Config) string {
 }
 
 func RawPath(cfg Config) string {
-	return firstConfigValue(cfg.Video.RawPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "raw"))
+	return firstConfigValue(cfg.Video.RawPath, filepath.Join(os.TempDir(), "embedding-video", "tmp", "raw"))
 }
 
 func HLSPath(cfg Config) string {
-	return firstConfigValue(cfg.Video.HlsPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "hls"))
+	return firstConfigValue(cfg.Video.HlsPath, filepath.Join(os.TempDir(), "embedding-video", "tmp", "hls"))
 }
 
 func VectorTempPath(cfg Config) string {
-	return firstConfigValue(cfg.Storage.VectorTempPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "video_vectorize"))
+	return firstConfigValue(cfg.Storage.VectorTempPath, filepath.Join(os.TempDir(), "embedding-video", "tmp", "video_vectorize"))
 }
 
 func RawObjectPrefix(cfg Config) string {
@@ -203,6 +205,10 @@ func RandomPlayRecentPrefix(cfg Config) string {
 	return firstConfigValue(cfg.RedisKeys.RandomPlayRecent, defaultRandomPlayRecentPrefix)
 }
 
+func RandomPlayBucketPrefix(cfg Config) string {
+	return firstConfigValue(cfg.RedisKeys.RandomPlayBucket, defaultRandomPlayBucketPrefix)
+}
+
 func EmbeddingDim(cfg Config) int {
 	if cfg.AI.EmbeddingDim > 0 {
 		return cfg.AI.EmbeddingDim
@@ -232,6 +238,13 @@ func RandomPlayDedupeWindow(cfg Config) time.Duration {
 		seconds = defaultRandomPlayDedupeWindowSec
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func RandomPlayRecentMaxSize(cfg Config) int {
+	if cfg.Recommendation.RandomPlayRecentMaxSize > 0 {
+		return cfg.Recommendation.RandomPlayRecentMaxSize
+	}
+	return defaultRandomPlayRecentMaxSize
 }
 
 func GorseEndpoint(cfg Config) string {

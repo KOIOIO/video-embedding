@@ -1,4 +1,4 @@
-# 视频向量化 HTTP 视频服务
+# 衡桃学堂 HTTP 视频服务
 
 ## 项目简介
 
@@ -10,8 +10,8 @@
 - HLS 转码与封面处理
 - 视频列表、播放、删除、发布、推荐状态维护
 - 基于题目的视频片段推荐
-- 基于双塔 embedding 的个性化视频片段推荐
-- 推荐曝光、观看、reaction 行为记录与离线训练样本导出
+- 基于 RecBole embedding 的个性化视频片段推荐
+- 推荐曝光、观看、reaction 行为记录与 RecBole 离线训练数据导出
 - 观看记录上报
 - 题库查询
 - 对象存储中的视频资源代理访问
@@ -26,7 +26,7 @@ video-service/
 ├── cmd/
 │   ├── dlqctl/                  # Redis Stream 死信队列查看与重放工具
 │   ├── httpapi/                 # HTTP 服务入口
-│   ├── twotowertrainer/         # 双塔训练调度入口
+│   ├── recboletrainer/          # RecBole 训练调度入口
 │   └── worker/                  # 统一 worker 入口
 ├── configs/                     # HTTP 服务配置
 ├── docs/                        # 设计文档与 Swagger
@@ -43,7 +43,7 @@ video-service/
 ├── logs/                        # 日志目录
 ├── middleware/
 ├── storage/                     # 本地存储目录（gitignored）
-└── tools/                       # 压测、迁移、双塔样本导出/导入等辅助工具
+└── tools/                       # 压测、迁移、RecBole 数据导出/导入等辅助工具
 ```
 
 ## 系统组成
@@ -81,10 +81,10 @@ flowchart TD
         AI[ASR / Embedding / LLM]
     end
 
-    subgraph Training[离线双塔训练层]
-        Trainer[cmd/twotowertrainer\n独立 two_tower_trainer 容器]
-        Pipeline[run_two_tower_pipeline.sh\n导出样本+item/user catalog -> 训练评估 -> gate -> 通过后导入发布]
-        PyTrain[Python train.py\n生成 user/item embedding]
+    subgraph Training[离线 RecBole 训练层]
+        Trainer[cmd/recboletrainer\n独立 recbole_trainer 容器]
+        Pipeline[run_recbole_pipeline.sh\n导出 atomic data -> RecBole 训练评估 -> gate -> 导入 recsys 并发布]
+        PyTrain[recbole_recommendation.train\n生成 user/item embedding]
         Artifact["artifacts/$MODEL_VERSION"]
     end
 
@@ -137,9 +137,9 @@ flowchart TD
 - `cmd/httpapi` 提供统一 HTTP 接口，Java 直接调用这一层。
 - `cmd/worker` 是当前默认的 worker 启动入口，用于消费转码和向量化任务队列。
 - 视频文件与 HLS 产物存放在对象存储中，通过 `Storage.MediaRoutePrefix` 配置的路由代理访问，默认兼容 `/videos/*filepath`。
-- `/api/video-segments/random-play` 是当前双塔推荐的主要展现入口；带 `user_id` 时优先使用 active 双塔 embedding 做个性化召回，缺少模型或用户向量时回退到可用片段。
-- `/api/recommendations/by-question` 面向题目文本匹配，主要基于题目文本向量与视频片段向量做召回，不依赖双塔用户向量。
-- `two_tower_trainer` 是独立训练调度进程，线上主服务容器默认不执行 Python 训练。
+- `/api/video-segments/random-play` 是当前个性化推荐的主要展现入口；配置 `Recommendation.Engine=gorse` 时优先使用 Gorse，Gorse 可配置 `external/recbole` 作为补候选来源，Go 服务负责 Redis random-play bucket、可播放过滤、曝光记录和最终兜底。
+- `/api/recommendations/by-question` 面向题目文本匹配，主要基于题目文本向量与视频片段向量做召回，不依赖 RecBole 用户向量。
+- `recbole_trainer` 是独立训练调度进程，线上主服务容器默认不执行 Python 训练。
 - 推荐链路在外部 AI provider 不可用时会自动进入降级模式，优先返回可用结果而不是直接报错。
 - `vector_worker` 在 AI provider 短时不可用时优先走重试与退避，不把所有上游失败立即视为终态失败。
 - 转码队列和向量化队列基于 Redis Streams 消费者组实现，任务处理成功后才 ACK；终态失败会进入对应 `:dlq` 死信流。
@@ -272,15 +272,15 @@ go run ./cmd/worker
 VIDEO_ENV_FILE=.env.local go run ./cmd/worker
 ```
 
-### 启动双塔训练调度
+### 启动 RecBole 训练调度
 
-本地如需验证双塔定时训练入口，可以单独启动：
+本地如需验证 RecBole 定时训练入口，可以单独启动：
 
 ```bash
-CONFIG_FILE=configs/video.yml go run ./cmd/twotowertrainer
+CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 ```
 
-该入口只负责训练调度，不启动 HTTP 服务、转码 worker 或向量化 worker。训练调度会按北京时间 `00:00`、`04:00`、`08:00`、`12:00`、`16:00`、`20:00` 触发 `../two-tower-training/scripts/run_two_tower_pipeline.sh`。
+该入口只负责训练调度，不启动 HTTP 服务、转码 worker 或向量化 worker。训练调度会触发 `../recbole-training/scripts/run_recbole_pipeline.sh`。
 
 ## Java 调用方式
 
@@ -336,7 +336,7 @@ CONFIG_FILE=configs/video.yml go run ./cmd/twotowertrainer
 | `GET` | `/api/videos/:id/view-count` | 获取观看次数 |
 | `POST` | `/api/videos/:id/reactions` | 提交视频反馈 |
 | `GET` | `/api/videos/:id/reaction-counts` | 获取视频反馈计数 |
-| `GET` | `/api/video-segments/random-play` | 刷新播放片段；带 `user_id` 时优先双塔个性化召回，否则随机兜底 |
+| `GET` | `/api/video-segments/random-play` | 刷新播放片段；带 `user_id` 时优先走 Gorse 主推荐，Gorse 可调用 RecBole external fallback，最终不足时随机兜底 |
 | `POST` | `/api/video-segments/:id/reactions` | 提交视频片段反馈 |
 | `GET` | `/api/video-segments/:id/reaction-counts` | 获取视频片段反馈计数 |
 | `POST` | `/api/videos/:id/publish` | 设置发布状态 |
@@ -559,7 +559,7 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 - S3 兼容对象存储
 - FFmpeg / ffprobe，或 Docker 可用的 FFmpeg 镜像
 - ASR / Embedding / LLM 对应的外部 AI 服务
-- 双塔训练容器需要 Python 3；线上 HTTP/worker 主服务不要求宿主机安装 Python
+- RecBole 训练容器需要 Python 3、RecBole 和 PyTorch；线上 HTTP/worker 主服务不要求宿主机安装 Python
 
 推荐链路已经具备本地 fallback embedding 兜底，因此外部 embedding 服务短时异常时，推荐接口仍可能返回降级结果。向量化链路仍然依赖外部 ASR / Embedding / LLM，但 worker 已增加更细粒度的 AI 错误重试与退避逻辑。
 
@@ -594,7 +594,7 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 | `CONFIG_FILE` | 指定配置文件路径，优先级高于 `VIDEO_CONFIG_FILE` |
 | `VIDEO_CONFIG_FILE` | 指定配置文件路径 |
 | `HTTP_ADDR` | 覆盖 HTTP 服务监听地址，例如 `0.0.0.0:8083` |
-| `TWO_TOWER_TRAINER_ENABLED` | 是否在 `cmd/worker` 中注册双塔训练调度；主服务容器默认 `false`，独立训练容器为 `true` |
+| `RECBOLE_TRAINER_ENABLED` | 是否在 `cmd/worker` 中注册 RecBole 训练调度；主服务容器默认 `false`，独立训练容器为 `true` |
 | `POSTGRES_DSN` | PostgreSQL DSN，覆盖 `Postgres.DSN` |
 | `REDIS_PASSWORD` | Redis 密码，覆盖 `Redis.Password` |
 | `COS_SECRET_ID` | 腾讯云 COS SecretId，覆盖 `RustFS.AccessKey` |
@@ -615,16 +615,14 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 | `UPLOAD_BENCH_BASE_URL` | `tools/upload_bench` 压测工具的目标服务地址 |
 | `SOURCE_DSN` | 数据迁移工具源库 DSN |
 | `TARGET_DSN` | 数据迁移工具目标库 DSN |
-| `MODEL_VERSION` | 双塔训练流水线本次模型版本，默认按时间生成 |
-| `SAMPLE_LIMIT`、`SEED_COUNT` | 双塔样本导出数量和本地造数数量 |
-| `BACKEND`、`EPOCHS`、`DIM`、`BATCH_SIZE` | 双塔训练后端、训练轮数、embedding 维度和 batch 大小 |
-| `RANDOM_NEGATIVES`、`HARD_NEGATIVES` | 双塔训练随机负采样和 batch 内 hard negative 数量 |
-| `PUBLISH_GATE_ENABLED` | 是否启用双塔发布门禁，默认 `true` |
-| `MIN_EVAL_AUC`、`MIN_RECALL_AT_20`、`MIN_COVERAGE_AT_20` | 双塔发布门禁的最低离线指标 |
-| `MAX_NEGATIVE_HIT_RATE_AT_20` | 双塔发布门禁的负样本命中率上限 |
-| `MAX_AUC_DROP`、`MAX_RECALL_DROP`、`MAX_COVERAGE_DROP` | 新模型相对上一版 active 指标允许下降的最大幅度 |
-| `MAX_NEGATIVE_HIT_RATE_INCREASE`、`MAX_DISLIKE_HIT_RATE_INCREASE` | 新模型相对上一版 active 负反馈指标允许上升的最大幅度 |
-| `ARTIFACT_RETENTION_DAYS` | 双塔训练产物保留天数，默认 `7` |
+| `MODEL_VERSION` | RecBole 训练流水线本次模型版本，默认按时间生成 |
+| `RECBOLE_MODEL` | RecBole 模型名，默认 `BPR` |
+| `SAMPLE_LIMIT`、`DAYS_BACK` | RecBole atomic 交互数据导出数量和回看窗口 |
+| `EPOCHS`、`DIM` | RecBole 训练轮数和 embedding 维度 |
+| `PUBLISH_GATE_ENABLED` | 是否启用 RecBole 发布门禁，默认 `true` |
+| `MIN_RECALL_AT_20`、`MIN_NDCG_AT_20` | RecBole 发布门禁的最低离线指标 |
+| `MAX_RELATIVE_NDCG_DROP` | 新模型相对上一版 active `NDCG@20` 允许下降的最大幅度 |
+| `ARTIFACT_RETENTION_DAYS` | RecBole 训练产物保留天数，默认 `7` |
 
 生产环境建议把敏感值放到环境变量或密钥管理系统中，不要把真实 API Key、数据库密码、对象存储密钥提交到仓库。
 
@@ -765,24 +763,24 @@ docker exec -it embedding-video /tmp/dlqctl replay --queue vector-refine --id <d
 
 线上重放前要先确认失败原因已经解除，例如 DashScope 付费/额度问题已经处理，否则任务会再次进入 DLQ。
 
-### 手动跑双塔训练流水线
+### 手动跑 RecBole 训练流水线
 
 ```bash
-cd ../two-tower-training
-CONFIG_FILE=../video-service/configs/video.yml ./scripts/run_two_tower_pipeline.sh
+cd ../recbole-training
+CONFIG_FILE=../video-service/configs/video.yml ./scripts/run_recbole_pipeline.sh
 ```
 
 流水线执行顺序：
 
 ```text
-导出训练样本、全量 item catalog 和用户学习画像
--> Python 训练和时间切分离线评估
--> 导出上一版 active model metrics
+导出 RecBole atomic data、全量 item catalog 和用户学习画像
+-> RecBole 训练和离线评估
+-> 导出上一版 active recsys model metrics
 -> publish gate 阈值检查和上一版对比
--> gate 通过后导入 item/user embedding 并发布 active model_version
+-> gate 通过后导入 recsys item/user embedding 并发布 active model_version
 ```
 
-如果 publish gate 不通过，脚本会停在导入发布前，保留 `../two-tower-training/artifacts/${MODEL_VERSION}` 便于排查，线上继续使用上一版 active 模型。
+如果 publish gate 不通过，脚本会停在导入发布前，保留 `../recbole-training/artifacts/${MODEL_VERSION}` 便于排查，线上继续使用上一版 active 模型。
 
 ### 访问 Swagger
 
@@ -951,29 +949,30 @@ Java 新接入建议统一只用下面这套路径风格：
 
 1. `httpapi` 进程，对外提供 HTTP 接口给 Java 调用。
 2. `worker` 进程，独立消费转码与向量化任务。
-3. `twotowertrainer` 进程，独立执行双塔训练、发布门禁、embedding 导入和模型版本发布。
+3. `recboletrainer` 进程，独立执行 RecBole 训练、发布门禁、embedding 导入和模型版本发布。
 
 这样可以隔离 HTTP 请求与耗时任务，隔离在线推荐与离线训练，并便于独立扩缩容。
 
-根目录 `docker-compose.yml` 当前提供一个便捷部署形态：`backend_http` 同一容器中后台启动 worker，再以前台进程启动 HTTP API；`two_tower_trainer` 使用独立 profile；`frontend_web` 是 `hls-web` 调试前端。
+根目录 `docker-compose.yml` 当前提供一个便捷部署形态：`backend_http` 同一容器中后台启动 worker，再以前台进程启动 HTTP API；`recbole_trainer` 使用独立 profile；`frontend_web` 是 `hls-web` 调试前端。
 
 ## 适合优先查看的文件
 
 - `cmd/httpapi/main.go`
 - `cmd/worker/main.go`
-- `cmd/twotowertrainer/main.go`
+- `cmd/recboletrainer/main.go`
 - `internal/http/router/router.go`
 - `internal/http/handler/`
 - `internal/http/app/app.go`
 - `internal/application/videoapp/`
 - `docs/swagger/swagger.yaml`
 - `tools/migrate_rustfs_bucket/main.go`
-- `tools/export_two_tower_samples/main.go`
-- `tools/export_active_recommend_model_metrics/main.go`
-- `tools/import_two_tower_embeddings/main.go`
+- `tools/export_recbole_dataset/main.go`
+- `tools/export_active_recsys_model_metrics/main.go`
+- `tools/import_recsys_embeddings/main.go`
+- `tools/drop_legacy_recommendation_tables/main.go`
 
-双塔训练代码与算法协议请看：
+RecBole 训练代码与算法协议请看：
 
-- `../two-tower-training/README.md`
-- `../two-tower-training/ALGORITHM_HANDOFF.md`
-- `../two-tower-training/scripts/run_two_tower_pipeline.sh`
+- `../recbole-training/README.md`
+- `../recbole-training/ALGORITHM_HANDOFF.md`
+- `../recbole-training/scripts/run_recbole_pipeline.sh`

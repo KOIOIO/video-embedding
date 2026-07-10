@@ -3,7 +3,6 @@ package videoapp
 import (
 	"context"
 	"strings"
-	"time"
 
 	domainvideo "nlp-video-analysis/internal/domain/video"
 )
@@ -79,9 +78,6 @@ func (s *Service) SubmitVideoReaction(ctx context.Context, videoID uint64, userI
 		}
 		counts, _, err := s.Repo.GetVideoReactionCounts(ctx, videoID)
 		if err != nil {
-			return VideoReactionResult{}, true, err
-		}
-		if err := s.rebuildUserVideoProfile(ctx, userID); err != nil {
 			return VideoReactionResult{}, true, err
 		}
 		return VideoReactionResult{Active: active, ReactionType: reactionType, Counts: counts}, true, nil
@@ -170,9 +166,6 @@ func (s *Service) SubmitSegmentReaction(ctx context.Context, segmentID uint64, u
 		if err != nil {
 			return VideoReactionResult{}, true, err
 		}
-		if err := s.rebuildUserVideoProfile(ctx, userID); err != nil {
-			return VideoReactionResult{}, true, err
-		}
 		return VideoReactionResult{Active: active, ReactionType: reactionType, Counts: counts}, true, nil
 	}
 
@@ -208,47 +201,6 @@ func (s *Service) SubmitSegmentReaction(ctx context.Context, segmentID uint64, u
 		return VideoReactionResult{}, false, err
 	}
 	return result, true, nil
-}
-
-func (s *Service) rebuildUserVideoProfile(ctx context.Context, userID uint64) error {
-	if s == nil || userID == 0 {
-		return nil
-	}
-	now := time.Now()
-	if s.Now != nil {
-		now = s.Now()
-	}
-	if s.ProfileUpdater != nil {
-		if err := s.ProfileUpdater.RebuildUserVideoProfile(ctx, userID, "video_profile_v1", now); err != nil {
-			return err
-		}
-	}
-	if updater, ok := s.Repo.(UserTowerEmbeddingUpdater); ok {
-		version, err := activeTwoTowerModelVersion(ctx, s.Repo)
-		if err != nil {
-			return err
-		}
-		if err := updater.RebuildUserTowerEmbedding(ctx, userID, version, now); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func activeTwoTowerModelVersion(ctx context.Context, repo any) (string, error) {
-	versionRepo, ok := repo.(TwoTowerModelVersionRepository)
-	if !ok {
-		return "two_tower_v1", nil
-	}
-	version, found, err := versionRepo.GetActiveTwoTowerModelVersion(ctx)
-	if err != nil {
-		return "", err
-	}
-	version = strings.TrimSpace(version)
-	if !found || version == "" {
-		return "two_tower_v1", nil
-	}
-	return version, nil
 }
 
 // GetSegmentReactionCounts 查询视频片段点赞和双赞数量。

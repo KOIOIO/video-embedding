@@ -1,4 +1,4 @@
-package twotowertrainer
+package recboletrainer
 
 import (
 	"os"
@@ -7,18 +7,18 @@ import (
 )
 
 func TestTrainerEnabledFromEnvDefaultsDisabled(t *testing.T) {
-	previous, hadPrevious := os.LookupEnv(twoTowerTrainerEnabledEnv)
+	previous, hadPrevious := os.LookupEnv(recBoleTrainerEnabledEnv)
 	t.Cleanup(func() {
 		if hadPrevious {
-			_ = os.Setenv(twoTowerTrainerEnabledEnv, previous)
+			_ = os.Setenv(recBoleTrainerEnabledEnv, previous)
 			return
 		}
-		_ = os.Unsetenv(twoTowerTrainerEnabledEnv)
+		_ = os.Unsetenv(recBoleTrainerEnabledEnv)
 	})
-	_ = os.Unsetenv(twoTowerTrainerEnabledEnv)
+	_ = os.Unsetenv(recBoleTrainerEnabledEnv)
 
 	if EnabledFromEnv() {
-		t.Fatalf("EnabledFromEnv() = true, want false when %s is unset", twoTowerTrainerEnabledEnv)
+		t.Fatalf("EnabledFromEnv() = true, want false when %s is unset", recBoleTrainerEnabledEnv)
 	}
 }
 
@@ -26,9 +26,9 @@ func TestTrainerEnabledFromEnvAcceptsTrueValues(t *testing.T) {
 	tests := []string{"1", "true", "TRUE", "yes", "on"}
 	for _, value := range tests {
 		t.Run(value, func(t *testing.T) {
-			t.Setenv(twoTowerTrainerEnabledEnv, value)
+			t.Setenv(recBoleTrainerEnabledEnv, value)
 			if !EnabledFromEnv() {
-				t.Fatalf("EnabledFromEnv() = false, want true for %s=%q", twoTowerTrainerEnabledEnv, value)
+				t.Fatalf("EnabledFromEnv() = false, want true for %s=%q", recBoleTrainerEnabledEnv, value)
 			}
 		})
 	}
@@ -38,9 +38,9 @@ func TestTrainerEnabledFromEnvRejectsFalseValues(t *testing.T) {
 	tests := []string{"0", "false", "FALSE", "no", "off", "unexpected"}
 	for _, value := range tests {
 		t.Run(value, func(t *testing.T) {
-			t.Setenv(twoTowerTrainerEnabledEnv, value)
+			t.Setenv(recBoleTrainerEnabledEnv, value)
 			if EnabledFromEnv() {
-				t.Fatalf("EnabledFromEnv() = true, want false for %s=%q", twoTowerTrainerEnabledEnv, value)
+				t.Fatalf("EnabledFromEnv() = true, want false for %s=%q", recBoleTrainerEnabledEnv, value)
 			}
 		})
 	}

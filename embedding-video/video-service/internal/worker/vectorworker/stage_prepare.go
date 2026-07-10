@@ -45,10 +45,6 @@ type prepareStageHandler struct {
 	coarseSegmentSec int
 }
 
-func newPrepareStageHandler(repo prepareRepository, prober rawVideoProber, coarseQueue stageEnqueuer, coarseSegmentSec int) *prepareStageHandler {
-	return newPrepareStageHandlerWithRefine(repo, prober, coarseQueue, nil, coarseSegmentSec)
-}
-
 func newPrepareStageHandlerWithRefine(repo prepareRepository, prober rawVideoProber, coarseQueue stageEnqueuer, refineQueue stageEnqueuer, coarseSegmentSec int) *prepareStageHandler {
 	if coarseSegmentSec <= 0 {
 		coarseSegmentSec = 60

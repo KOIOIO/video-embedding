@@ -94,6 +94,9 @@ func TestRuntimeConfigDefaultsPreserveExistingValues(t *testing.T) {
 	if got := RandomPlayRecentPrefix(cfg); got != "video:random_play:recent:" {
 		t.Fatalf("RandomPlayRecentPrefix() = %q, want %q", got, "video:random_play:recent:")
 	}
+	if got := RandomPlayBucketPrefix(cfg); got != "video:random_play:bucket:" {
+		t.Fatalf("RandomPlayBucketPrefix() = %q, want %q", got, "video:random_play:bucket:")
+	}
 	if got := EmbeddingDim(cfg); got != 1536 {
 		t.Fatalf("EmbeddingDim() = %d, want %d", got, 1536)
 	}
@@ -105,6 +108,9 @@ func TestRuntimeConfigDefaultsPreserveExistingValues(t *testing.T) {
 	}
 	if got := RandomPlayDedupeWindow(cfg); got != 30*time.Minute {
 		t.Fatalf("RandomPlayDedupeWindow() = %s, want %s", got, 30*time.Minute)
+	}
+	if got := RandomPlayRecentMaxSize(cfg); got != 200 {
+		t.Fatalf("RandomPlayRecentMaxSize() = %d, want 200", got)
 	}
 	if got := GorseEndpoint(cfg); got != "http://localhost:8087" {
 		t.Fatalf("GorseEndpoint() = %q, want %q", got, "http://localhost:8087")
@@ -160,14 +166,16 @@ func TestRuntimeConfigUsesExplicitValues(t *testing.T) {
 			TranscodeStatus:       "custom:status:",
 			RuntimeActiveCounter:  "custom:active:",
 			RandomPlayRecent:      "custom:random:recent:",
+			RandomPlayBucket:      "custom:random:bucket:",
 		},
 		AI: AIConfig{
 			EmbeddingDim: 768,
 			Provider:     "eino",
 		},
 		Recommendation: RecommendationConfig{
-			Engine:                    "two_tower",
+			Engine:                    "recbole",
 			RandomPlayDedupeWindowSec: 600,
+			RandomPlayRecentMaxSize:   25,
 		},
 		Gorse: GorseConfig{
 			Endpoint:          " http://gorse:8087/ ",
@@ -267,17 +275,23 @@ func TestRuntimeConfigUsesExplicitValues(t *testing.T) {
 	if got := RandomPlayRecentPrefix(cfg); got != "custom:random:recent:" {
 		t.Fatalf("RandomPlayRecentPrefix() = %q, want %q", got, "custom:random:recent:")
 	}
+	if got := RandomPlayBucketPrefix(cfg); got != "custom:random:bucket:" {
+		t.Fatalf("RandomPlayBucketPrefix() = %q, want %q", got, "custom:random:bucket:")
+	}
 	if got := EmbeddingDim(cfg); got != 768 {
 		t.Fatalf("EmbeddingDim() = %d, want %d", got, 768)
 	}
 	if got := AIProvider(cfg); got != "eino" {
 		t.Fatalf("AIProvider() = %q, want %q", got, "eino")
 	}
-	if got := RecommendationEngine(cfg); got != "two_tower" {
-		t.Fatalf("RecommendationEngine() = %q, want %q", got, "two_tower")
+	if got := RecommendationEngine(cfg); got != "recbole" {
+		t.Fatalf("RecommendationEngine() = %q, want %q", got, "recbole")
 	}
 	if got := RandomPlayDedupeWindow(cfg); got != 10*time.Minute {
 		t.Fatalf("RandomPlayDedupeWindow() = %s, want %s", got, 10*time.Minute)
+	}
+	if got := RandomPlayRecentMaxSize(cfg); got != 25 {
+		t.Fatalf("RandomPlayRecentMaxSize() = %d, want 25", got)
 	}
 	if got := GorseEndpoint(cfg); got != "http://gorse:8087" {
 		t.Fatalf("GorseEndpoint() = %q, want %q", got, "http://gorse:8087")
@@ -400,7 +414,7 @@ Gorse:
 	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("HSTV_ENV_FILE=.env.local\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("VIDEO_ENV_FILE=.env.local\n"), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env.local"), []byte(`
@@ -412,7 +426,7 @@ GORSE_API_KEY=dotenv-gorse
 		t.Fatalf("write .env.local: %v", err)
 	}
 
-	cleanupEnv := cleanEnv(t, "HSTV_ENV_FILE", "POSTGRES_DSN", "COS_SECRET_ID", "COS_SECRET_KEY", "GORSE_API_KEY")
+	cleanupEnv := cleanEnv(t, "VIDEO_ENV_FILE", "POSTGRES_DSN", "COS_SECRET_ID", "COS_SECRET_KEY", "GORSE_API_KEY")
 	defer cleanupEnv()
 	originalDir, err := os.Getwd()
 	if err != nil {

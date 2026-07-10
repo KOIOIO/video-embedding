@@ -33,11 +33,11 @@ func main() {
 }
 
 func parseOptions(args []string) (options, error) {
-	opts := options{configFile: defaultConfigPath, modelName: "two_tower"}
-	fs := flag.NewFlagSet("export_active_recommend_model_metrics", flag.ContinueOnError)
+	opts := options{configFile: defaultConfigPath, modelName: "recbole"}
+	fs := flag.NewFlagSet("export_active_recsys_model_metrics", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.configFile, "config", opts.configFile, "config file used for PostgreSQL DSN")
-	fs.StringVar(&opts.modelName, "model", opts.modelName, "recommend model name")
+	fs.StringVar(&opts.modelName, "model", opts.modelName, "recommendation model name")
 	fs.StringVar(&opts.outputFile, "output", "", "JSON output path")
 	if err := fs.Parse(args); err != nil {
 		return options{}, err
@@ -82,7 +82,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err := os.WriteFile(opts.outputFile, []byte(metricsJSON+"\n"), 0o644); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "active_metrics_output=%s\n", opts.outputFile)
+	fmt.Fprintf(out, "active_recsys_metrics_output=%s\n", opts.outputFile)
 	return nil
 }
 
@@ -105,7 +105,7 @@ func loadActiveMetricsJSON(ctx context.Context, db *sql.DB, modelName string) (s
 func buildActiveMetricsQuery() string {
 	return `
 SELECT COALESCE(metrics_json::text, '{}')
-FROM public.edu_recommend_model_version
+FROM recsys.recommend_model_version
 WHERE model_name = $1
   AND is_active = TRUE
   AND status = 1

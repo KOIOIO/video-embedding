@@ -136,6 +136,7 @@ type RedisKeysConfig struct {
 	TranscodeStatus       string `yaml:"TranscodeStatus"`
 	RuntimeActiveCounter  string `yaml:"RuntimeActiveCounter"`
 	RandomPlayRecent      string `yaml:"RandomPlayRecent"`
+	RandomPlayBucket      string `yaml:"RandomPlayBucket"`
 }
 
 // PostgresConfig 定义 PostgreSQL 连接信息与连接池参数。
@@ -209,6 +210,7 @@ type WorkerPoolConfig struct {
 type RecommendationConfig struct {
 	Engine                    string `yaml:"Engine"`
 	RandomPlayDedupeWindowSec int    `yaml:"RandomPlayDedupeWindowSec"`
+	RandomPlayRecentMaxSize   int    `yaml:"RandomPlayRecentMaxSize"`
 }
 
 // GorseConfig defines the local Gorse recommendation engine integration.

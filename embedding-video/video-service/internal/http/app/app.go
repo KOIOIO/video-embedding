@@ -128,8 +128,13 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	service.RecommendationEngine = recommendationEngine
 	service.GorseClient = gorseClient
 	service.GorseOptions = gorseOptions
-	service.RecentSegments = infraredis.NewRecentSegmentStore(rdb, config.RandomPlayRecentPrefix(cfg))
+	service.RecentSegments = infraredis.NewRecentSegmentStoreWithOptions(rdb, infraredis.RecentSegmentStoreOptions{
+		Prefix:  config.RandomPlayRecentPrefix(cfg),
+		MaxSize: config.RandomPlayRecentMaxSize(cfg),
+	})
 	service.RecentSegmentTTL = config.RandomPlayDedupeWindow(cfg)
+	service.RecentSegmentMaxSize = config.RandomPlayRecentMaxSize(cfg)
+	service.RandomPlayBucket = infraredis.NewRandomPlayBucketStore(rdb, config.RandomPlayBucketPrefix(cfg))
 	service.ReactionStore = reactionBuffer
 	service.SegmentReactionStore = segmentReactionBuffer
 

@@ -42,7 +42,7 @@ func (p prepareProbe) Probe(_ context.Context, _ string) (int, error) {
 func TestPrepareStageCreatesCoarsePlanAndEnqueuesCoarse(t *testing.T) {
 	repo := &prepareRepo{foundVideo: true}
 	queue := &recordingStageQueue{}
-	handler := newPrepareStageHandler(repo, prepareProbe{duration: 95}, queue, 40)
+	handler := newPrepareStageHandlerWithRefine(repo, prepareProbe{duration: 95}, queue, nil, 40)
 
 	err := handler.Handle(context.Background(), VectorStageTask{
 		TaskID:  "task-1",
