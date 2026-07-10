@@ -76,6 +76,7 @@ RedisKeys:
   TranscodeStatus: "video:transcode:status:"
   RuntimeActiveCounter: "video:runtime:active:"
   RandomPlayRecent: "video:random_play:recent:"
+  RandomPlayBucket: "video:random_play:bucket:"
 
 Postgres:
   DSN: ""
@@ -113,8 +114,8 @@ VectorWorker:
   TailAlignmentMaxOverlapSec: 8 # 适度重叠，承接上一片段末尾内容
   SegmentWindowSec: 30
   SegmentStepSec: 20            # 核心改点：窗口步长 < 窗口大小，产生重叠分析区
-  ASRWorkers: 30
-  CoarseWorkers: 60
+  ASRWorkers: 8
+  CoarseWorkers: 12
   EmbedBatch: 10
   SampleCount: 6
   SampleDurSec: 30
@@ -129,15 +130,16 @@ VectorStageWorkers:
 
 WorkerPools:
   vector.coarse:
-    Size: 60
+    Size: 12
   vector.sample_asr:
-    Size: 30
+    Size: 8
   vector.refine_asr:
-    Size: 30
+    Size: 8
 
 Recommendation:
-  Engine: "gorse" # knowledge_match | gorse | two_tower
+  Engine: "recbole" # knowledge_match | gorse | recbole
   RandomPlayDedupeWindowSec: 1800
+  RandomPlayRecentMaxSize: 200
 
 Gorse:
   Endpoint: "http://localhost:8087"

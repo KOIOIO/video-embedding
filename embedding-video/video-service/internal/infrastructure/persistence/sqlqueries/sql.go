@@ -172,14 +172,15 @@ WHERE user_id = ?
 LIMIT 1;
 `
 
-const GetUserTowerEmbeddingQuery = `
+const GetUserRecBoleEmbeddingQuery = `
 SELECT
   user_id AS user_id,
-  tower_vector::text AS tower_vector,
+  embedding::text AS embedding,
   model_version AS model_version,
   status AS status
-FROM edu_user_tower_embedding
+FROM recsys.recommend_user_embedding
 WHERE user_id = ?
+  AND model_name = ?
   AND model_version = ?
   AND status = 1
   AND deleted = 0
@@ -188,7 +189,7 @@ LIMIT 1;
 
 const GetActiveRecommendModelVersionQuery = `
 SELECT model_version
-FROM edu_recommend_model_version
+FROM recsys.recommend_model_version
 WHERE model_name = ?
   AND is_active = TRUE
   AND status = 1
@@ -197,7 +198,7 @@ ORDER BY published_at DESC, id DESC
 LIMIT 1;
 `
 
-const RecommendByTwoTowerQuery = `
+const RecommendByRecBoleQuery = `
 SELECT
   s.id AS video_segment_id,
   s.video_id AS video_id,
@@ -213,10 +214,11 @@ SELECT
   r.view_count AS view_count,
   r.create_time AS create_time,
   r.update_time AS update_time
-FROM edu_video_item_embedding ie
+FROM recsys.recommend_item_embedding ie
 JOIN edu_video_segment s ON s.id = ie.video_segment_id
 JOIN edu_video_resource r ON r.id = ie.video_id
-WHERE ie.model_version = ?
+WHERE ie.model_name = ?
+  AND ie.model_version = ?
   AND ie.status = 1
   AND ie.deleted = 0
   AND s.deleted = 0
@@ -382,85 +384,6 @@ BEGIN
   END IF;
 END$$;
 `
-
-const CreateVideoItemEmbeddingTableQuery = `
-CREATE TABLE IF NOT EXISTS edu_video_item_embedding (
-  id BIGSERIAL PRIMARY KEY,
-  video_segment_id BIGINT NOT NULL,
-  video_id BIGINT NOT NULL,
-  embedding vector(64) NOT NULL,
-  model_version TEXT NOT NULL,
-  status SMALLINT DEFAULT 1,
-  deleted SMALLINT DEFAULT 0,
-  create_time TIMESTAMP,
-  update_time TIMESTAMP
-);
-`
-
-const CreateUserTowerEmbeddingTableQuery = `
-CREATE TABLE IF NOT EXISTS edu_user_tower_embedding (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL,
-  tower_vector vector(64) NOT NULL,
-  model_version TEXT NOT NULL,
-  status SMALLINT DEFAULT 1,
-  deleted SMALLINT DEFAULT 0,
-  create_time TIMESTAMP,
-  update_time TIMESTAMP
-);
-`
-
-const CreateRecommendModelVersionTableQuery = `
-CREATE TABLE IF NOT EXISTS edu_recommend_model_version (
-  id BIGSERIAL PRIMARY KEY,
-  model_name TEXT NOT NULL,
-  model_version TEXT NOT NULL,
-  artifact_path TEXT,
-  metrics_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  is_active BOOLEAN DEFAULT FALSE,
-  status SMALLINT DEFAULT 1,
-  published_at TIMESTAMP,
-  create_time TIMESTAMP,
-  update_time TIMESTAMP,
-  deleted SMALLINT DEFAULT 0
-);
-`
-
-const CreateVideoItemEmbeddingUniqueConstraintQuery = `
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_video_item_embedding_segment_model') THEN
-    ALTER TABLE edu_video_item_embedding
-      ADD CONSTRAINT uk_video_item_embedding_segment_model UNIQUE (video_segment_id, model_version);
-  END IF;
-END$$;
-`
-
-const CreateUserTowerEmbeddingUniqueConstraintQuery = `
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_user_tower_embedding_user_model') THEN
-    ALTER TABLE edu_user_tower_embedding
-      ADD CONSTRAINT uk_user_tower_embedding_user_model UNIQUE (user_id, model_version);
-  END IF;
-END$$;
-`
-
-const CreateRecommendModelVersionUniqueConstraintQuery = `
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uk_recommend_model_version_name_version') THEN
-    ALTER TABLE edu_recommend_model_version
-      ADD CONSTRAINT uk_recommend_model_version_name_version UNIQUE (model_name, model_version);
-  END IF;
-END$$;
-`
-
-const CreateVideoItemEmbeddingModelIndexQuery = `CREATE INDEX IF NOT EXISTS idx_video_item_embedding_model_status ON edu_video_item_embedding(model_version, status, deleted);`
-
-const CreateUserTowerEmbeddingModelIndexQuery = `CREATE INDEX IF NOT EXISTS idx_user_tower_embedding_user_model ON edu_user_tower_embedding(user_id, model_version, status, deleted);`
-
-const CreateRecommendModelVersionActiveIndexQuery = `CREATE INDEX IF NOT EXISTS idx_recommend_model_version_active ON edu_recommend_model_version(model_name, is_active, status, deleted, published_at DESC);`
 
 const CreateRecommendExposureLookupIndexQuery = `CREATE INDEX IF NOT EXISTS idx_recommend_exposure_user_question_segment_time ON edu_recommend_exposure(user_id, question_id, video_segment_id, create_time DESC);`
 

@@ -11,7 +11,7 @@ func TestMinioOptionsForCOSUsesRegionAndDNSLookup(t *testing.T) {
 		Endpoint:     "cos.ap-beijing.myqcloud.com",
 		AccessKey:    "ak",
 		SecretKey:    "sk",
-		Bucket:       "video-embedding-storage-0000000000",
+		Bucket:       "video-embedding-storage",
 		UseSSL:       true,
 		Region:       "ap-beijing",
 		BucketLookup: "dns",
@@ -38,8 +38,8 @@ func TestNormalizeEndpointStripsScheme(t *testing.T) {
 
 func TestNormalizeEndpointConvertsCOSBucketEndpointToServiceEndpoint(t *testing.T) {
 	cfg := normalizedConfig(Config{
-		Endpoint:     "https://video-embedding-storage-0000000000.cos.ap-beijing.myqcloud.com",
-		Bucket:       "video-embedding-storage-0000000000",
+		Endpoint:     "https://video-embedding-storage.cos.ap-beijing.myqcloud.com",
+		Bucket:       "video-embedding-storage",
 		BucketLookup: "dns",
 	})
 

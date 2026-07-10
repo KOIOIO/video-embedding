@@ -17,12 +17,13 @@ type Service struct {
 	StatusStore          TranscodeStatusStore
 	ReactionStore        VideoReactionStore
 	SegmentReactionStore VideoReactionStore
-	ProfileUpdater       VideoProfileUpdater
 	RecommendationEngine string
 	GorseClient          recommendationapp.GorseClient
 	GorseOptions         recommendationapp.GorseOptions
 	RecentSegments       recommendationapp.RecentSegmentStore
 	RecentSegmentTTL     time.Duration
+	RecentSegmentMaxSize int
+	RandomPlayBucket     RandomPlayBucketStore
 	Store                ObjectStore
 	FS                   FileStorage
 	Embedder             TextEmbedder
@@ -49,9 +50,6 @@ func NewService(repo VideoRepository, queue TranscodeQueue, vectorQueue Vectoriz
 	}
 	if segmentRepo, ok := repo.(SegmentReactionRepository); ok {
 		svc.SegmentReactionRepo = segmentRepo
-	}
-	if profileUpdater, ok := repo.(VideoProfileUpdater); ok {
-		svc.ProfileUpdater = profileUpdater
 	}
 	return svc
 }

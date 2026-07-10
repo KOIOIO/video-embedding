@@ -113,13 +113,15 @@ type SegmentReactionCountsData struct {
 }
 
 type RandomVideoSegmentData struct {
-	VideoID        uint64 `json:"video_id"`
-	VideoSegmentID uint64 `json:"video_segment_id"`
-	StartTimeSec   int    `json:"start_time_sec"`
-	EndTimeSec     int    `json:"end_time_sec"`
-	Title          string `json:"title"`
-	CoverURL       string `json:"cover_url"`
-	PlayURL        string `json:"play_url"`
+	VideoID          uint64 `json:"video_id"`
+	VideoSegmentID   uint64 `json:"video_segment_id"`
+	StartTimeSec     int    `json:"start_time_sec"`
+	EndTimeSec       int    `json:"end_time_sec"`
+	Title            string `json:"title"`
+	CoverURL         string `json:"cover_url"`
+	PlayURL          string `json:"play_url"`
+	UserReacted      bool   `json:"user_reacted"`
+	UserReactionType string `json:"user_reaction_type"`
 }
 
 type TranscodeStatusData struct {

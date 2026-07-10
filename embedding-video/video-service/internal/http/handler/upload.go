@@ -15,14 +15,14 @@ func NewUploadHandler(app any) *UploadHandler {
 }
 
 // UploadVideo godoc
-// @Summary Upload a video
-// @Tags videos
+// @Summary 上传单个视频
+// @Tags 视频服务
 // @Accept multipart/form-data
 // @Produce json
-// @Param file formData file true "Video file"
-// @Param title formData string false "Video title"
-// @Param description formData string false "Video description"
-// @Param user_id formData int false "Uploader user ID, defaults to 1"
+// @Param file formData file true "视频文件"
+// @Param title formData string false "视频标题"
+// @Param description formData string false "视频描述"
+// @Param user_id formData int false "上传用户ID，默认1"
 // @Success 200 {object} dto.UploadVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -32,13 +32,13 @@ func (h *UploadHandler) UploadVideo(c *gin.Context) {
 }
 
 // UploadVideoArchive godoc
-// @Summary Upload a zip archive containing videos
-// @Tags videos
+// @Summary 上传视频压缩包
+// @Tags 视频服务
 // @Accept multipart/form-data
 // @Produce json
-// @Param file formData file true "Zip archive"
-// @Param description formData string false "Video description"
-// @Param user_id formData int false "Uploader user ID, defaults to 1"
+// @Param file formData file true "视频压缩包"
+// @Param description formData string false "视频描述"
+// @Param user_id formData int false "上传用户ID，默认1"
 // @Success 200 {object} dto.UploadVideoArchiveResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -48,12 +48,12 @@ func (h *UploadHandler) UploadVideoArchive(c *gin.Context) {
 }
 
 // UploadVideoCover godoc
-// @Summary Upload a video cover
-// @Tags videos
+// @Summary 上传视频封面
+// @Tags 视频服务
 // @Accept multipart/form-data
 // @Produce json
-// @Param id path int true "Video ID"
-// @Param file formData file true "Cover file"
+// @Param id path int true "视频ID"
+// @Param file formData file true "封面文件"
 // @Success 200 {object} dto.UploadCoverResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -64,11 +64,11 @@ func (h *UploadHandler) UploadVideoCover(c *gin.Context) {
 }
 
 // InitiateChunkedUpload godoc
-// @Summary Initiate a chunked video upload
-// @Tags videos
+// @Summary 初始化视频分片上传
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param request body dto.InitiateChunkedUploadRequest true "Chunked upload metadata"
+// @Param request body dto.InitiateChunkedUploadRequest true "分片上传元信息"
 // @Success 200 {object} dto.ChunkedUploadResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -78,13 +78,13 @@ func (h *UploadHandler) InitiateChunkedUpload(c *gin.Context) {
 }
 
 // UploadVideoChunk godoc
-// @Summary Upload one video chunk
-// @Tags videos
+// @Summary 上传视频分片
+// @Tags 视频服务
 // @Accept application/octet-stream
 // @Produce json
-// @Param uploadId path string true "Upload ID"
-// @Param chunkIndex path int true "Zero-based chunk index"
-// @Param chunk body string true "Raw chunk bytes"
+// @Param uploadId path string true "上传任务ID"
+// @Param chunkIndex path int true "分片序号，从0开始"
+// @Param chunk body string true "分片二进制内容"
 // @Success 200 {object} dto.ChunkedUploadResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -94,10 +94,10 @@ func (h *UploadHandler) UploadVideoChunk(c *gin.Context) {
 }
 
 // GetChunkedUploadStatus godoc
-// @Summary Get chunked upload status
-// @Tags videos
+// @Summary 查询视频分片上传状态
+// @Tags 视频服务
 // @Produce json
-// @Param uploadId path string true "Upload ID"
+// @Param uploadId path string true "上传任务ID"
 // @Success 200 {object} dto.ChunkedUploadResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -108,10 +108,10 @@ func (h *UploadHandler) GetChunkedUploadStatus(c *gin.Context) {
 }
 
 // CompleteChunkedUpload godoc
-// @Summary Complete a chunked video upload
-// @Tags videos
+// @Summary 完成视频分片上传
+// @Tags 视频服务
 // @Produce json
-// @Param uploadId path string true "Upload ID"
+// @Param uploadId path string true "上传任务ID"
 // @Success 200 {object} dto.UploadVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -121,11 +121,11 @@ func (h *UploadHandler) CompleteChunkedUpload(c *gin.Context) {
 }
 
 // InitiateChunkedArchiveUpload godoc
-// @Summary Initiate a chunked zip archive upload
-// @Tags videos
+// @Summary 初始化视频压缩包分片上传
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param request body dto.InitiateChunkedUploadRequest true "Chunked archive upload metadata"
+// @Param request body dto.InitiateChunkedUploadRequest true "压缩包分片上传元信息"
 // @Success 200 {object} dto.ChunkedUploadResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -135,10 +135,10 @@ func (h *UploadHandler) InitiateChunkedArchiveUpload(c *gin.Context) {
 }
 
 // CompleteChunkedArchiveUpload godoc
-// @Summary Complete a chunked zip archive upload
-// @Tags videos
+// @Summary 完成视频压缩包分片上传
+// @Tags 视频服务
 // @Produce json
-// @Param uploadId path string true "Upload ID"
+// @Param uploadId path string true "上传任务ID"
 // @Success 200 {object} dto.UploadVideoArchiveResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -148,10 +148,10 @@ func (h *UploadHandler) CompleteChunkedArchiveUpload(c *gin.Context) {
 }
 
 // GetArchiveProcessingProgress godoc
-// @Summary Get zip archive processing progress
-// @Tags videos
+// @Summary 查询视频压缩包处理进度
+// @Tags 视频服务
 // @Produce json
-// @Param batchId path string true "Archive batch ID"
+// @Param batchId path string true "压缩包批次ID"
 // @Success 200 {object} dto.ArchiveProcessingProgressResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse

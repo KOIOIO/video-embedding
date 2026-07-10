@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -371,17 +370,5 @@ func TestDecideRetry(t *testing.T) {
 	decision = DefaultRetryPolicy(context.DeadlineExceeded, maxRetryAttempts)
 	if decision.Retry {
 		t.Fatal("expected exhausted retry budget to stop retrying")
-	}
-}
-
-func TestIsTemporaryStorageError(t *testing.T) {
-	if !isTemporaryStorageError(errors.New("s3 timeout while downloading")) {
-		t.Fatal("expected timeout error to be temporary")
-	}
-	if isTemporaryStorageError(errors.New("permission denied")) {
-		t.Fatal("expected permission denied to be terminal")
-	}
-	if !isTemporaryStorageError(errors.New(strings.ToUpper("connection reset by peer"))) {
-		t.Fatal("expected connection reset to be temporary")
 	}
 }

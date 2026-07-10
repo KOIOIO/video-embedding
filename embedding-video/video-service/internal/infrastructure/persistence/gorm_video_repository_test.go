@@ -2,17 +2,31 @@ package persistence
 
 import (
 	"context"
-	"math"
+	"strings"
 	"testing"
 	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"nlp-video-analysis/internal/application/videoapp"
 	domainvideo "nlp-video-analysis/internal/domain/video"
 	"nlp-video-analysis/internal/model"
 )
+
+type sqlCaptureLogger struct {
+	sql []string
+}
+
+func (l *sqlCaptureLogger) LogMode(logger.LogLevel) logger.Interface      { return l }
+func (l *sqlCaptureLogger) Info(context.Context, string, ...interface{})  {}
+func (l *sqlCaptureLogger) Warn(context.Context, string, ...interface{})  {}
+func (l *sqlCaptureLogger) Error(context.Context, string, ...interface{}) {}
+func (l *sqlCaptureLogger) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	sql, _ := fc()
+	l.sql = append(l.sql, sql)
+}
 
 func newVideoRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -20,55 +34,10 @@ func newVideoRepoTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduRecommendExposure{}); err != nil {
+	if err := db.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
-}
-
-func TestBuildTowerVectorEnablesNormalizedVectorForPositiveEvents(t *testing.T) {
-	now := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
-	vector, status := buildTowerVector([]towerEvent{
-		{
-			Source:       "segment_reaction",
-			ReactionType: "like",
-			Vector:       []float32{3, 4},
-			EventTime:    now.Add(-time.Hour),
-		},
-	}, now)
-
-	if status != 1 {
-		t.Fatalf("status = %d, want 1", status)
-	}
-	if len(vector) != 2 {
-		t.Fatalf("vector length = %d, want 2: %#v", len(vector), vector)
-	}
-	if !floatClose(float64(vector[0]), 0.6) || !floatClose(float64(vector[1]), 0.8) {
-		t.Fatalf("vector = %#v, want normalized [0.6 0.8]", vector)
-	}
-}
-
-func TestBuildTowerVectorDisablesVectorWithoutPositiveEvents(t *testing.T) {
-	now := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
-	vector, status := buildTowerVector([]towerEvent{
-		{
-			Source:       "segment_reaction",
-			ReactionType: "dislike",
-			Vector:       []float32{1, 0},
-			EventTime:    now.Add(-time.Hour),
-		},
-	}, now)
-
-	if status != 0 {
-		t.Fatalf("status = %d, want 0", status)
-	}
-	if vector != nil {
-		t.Fatalf("vector = %#v, want nil", vector)
-	}
-}
-
-func floatClose(got float64, want float64) bool {
-	return math.Abs(got-want) < 0.000001
 }
 
 func TestCanUploadVideoAllowsUserTypesTwoAndThreeOnly(t *testing.T) {
@@ -171,6 +140,180 @@ func TestMarkRecommendationExposureWatchedUpdatesLatestMatchingExposure(t *testi
 	if !newRow.Clicked || !newRow.Watched || !newRow.ClickedTime.Equal(markTime) || !newRow.WatchedTime.Equal(markTime) {
 		t.Fatalf("new exposure should be marked watched: %+v", newRow)
 	}
+}
+
+func TestRecommendationDatasourceStatsCountsRecommendationInputs(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+	now := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
+
+	if err := db.Create(&[]model.EduVideoResource{
+		{ID: 1, Title: "published recommended", VideoURL: "/v/1.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 0},
+		{ID: 2, Title: "published only", VideoURL: "/v/2.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, Deleted: 0},
+		{ID: 3, Title: "deleted", VideoURL: "/v/3.mp4", Status: int16(domainvideo.StatusDone), IsPublish: true, IsRec: true, Deleted: 1},
+	}).Error; err != nil {
+		t.Fatalf("seed videos: %v", err)
+	}
+	if err := db.Create(&[]model.EduVideoSegment{
+		{ID: 11, VideoID: 1, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 10, Status: 1, Deleted: 0},
+		{ID: 12, VideoID: 1, SegmentIndex: 2, StartTimeSec: 10, EndTimeSec: 20, Status: 1, Deleted: 0},
+		{ID: 13, VideoID: 2, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 10, Status: 2, Deleted: 0},
+		{ID: 14, VideoID: 3, SegmentIndex: 1, StartTimeSec: 0, EndTimeSec: 10, Status: 1, Deleted: 1},
+	}).Error; err != nil {
+		t.Fatalf("seed segments: %v", err)
+	}
+	if err := db.Model(&model.EduVideoSegment{}).Where("id = ?", 11).Update("embedding", "[1,2,3]").Error; err != nil {
+		t.Fatalf("seed segment embedding: %v", err)
+	}
+	if err := db.Model(&model.EduVideoSegment{}).Where("id IN ?", []uint64{12, 13}).Update("embedding", nil).Error; err != nil {
+		t.Fatalf("clear segment embeddings: %v", err)
+	}
+	if err := db.Create(&[]model.EduRecommendExposure{
+		{RequestID: "req-1", UserID: 7, VideoID: 1, VideoSegmentID: 11, Rank: 1, Score: 1, Strategy: videoapp.RecommendStrategyGorse, Watched: true, CreateTime: now, Deleted: 0},
+		{RequestID: "req-2", UserID: 8, VideoID: 1, VideoSegmentID: 12, Rank: 2, Score: 0.5, Strategy: videoapp.RecommendStrategyRecBole, CreateTime: now, Deleted: 0},
+	}).Error; err != nil {
+		t.Fatalf("seed exposures: %v", err)
+	}
+	if err := db.Create(&[]model.EduUserVideoRecommend{
+		{UserID: 7, VideoID: 1, VideoSegmentID: 11, IsWatched: true, Deleted: 0},
+		{UserID: 8, VideoID: 1, VideoSegmentID: 12, Deleted: 0},
+	}).Error; err != nil {
+		t.Fatalf("seed recommendations: %v", err)
+	}
+	if err := db.Create(&model.EduUserReaction{UserID: 7, VideoID: 1, VideoSegmentID: 11, ReactionType: string(videoapp.VideoReactionLike), Deleted: 0}).Error; err != nil {
+		t.Fatalf("seed reaction: %v", err)
+	}
+	if err := db.Exec(`ATTACH DATABASE ':memory:' AS recsys`).Error; err != nil {
+		t.Fatalf("attach recsys: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE recsys.recommend_user_embedding (user_id INTEGER, status INTEGER, deleted INTEGER)`).Error; err != nil {
+		t.Fatalf("create recsys user embedding: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE recsys.recommend_item_embedding (video_segment_id INTEGER, status INTEGER, deleted INTEGER)`).Error; err != nil {
+		t.Fatalf("create recsys item embedding: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO recsys.recommend_user_embedding (user_id, status, deleted) VALUES (7, 1, 0), (7, 1, 0), (8, 0, 0), (9, 1, 1)`).Error; err != nil {
+		t.Fatalf("seed recsys user embedding: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO recsys.recommend_item_embedding (video_segment_id, status, deleted) VALUES (11, 1, 0), (11, 1, 0), (12, 0, 0), (13, 1, 1)`).Error; err != nil {
+		t.Fatalf("seed recsys item embedding: %v", err)
+	}
+
+	stats, err := repo.GetRecommendationDatasourceStats(ctx)
+	if err != nil {
+		t.Fatalf("GetRecommendationDatasourceStats returned error: %v", err)
+	}
+
+	if stats.VideoTotal != 2 || stats.PublishedVideos != 2 || stats.RecommendVideos != 1 {
+		t.Fatalf("video stats = %+v", stats)
+	}
+	if stats.SegmentTotal != 3 || stats.PlayableSegments != 2 || stats.EmbeddedSegments != 1 {
+		t.Fatalf("segment stats = %+v", stats)
+	}
+	if stats.ExposureTotal != 2 || stats.WatchedExposures != 1 || stats.RecommendationRows != 2 || stats.WatchedRecommendations != 1 {
+		t.Fatalf("recommendation stats = %+v", stats)
+	}
+	if stats.RecBoleUsers != 1 || stats.RecBoleItems != 1 || stats.ReactionRows != 1 {
+		t.Fatalf("recbole/reaction stats = %+v", stats)
+	}
+}
+
+func TestRecommendationDiagnosticsReadsRecentRequestsAndFreshness(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+	now := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	if err := db.Create(&[]model.EduRecommendExposure{
+		{RequestID: "req-new", UserID: 7, QuestionID: 3, VideoID: 11, VideoSegmentID: 101, Rank: 1, Score: 0.9, Strategy: videoapp.RecommendStrategyRecBole, ModelVersion: "recbole_v2", Watched: true, CreateTime: now},
+		{RequestID: "req-new", UserID: 7, QuestionID: 3, VideoID: 12, VideoSegmentID: 102, Rank: 2, Score: 0.8, Strategy: videoapp.RecommendStrategyRecBole, ModelVersion: "recbole_v2", Watched: false, CreateTime: now.Add(-time.Minute)},
+		{RequestID: "req-old", UserID: 8, QuestionID: 4, VideoID: 13, VideoSegmentID: 103, Rank: 1, Score: 0.7, Strategy: videoapp.RecommendStrategyGorse, ModelVersion: "gorse", Watched: false, CreateTime: now.Add(-time.Hour)},
+	}).Error; err != nil {
+		t.Fatalf("seed exposures: %v", err)
+	}
+	if err := db.Exec(`ATTACH DATABASE ':memory:' AS recsys`).Error; err != nil {
+		t.Fatalf("attach recsys: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE recsys.recommend_user_embedding (user_id INTEGER, status INTEGER, deleted INTEGER, update_time TIMESTAMP)`).Error; err != nil {
+		t.Fatalf("create recsys user embedding: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE recsys.recommend_item_embedding (video_segment_id INTEGER, status INTEGER, deleted INTEGER, update_time TIMESTAMP)`).Error; err != nil {
+		t.Fatalf("create recsys item embedding: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO recsys.recommend_user_embedding (user_id, status, deleted, update_time) VALUES (?, 1, 0, ?)`, 7, now.Add(-2*time.Hour)).Error; err != nil {
+		t.Fatalf("seed recsys user embedding: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO recsys.recommend_item_embedding (video_segment_id, status, deleted, update_time) VALUES (?, 1, 0, ?)`, 101, now.Add(-time.Hour)).Error; err != nil {
+		t.Fatalf("seed recsys item embedding: %v", err)
+	}
+
+	requests, err := repo.ListRecommendationRecentRequests(ctx, 5)
+	if err != nil {
+		t.Fatalf("ListRecommendationRecentRequests returned error: %v", err)
+	}
+	if len(requests) < 2 || requests[0].RequestID != "req-new" {
+		t.Fatalf("requests = %+v, want req-new first", requests)
+	}
+	if requests[0].Exposures != 2 || requests[0].Watched != 1 || requests[0].WatchRate != 0.5 {
+		t.Fatalf("req-new aggregate = %+v", requests[0])
+	}
+
+	freshness, err := repo.ListRecommendationDataFreshness(ctx)
+	if err != nil {
+		t.Fatalf("ListRecommendationDataFreshness returned error: %v", err)
+	}
+	if !hasFreshnessSource(freshness, "recbole_user_embedding") || !hasFreshnessSource(freshness, "recbole_item_embedding") {
+		t.Fatalf("freshness = %+v, want recbole user and item sources", freshness)
+	}
+}
+
+func TestRecommendationEffectMetricsAggregatesByDayAndStrategy(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	repo := NewGormVideoRepository(db)
+	now := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
+	yesterday := now.AddDate(0, 0, -1)
+
+	if err := db.Create(&[]model.EduRecommendExposure{
+		{RequestID: "req-gorse-1", UserID: 7, VideoID: 1, VideoSegmentID: 11, Rank: 1, Score: 1, Strategy: videoapp.RecommendStrategyGorse, ModelVersion: "gorse", Watched: true, CreateTime: now, Deleted: 0},
+		{RequestID: "req-gorse-2", UserID: 8, VideoID: 1, VideoSegmentID: 12, Rank: 2, Score: 0.5, Strategy: videoapp.RecommendStrategyGorse, ModelVersion: "gorse", CreateTime: now, Deleted: 0},
+		{RequestID: "req-recbole-1", UserID: 9, VideoID: 2, VideoSegmentID: 21, Rank: 1, Score: 0.8, Strategy: videoapp.RecommendStrategyRecBole, ModelVersion: "recbole_v2", Watched: true, CreateTime: yesterday, Deleted: 0},
+	}).Error; err != nil {
+		t.Fatalf("seed exposures: %v", err)
+	}
+
+	metrics, err := repo.ListRecommendationEffectMetrics(ctx, 3)
+	if err != nil {
+		t.Fatalf("ListRecommendationEffectMetrics returned error: %v", err)
+	}
+
+	if len(metrics.Daily) != 2 {
+		t.Fatalf("daily rows = %+v, want 2", metrics.Daily)
+	}
+	if metrics.Daily[0].Day != "2026-07-08" || metrics.Daily[0].Exposures != 1 || metrics.Daily[0].Watched != 1 || metrics.Daily[0].WatchRate != 1 {
+		t.Fatalf("first daily = %+v", metrics.Daily[0])
+	}
+	if metrics.Daily[1].Day != "2026-07-09" || metrics.Daily[1].Exposures != 2 || metrics.Daily[1].Watched != 1 || metrics.Daily[1].WatchRate != 0.5 {
+		t.Fatalf("second daily = %+v", metrics.Daily[1])
+	}
+	if len(metrics.Strategies) != 2 {
+		t.Fatalf("strategy rows = %+v, want 2", metrics.Strategies)
+	}
+	if metrics.Strategies[0].Strategy != videoapp.RecommendStrategyGorse || metrics.Strategies[0].ModelVersion != "gorse" || metrics.Strategies[0].Exposures != 2 || metrics.Strategies[0].Watched != 1 || metrics.Strategies[0].WatchRate != 0.5 {
+		t.Fatalf("gorse row = %+v", metrics.Strategies[0])
+	}
+	if metrics.Strategies[1].Strategy != videoapp.RecommendStrategyRecBole || metrics.Strategies[1].ModelVersion != "recbole_v2" || metrics.Strategies[1].Exposures != 1 || metrics.Strategies[1].Watched != 1 || metrics.Strategies[1].WatchRate != 1 {
+		t.Fatalf("recbole row = %+v", metrics.Strategies[1])
+	}
+}
+
+func hasFreshnessSource(rows []videoapp.RecommendationDataFreshness, source string) bool {
+	for _, row := range rows {
+		if row.Source == source && row.HasData {
+			return true
+		}
+	}
+	return false
 }
 
 func seedVideoResource(t *testing.T, db *gorm.DB, id uint64) {
@@ -326,6 +469,47 @@ func TestFindRandomPlayableSegmentExcludingSkipsRecentSegments(t *testing.T) {
 	}
 	if result.VideoSegmentID != 302 {
 		t.Fatalf("VideoSegmentID = %d, want 302", result.VideoSegmentID)
+	}
+}
+
+func TestFindRandomPlayableSegmentDoesNotUseDatabaseRandomSort(t *testing.T) {
+	ctx := context.Background()
+	db := newVideoRepoTestDB(t)
+	capture := &sqlCaptureLogger{}
+	repo := NewGormVideoRepository(db.Session(&gorm.Session{Logger: capture}))
+
+	if err := db.Create(&model.EduVideoResource{
+		ID:        41,
+		Title:     "playable video",
+		VideoURL:  "/raw/41.mp4",
+		Status:    int16(domainvideo.StatusDone),
+		IsPublish: true,
+		Deleted:   0,
+	}).Error; err != nil {
+		t.Fatalf("seed video: %v", err)
+	}
+	if err := db.Create(&model.EduVideoSegment{
+		ID:             401,
+		VideoID:        41,
+		SegmentIndex:   1,
+		StartTimeSec:   0,
+		EndTimeSec:     30,
+		ContentSummary: "playable segment",
+		Status:         1,
+		Deleted:        0,
+	}).Error; err != nil {
+		t.Fatalf("seed segment: %v", err)
+	}
+
+	_, found, err := repo.FindRandomPlayableSegment(ctx)
+	if err != nil {
+		t.Fatalf("FindRandomPlayableSegment returned error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected a playable segment")
+	}
+	if sql := strings.ToUpper(strings.Join(capture.sql, "\n")); strings.Contains(sql, "RANDOM()") {
+		t.Fatalf("random playable fallback should not use database random sort, got SQL:\n%s", sql)
 	}
 }
 

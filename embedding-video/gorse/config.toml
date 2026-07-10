@@ -54,7 +54,7 @@ name = "neighbors"
 type = "items"
 
 [[recommend.external]]
-name = "two_tower"
+name = "recbole"
 script = """
 function pull(url) {
   try {
@@ -66,7 +66,7 @@ function pull(url) {
   return "";
 }
 
-var path = "/api/internal/recommendations/external/two-tower?user_id=" + user_id + "&n=100";
+var path = "/api/internal/recommendations/external/recbole?user_id=" + user_id + "&n=100";
 pull("http://backend:8083" + path) ||
   "[]";
 """

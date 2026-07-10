@@ -187,6 +187,44 @@ func TestAPIHealthzRouteRegistered(t *testing.T) {
 	}
 }
 
+func TestRecommendationAdminRoutesAreRegistered(t *testing.T) {
+	r := router.New(&appbuilder.App{Service: &videoapp.Service{}})
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   int
+	}{
+		{name: "overview", method: http.MethodGet, path: "/api/admin/recommendation/overview", want: http.StatusOK},
+		{name: "diagnostics", method: http.MethodGet, path: "/api/admin/recommendation/diagnostics", want: http.StatusOK},
+		{name: "datasources", method: http.MethodGet, path: "/api/admin/recommendation/datasources", want: http.StatusOK},
+		{name: "effects", method: http.MethodGet, path: "/api/admin/recommendation/effects?days=bad", want: http.StatusBadRequest},
+		{name: "random trace", method: http.MethodGet, path: "/api/admin/recommendation/trace/random-play?user_id=bad", want: http.StatusBadRequest},
+		{name: "question trace", method: http.MethodPost, path: "/api/admin/recommendation/trace/by-question", body: `{"question_text":"   "}`, want: http.StatusBadRequest},
+		{name: "redis state", method: http.MethodGet, path: "/api/admin/recommendation/redis-state?user_id=bad", want: http.StatusBadRequest},
+		{name: "random preview", method: http.MethodGet, path: "/api/admin/recommendation/preview/random-play?user_id=bad", want: http.StatusBadRequest},
+		{name: "question preview", method: http.MethodPost, path: "/api/admin/recommendation/preview/by-question", body: `{"question_text":"   "}`, want: http.StatusBadRequest},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.method == http.MethodPost {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+
+			r.ServeHTTP(w, req)
+
+			if w.Code != tc.want {
+				t.Fatalf("expected route %s %s to return %d, got %d: %s", tc.method, tc.path, tc.want, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestRouterAddsCORSHeadersToNormalRequests(t *testing.T) {
 	r := router.New(&appbuilder.App{})
 	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)

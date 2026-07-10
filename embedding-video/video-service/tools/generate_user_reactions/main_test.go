@@ -15,9 +15,9 @@ func TestBuildReactionPlansGeneratesUniqueUserSegmentPairs(t *testing.T) {
 	}
 	now := time.Date(2026, 6, 22, 12, 0, 0, 0, time.UTC)
 
-	plans, err := buildReactionPlans(users, segments, 7, rand.New(rand.NewSource(1)), now)
+	plans, err := buildReactionPlansExcluding(users, segments, 7, nil, rand.New(rand.NewSource(1)), now, defaultDaysBack*24*time.Hour)
 	if err != nil {
-		t.Fatalf("buildReactionPlans returned error: %v", err)
+		t.Fatalf("buildReactionPlansExcluding returned error: %v", err)
 	}
 	if len(plans) != 7 {
 		t.Fatalf("plan count = %d, want 7", len(plans))
@@ -60,7 +60,7 @@ func TestBuildReactionPlansRejectsInsufficientCapacity(t *testing.T) {
 	users := []uint64{11}
 	segments := []videoSegment{{ID: 101, VideoID: 1001}}
 
-	_, err := buildReactionPlans(users, segments, 2, rand.New(rand.NewSource(1)), time.Now())
+	_, err := buildReactionPlansExcluding(users, segments, 2, nil, rand.New(rand.NewSource(1)), time.Now(), defaultDaysBack*24*time.Hour)
 	if err == nil {
 		t.Fatal("expected error for insufficient unique user/segment pairs")
 	}

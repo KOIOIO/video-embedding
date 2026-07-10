@@ -15,11 +15,11 @@ func NewRecommendHandler(app any) *RecommendHandler {
 }
 
 // RecommendByQuestion godoc
-// @Summary Recommend videos by question
-// @Tags recommendations
+// @Summary 根据题目推荐视频
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param request body dto.RecommendByQuestionRequest true "Recommendation request"
+// @Param request body dto.RecommendByQuestionRequest true "推荐请求参数"
 // @Success 200 {object} dto.RecommendationListResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -30,12 +30,12 @@ func (h *RecommendHandler) RecommendByQuestion(c *gin.Context) {
 }
 
 // ListRecommendations godoc
-// @Summary List recommendations
-// @Tags recommendations
+// @Summary 查询推荐列表
+// @Tags 视频服务
 // @Produce json
-// @Param question_id query int true "Question ID"
-// @Param user_id query int false "User ID"
-// @Param limit query int false "Result limit"
+// @Param question_id query int true "题目ID"
+// @Param user_id query int false "用户ID"
+// @Param limit query int false "返回数量"
 // @Success 200 {object} dto.RecommendationListResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -45,11 +45,11 @@ func (h *RecommendHandler) ListRecommendations(c *gin.Context) {
 }
 
 // ReportWatch godoc
-// @Summary Report watch progress
-// @Tags recommendations
+// @Summary 上报视频观看进度
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param request body dto.ReportWatchRequest true "Watch report request"
+// @Param request body dto.ReportWatchRequest true "观看进度参数"
 // @Success 200 {object} dto.WatchRecordResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
