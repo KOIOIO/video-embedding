@@ -1,2 +1,5 @@
-embedding-video/recbole-training/.venv/
+node_modules/
+dist/
+.venv/
 __pycache__/
+*.pyc
