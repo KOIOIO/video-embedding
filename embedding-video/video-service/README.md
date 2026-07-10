@@ -1,4 +1,4 @@
-# 衡桃学堂 HTTP 视频服务
+# Video Service — HTTP 视频服务
 
 ## 项目简介
 

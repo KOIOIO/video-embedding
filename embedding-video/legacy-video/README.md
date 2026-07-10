@@ -1,4 +1,4 @@
-# embedding-video
+# legacy-video
 
 这个目录是历史 Go 后端工程，包含早期的 gRPC / API / worker 相关代码。
 
