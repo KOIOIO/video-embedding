@@ -15,10 +15,10 @@ func NewVideoHandler(app any) *VideoHandler {
 }
 
 // ListVideos godoc
-// @Summary List videos
-// @Tags videos
+// @Summary 查询视频列表
+// @Tags 视频服务
 // @Produce json
-// @Param type query string false "Filter type" Enums(ALL,RAW,HLS) default(ALL)
+// @Param type query string false "视频类型筛选" Enums(ALL,RAW,HLS) default(ALL)
 // @Success 200 {object} dto.VideoListResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -28,12 +28,12 @@ func (h *VideoHandler) ListVideos(c *gin.Context) {
 }
 
 // UpdateVideoMetadata godoc
-// @Summary Update video metadata
-// @Tags videos
+// @Summary 修改视频基础信息
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param id path int true "Video ID"
-// @Param request body dto.UpdateVideoRequest true "Updated metadata"
+// @Param id path int true "视频ID"
+// @Param request body dto.UpdateVideoRequest true "视频基础信息"
 // @Success 200 {object} dto.UpdateVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -44,10 +44,10 @@ func (h *VideoHandler) UpdateVideoMetadata(c *gin.Context) {
 }
 
 // DeleteVideo godoc
-// @Summary Delete a video
-// @Tags videos
+// @Summary 删除视频
+// @Tags 视频服务
 // @Produce json
-// @Param id path int true "Video ID"
+// @Param id path int true "视频ID"
 // @Success 200 {object} dto.DeleteVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -58,10 +58,10 @@ func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 }
 
 // PlayVideo godoc
-// @Summary Resolve a video's playback URL
-// @Tags videos
+// @Summary 获取视频播放地址
+// @Tags 视频服务
 // @Produce json
-// @Param id path int true "Video ID"
+// @Param id path int true "视频ID"
 // @Success 200 {object} dto.PlayVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -72,11 +72,11 @@ func (h *VideoHandler) PlayVideo(c *gin.Context) {
 }
 
 // GetSimilarVideos godoc
-// @Summary List similar videos
-// @Tags videos
+// @Summary 查询相似视频
+// @Tags 视频服务
 // @Produce json
-// @Param id path int true "Video ID"
-// @Param limit query int false "Result limit" default(6)
+// @Param id path int true "视频ID"
+// @Param limit query int false "返回数量" default(6)
 // @Success 200 {object} dto.SimilarVideosResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
@@ -86,10 +86,10 @@ func (h *VideoHandler) GetSimilarVideos(c *gin.Context) {
 }
 
 // GetViewCount godoc
-// @Summary Get a video's view count
-// @Tags videos
+// @Summary 查询视频播放次数
+// @Tags 视频服务
 // @Produce json
-// @Param id path int true "Video ID"
+// @Param id path int true "视频ID"
 // @Success 200 {object} dto.ViewCountResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -100,12 +100,12 @@ func (h *VideoHandler) GetViewCount(c *gin.Context) {
 }
 
 // SetVideoPublished godoc
-// @Summary Set video published status
-// @Tags videos
+// @Summary 设置视频发布状态
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param id path int true "Video ID"
-// @Param request body dto.PublishVideoRequest true "Publish request"
+// @Param id path int true "视频ID"
+// @Param request body dto.PublishVideoRequest true "发布状态参数"
 // @Success 200 {object} dto.PublishVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -116,12 +116,12 @@ func (h *VideoHandler) SetVideoPublished(c *gin.Context) {
 }
 
 // SetVideoRecommend godoc
-// @Summary Set video recommendation status
-// @Tags videos
+// @Summary 设置视频推荐状态
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param id path int true "Video ID"
-// @Param request body dto.RecommendVideoRequest true "Recommendation request"
+// @Param id path int true "视频ID"
+// @Param request body dto.RecommendVideoRequest true "推荐状态参数"
 // @Success 200 {object} dto.RecommendVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -132,12 +132,12 @@ func (h *VideoHandler) SetVideoRecommend(c *gin.Context) {
 }
 
 // SubmitVideoReaction godoc
-// @Summary Submit or cancel a video reaction
-// @Tags videos
+// @Summary 提交或取消视频互动
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param id path int true "Video ID"
-// @Param request body dto.VideoReactionRequest true "Reaction request"
+// @Param id path int true "视频ID"
+// @Param request body dto.VideoReactionRequest true "互动参数"
 // @Success 200 {object} dto.VideoReactionResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -148,10 +148,10 @@ func (h *VideoHandler) SubmitVideoReaction(c *gin.Context) {
 }
 
 // GetVideoReactionCounts godoc
-// @Summary Get a video's like and double-like counts
-// @Tags videos
+// @Summary 查询视频点赞和双击数量
+// @Tags 视频服务
 // @Produce json
-// @Param id path int true "Video ID"
+// @Param id path int true "视频ID"
 // @Success 200 {object} dto.VideoReactionCountsResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -162,12 +162,12 @@ func (h *VideoHandler) GetVideoReactionCounts(c *gin.Context) {
 }
 
 // SubmitSegmentReaction godoc
-// @Summary Submit or cancel a video segment reaction
-// @Tags videos
+// @Summary 提交或取消视频片段互动
+// @Tags 视频服务
 // @Accept json
 // @Produce json
-// @Param id path int true "Video segment ID"
-// @Param request body dto.VideoReactionRequest true "Reaction request"
+// @Param id path int true "视频片段ID"
+// @Param request body dto.VideoReactionRequest true "互动参数"
 // @Success 200 {object} dto.SegmentReactionResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -178,10 +178,10 @@ func (h *VideoHandler) SubmitSegmentReaction(c *gin.Context) {
 }
 
 // GetSegmentReactionCounts godoc
-// @Summary Get a video segment's like and double-like counts
-// @Tags videos
+// @Summary 查询视频片段点赞和双击数量
+// @Tags 视频服务
 // @Produce json
-// @Param id path int true "Video segment ID"
+// @Param id path int true "视频片段ID"
 // @Success 200 {object} dto.SegmentReactionCountsResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -192,10 +192,10 @@ func (h *VideoHandler) GetSegmentReactionCounts(c *gin.Context) {
 }
 
 // RandomPlayVideoSegment godoc
-// @Summary Random play video segment
-// @Tags videos
+// @Summary 随机播放视频片段
+// @Tags 视频服务
 // @Produce json
-// @Param user_id query int false "User ID for two-tower personalized recommendation"
+// @Param user_id query int false "用户ID，用于个性化推荐和最近播放去重"
 // @Success 200 {object} dto.RandomVideoSegmentResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
@@ -205,25 +205,25 @@ func (h *VideoHandler) RandomPlayVideoSegment(c *gin.Context) {
 	h.inner.RandomPlayVideoSegment(c)
 }
 
-// ExternalTwoTowerRecommendations godoc
-// @Summary Get two-tower item IDs for Gorse external recommender
-// @Tags internal
+// ExternalRecBoleRecommendations godoc
+// @Summary 获取 RecBole 召回视频片段ID
+// @Tags 视频服务
 // @Produce json
-// @Param user_id query int true "User ID"
-// @Param n query int false "Number of item IDs, capped at 500"
+// @Param user_id query int true "用户ID"
+// @Param n query int false "返回的视频片段ID数量，最多500个"
 // @Success 200 {array} string
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
-// @Router /api/internal/recommendations/external/two-tower [get]
-func (h *VideoHandler) ExternalTwoTowerRecommendations(c *gin.Context) {
-	h.inner.ExternalTwoTowerRecommendations(c)
+// @Router /api/internal/recommendations/external/recbole [get]
+func (h *VideoHandler) ExternalRecBoleRecommendations(c *gin.Context) {
+	h.inner.ExternalRecBoleRecommendations(c)
 }
 
 // GetTranscodeStatus godoc
-// @Summary Get transcode task status
-// @Tags videos
+// @Summary 查询转码任务状态
+// @Tags 视频服务
 // @Produce json
-// @Param taskId path string true "Transcode task ID"
+// @Param taskId path string true "转码任务ID"
 // @Success 200 {object} dto.TranscodeStatusResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse

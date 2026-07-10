@@ -86,28 +86,30 @@ func TestGetUserVideoProfileQueryRequiresActiveVersionedProfile(t *testing.T) {
 	}
 }
 
-func TestTwoTowerQueriesUseVersionedActiveEmbeddings(t *testing.T) {
+func TestRecBoleQueriesUseVersionedActiveEmbeddings(t *testing.T) {
 	for _, fragment := range []string{
-		"tower_vector::text AS tower_vector",
-		"FROM edu_user_tower_embedding",
+		"embedding::text AS embedding",
+		"FROM recsys.recommend_user_embedding",
+		"model_name = ?",
 		"model_version = ?",
 		"status = 1",
 		"deleted = 0",
 	} {
-		if !strings.Contains(GetUserTowerEmbeddingQuery, fragment) {
-			t.Fatalf("GetUserTowerEmbeddingQuery missing %q", fragment)
+		if !strings.Contains(GetUserRecBoleEmbeddingQuery, fragment) {
+			t.Fatalf("GetUserRecBoleEmbeddingQuery missing %q", fragment)
 		}
 	}
 	for _, fragment := range []string{
-		"FROM edu_video_item_embedding ie",
+		"FROM recsys.recommend_item_embedding ie",
 		"JOIN edu_video_segment s ON s.id = ie.video_segment_id",
 		"(ie.embedding <=> ?) AS distance",
+		"ie.model_name = ?",
 		"ie.model_version = ?",
 		"ie.status = 1",
 		"ORDER BY ie.embedding <=> ?",
 	} {
-		if !strings.Contains(RecommendByTwoTowerQuery, fragment) {
-			t.Fatalf("RecommendByTwoTowerQuery missing %q", fragment)
+		if !strings.Contains(RecommendByRecBoleQuery, fragment) {
+			t.Fatalf("RecommendByRecBoleQuery missing %q", fragment)
 		}
 	}
 }

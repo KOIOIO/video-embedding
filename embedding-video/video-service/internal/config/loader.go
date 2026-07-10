@@ -70,7 +70,7 @@ func loadDotEnv() {
 	if path, err := findUpward(".env", 6); err == nil {
 		loadEnvFile(path)
 	}
-	envFile := firstEnv("HSTV_ENV_FILE")
+	envFile := firstEnv("VIDEO_ENV_FILE")
 	if envFile == "" {
 		return
 	}

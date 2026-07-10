@@ -2,8 +2,6 @@ package videoapp
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
 
 	playbackapp "nlp-video-analysis/internal/application/videoapp/playback"
 	domainvideo "nlp-video-analysis/internal/domain/video"
@@ -41,30 +39,6 @@ func newPlaybackService(s *Service) playbackapp.Service {
 		HLSURLPrefix:  s.Paths.HLSURLPrefix,
 		HLSMasterName: s.Paths.HLSMasterName,
 	}
-}
-
-func deriveHLSURLFromRaw(rawURL string, rawPrefix string, hlsPrefix string, masterName string) string {
-	value := strings.TrimSpace(rawURL)
-	if value == "" {
-		return ""
-	}
-	rawPrefix = strings.TrimRight(strings.TrimSpace(rawPrefix), "/")
-	prefix := strings.TrimRight(hlsPrefix, "/")
-	if strings.HasPrefix(value, rawPrefix+"/") {
-		value = strings.TrimPrefix(value, rawPrefix+"/")
-	} else {
-		value = strings.TrimPrefix(value, "/videos/")
-		value = strings.TrimPrefix(value, "raw/")
-	}
-	value = strings.TrimPrefix(value, "/")
-	parts := strings.Split(value, "/")
-	if len(parts) < 4 {
-		return ""
-	}
-	datePath := strings.Join(parts[:3], "/")
-	fileName := parts[3]
-	base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-	return prefix + "/" + datePath + "/" + base + "/" + masterName
 }
 
 type playbackRepositoryAdapter struct {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -530,9 +529,4 @@ func splitPiped(value string) []string {
 		return nil
 	}
 	return strings.Split(value, "|")
-}
-
-func _parseUint(value string) uint64 {
-	parsed, _ := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
-	return parsed
 }

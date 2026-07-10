@@ -9,15 +9,13 @@ import (
 const maxVideoReactionRetries = 3
 
 type VideoReactionWorker struct {
-	Queue          VideoReactionQueue
-	Repo           VideoReactionStateRepository
-	ProfileUpdater VideoProfileUpdater
+	Queue VideoReactionQueue
+	Repo  VideoReactionStateRepository
 }
 
 type SegmentReactionWorker struct {
-	Queue          VideoReactionQueue
-	Repo           SegmentReactionStateRepository
-	ProfileUpdater VideoProfileUpdater
+	Queue VideoReactionQueue
+	Repo  SegmentReactionStateRepository
 }
 
 func NewVideoReactionWorker(queue VideoReactionQueue, repo VideoReactionStateRepository) *VideoReactionWorker {
@@ -38,27 +36,6 @@ func (w *VideoReactionWorker) RunOnce(ctx context.Context) error {
 	}
 	found, err := w.Repo.ApplyVideoReactionState(ctx, msg.Event.VideoID, msg.Event.UserID, msg.Event.ReactionType, msg.Event.Active)
 	if err == nil && found {
-		if w.ProfileUpdater != nil {
-			now := time.Now()
-			err = w.ProfileUpdater.RebuildUserVideoProfile(ctx, msg.Event.UserID, "video_profile_v1", now)
-			if err == nil {
-				if updater, ok := w.ProfileUpdater.(UserTowerEmbeddingUpdater); ok {
-					var version string
-					version, err = activeTwoTowerModelVersion(ctx, w.ProfileUpdater)
-					if err == nil {
-						err = updater.RebuildUserTowerEmbedding(ctx, msg.Event.UserID, version, now)
-					}
-				}
-			}
-			if err != nil {
-				if msg.Event.RetryCount() >= maxVideoReactionRetries {
-					return w.Queue.MoveToDeadLetter(ctx, msg, err.Error())
-				}
-				next := msg
-				next.Event.Retry = msg.Event.Retry + 1
-				return w.Queue.Requeue(ctx, next, time.Second*time.Duration(next.Event.Retry), err.Error())
-			}
-		}
 		return w.Queue.Ack(ctx, msg.MessageID)
 	}
 	if err == nil && !found {
@@ -82,27 +59,6 @@ func (w *SegmentReactionWorker) RunOnce(ctx context.Context) error {
 	}
 	found, err := w.Repo.ApplySegmentReactionState(ctx, msg.Event.VideoID, msg.Event.UserID, msg.Event.ReactionType, msg.Event.Active)
 	if err == nil && found {
-		if w.ProfileUpdater != nil {
-			now := time.Now()
-			err = w.ProfileUpdater.RebuildUserVideoProfile(ctx, msg.Event.UserID, "video_profile_v1", now)
-			if err == nil {
-				if updater, ok := w.ProfileUpdater.(UserTowerEmbeddingUpdater); ok {
-					var version string
-					version, err = activeTwoTowerModelVersion(ctx, w.ProfileUpdater)
-					if err == nil {
-						err = updater.RebuildUserTowerEmbedding(ctx, msg.Event.UserID, version, now)
-					}
-				}
-			}
-			if err != nil {
-				if msg.Event.RetryCount() >= maxVideoReactionRetries {
-					return w.Queue.MoveToDeadLetter(ctx, msg, err.Error())
-				}
-				next := msg
-				next.Event.Retry = msg.Event.Retry + 1
-				return w.Queue.Requeue(ctx, next, time.Second*time.Duration(next.Event.Retry), err.Error())
-			}
-		}
 		return w.Queue.Ack(ctx, msg.MessageID)
 	}
 	if err == nil && !found {

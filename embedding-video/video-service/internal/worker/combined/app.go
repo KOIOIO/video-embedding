@@ -7,8 +7,8 @@ import (
 	"nlp-video-analysis/internal/config"
 	"nlp-video-analysis/internal/lifecycle"
 	gorsesyncworker "nlp-video-analysis/internal/worker/gorsesync"
+	"nlp-video-analysis/internal/worker/recboletrainer"
 	transcodeworker "nlp-video-analysis/internal/worker/transcodeworker"
-	"nlp-video-analysis/internal/worker/twotowertrainer"
 	vectorworker "nlp-video-analysis/internal/worker/vectorworker"
 	"nlp-video-analysis/middleware"
 
@@ -30,14 +30,14 @@ func Run() {
 	transcodeworker.Register(app, cfg)
 	vectorworker.Register(app, cfg)
 	gorsesyncworker.Register(app, cfg)
-	twotowertrainer.Register(app, cfg)
+	recboletrainer.Register(app, cfg)
 
 	zap.L().Info("worker_start",
 		zap.String("mode", "combined"),
 		zap.Int("transcode_workers", normalizedTranscodeWorkerCount(cfg)),
 		zap.Int("vector_workers", normalizedVectorWorkerCount(cfg)),
 		zap.Bool("gorse_sync_enabled", cfg.Gorse.SyncEnabled),
-		zap.Bool("two_tower_trainer_enabled", twotowertrainer.EnabledFromEnv()),
+		zap.Bool("recbole_trainer_enabled", recboletrainer.EnabledFromEnv()),
 	)
 
 	if err := app.Run(nil); err != nil {

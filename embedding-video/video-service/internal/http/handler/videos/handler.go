@@ -34,7 +34,7 @@ type videoApp interface {
 	SubmitSegmentReaction(ctx context.Context, segmentID uint64, userID uint64, reactionType videoapp.VideoReactionType) (videoapp.VideoReactionResult, bool, error)
 	GetSegmentReactionCounts(ctx context.Context, segmentID uint64) (videoapp.VideoReactionCounts, bool, error)
 	RandomPlayVideoSegment(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error)
-	ExternalTwoTowerItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
+	ExternalRecBoleItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
 	GetTranscodeStatus(ctx context.Context, taskID string) (videoapp.TranscodeStatus, bool, error)
 }
 
@@ -388,17 +388,19 @@ func (h *Handler) RandomPlayVideoSegment(c *gin.Context) {
 		title = item.TitleOverride
 	}
 	writeSuccess(c, dto.RandomVideoSegmentData{
-		VideoID:        item.VideoID,
-		VideoSegmentID: item.VideoSegmentID,
-		StartTimeSec:   item.StartTimeSec,
-		EndTimeSec:     item.EndTimeSec,
-		Title:          title,
-		CoverURL:       item.Video.CoverURL,
-		PlayURL:        strings.TrimSpace(h.app.ResolvePlaybackURL(c.Request.Context(), item.Video)),
+		VideoID:          item.VideoID,
+		VideoSegmentID:   item.VideoSegmentID,
+		StartTimeSec:     item.StartTimeSec,
+		EndTimeSec:       item.EndTimeSec,
+		Title:            title,
+		CoverURL:         item.Video.CoverURL,
+		PlayURL:          strings.TrimSpace(h.app.ResolvePlaybackURL(c.Request.Context(), item.Video)),
+		UserReacted:      item.UserReacted,
+		UserReactionType: string(item.UserReactionType),
 	})
 }
 
-func (h *Handler) ExternalTwoTowerRecommendations(c *gin.Context) {
+func (h *Handler) ExternalRecBoleRecommendations(c *gin.Context) {
 	userID, ok := parseOptionalPositiveUintQuery(c, "user_id")
 	if !ok {
 		return
@@ -414,12 +416,12 @@ func (h *Handler) ExternalTwoTowerRecommendations(c *gin.Context) {
 	if limit > 500 {
 		limit = 500
 	}
-	ids, err := h.app.ExternalTwoTowerItemIDs(c.Request.Context(), videoapp.RandomPlayVideoSegmentInput{
+	ids, err := h.app.ExternalRecBoleItemIDs(c.Request.Context(), videoapp.RandomPlayVideoSegmentInput{
 		UserID: userID,
 		Limit:  limit,
 	})
 	if err != nil {
-		writeAppError(c, err, "external two tower recommendation failed")
+		writeAppError(c, err, "external RecBole recommendation failed")
 		return
 	}
 	c.JSON(http.StatusOK, formatExternalItemIDs(ids))

@@ -147,6 +147,49 @@ func TestRecommendByQuestionRecordsQuestionVectorExposuresWithRank(t *testing.T)
 	}
 }
 
+func TestPreviewRecommendByQuestionDoesNotPersistRecommendationOrExposure(t *testing.T) {
+	repo := &fakeRepository{
+		embeddingDim: 2,
+		questionText: "[1,0]",
+		candidates: []Candidate{{
+			VideoSegmentID: 22,
+			VideoID:        11,
+			Distance:       0.25,
+			SegmentTitle:   "preview segment",
+			Status:         int16(domainvideo.StatusDone),
+			IsPublished:    true,
+		}},
+	}
+	svc := Service{
+		Repo:            repo,
+		Now:             time.Now,
+		InvalidArgument: invalidArgumentError,
+	}
+
+	items, err := svc.PreviewRecommendByQuestion(context.Background(), RecommendByQuestionInput{QuestionID: 99, UserID: 7, Limit: 1})
+	if err != nil {
+		t.Fatalf("PreviewRecommendByQuestion returned error: %v", err)
+	}
+	if repo.questionID != 99 {
+		t.Fatalf("questionID = %d, want 99", repo.questionID)
+	}
+	if repo.findLimit != 1 {
+		t.Fatalf("find limit = %d, want 1", repo.findLimit)
+	}
+	if len(items) != 1 || items[0].VideoSegmentID != 22 {
+		t.Fatalf("items = %+v, want preview segment 22", items)
+	}
+	if items[0].Strategy != StrategyQuestionVector {
+		t.Fatalf("strategy = %q, want %q", items[0].Strategy, StrategyQuestionVector)
+	}
+	if len(repo.saved) != 0 {
+		t.Fatalf("saved recommendations = %d, want 0", len(repo.saved))
+	}
+	if len(repo.savedExposures) != 0 {
+		t.Fatalf("saved exposures = %d, want 0", len(repo.savedExposures))
+	}
+}
+
 func TestRecommendByQuestionUsesQuestionEmbeddingText(t *testing.T) {
 	repo := &fakeRepository{
 		embeddingDim: 2,
@@ -161,7 +204,7 @@ func TestRecommendByQuestionUsesQuestionEmbeddingText(t *testing.T) {
 		Repo:            repo,
 		Now:             time.Now,
 		InvalidArgument: invalidArgumentError,
-		Engine:          EngineTwoTower,
+		Engine:          EngineRecBole,
 	}
 
 	items, err := svc.RecommendByQuestion(context.Background(), RecommendByQuestionInput{QuestionID: 99, Limit: 100})
@@ -250,20 +293,20 @@ func TestRecommendByQuestionIgnoresUserVideoProfileWhenAvailable(t *testing.T) {
 	}
 }
 
-func TestRecommendByQuestionIgnoresTwoTowerRecallWhenUserEmbeddingAvailable(t *testing.T) {
+func TestRecommendByQuestionIgnoresRecBoleRecallWhenUserEmbeddingAvailable(t *testing.T) {
 	now := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
 	repo := &fakeRepository{
-		embeddingDim:  2,
-		questionText:  "[1,0]",
-		candidates:    []Candidate{{VideoSegmentID: 103, VideoID: 13, Distance: 0.20}},
-		twoTowerFound: true,
-		twoTowerEmbedding: UserTowerEmbedding{
+		embeddingDim: 2,
+		questionText: "[1,0]",
+		candidates:   []Candidate{{VideoSegmentID: 103, VideoID: 13, Distance: 0.20}},
+		recBoleFound: true,
+		recBoleEmbedding: UserRecBoleEmbedding{
 			UserID:       7,
 			Vector:       []float32{0.2, 0.8},
-			ModelVersion: DefaultTwoTowerModelVersion,
+			ModelVersion: DefaultRecBoleModelVersion,
 			Status:       1,
 		},
-		twoTowerCandidates: []TwoTowerCandidate{
+		recBoleCandidates: []RecBoleCandidate{
 			{
 				Candidate: Candidate{VideoSegmentID: 101, VideoID: 11, Distance: 0.10},
 			},
@@ -284,18 +327,18 @@ func TestRecommendByQuestionIgnoresTwoTowerRecallWhenUserEmbeddingAvailable(t *t
 		Repo:            repo,
 		Now:             func() time.Time { return now },
 		InvalidArgument: invalidArgumentError,
-		NewRequestID:    func() string { return "req-two-tower" },
+		NewRequestID:    func() string { return "req-recbole" },
 	}
 
 	items, err := svc.RecommendByQuestion(context.Background(), RecommendByQuestionInput{QuestionID: 99, UserID: 7, Limit: 1})
 	if err != nil {
 		t.Fatalf("RecommendByQuestion returned error: %v", err)
 	}
-	if repo.twoTowerRequested {
-		t.Fatal("two tower recall should not be requested for by-question matching")
+	if repo.recBoleRequested {
+		t.Fatal("RecBole recall should not be requested for by-question matching")
 	}
-	if repo.twoTowerFindLimit != 0 {
-		t.Fatalf("two tower find limit = %d, want 0", repo.twoTowerFindLimit)
+	if repo.recBoleFindLimit != 0 {
+		t.Fatalf("RecBole find limit = %d, want 0", repo.recBoleFindLimit)
 	}
 	if repo.profileRequested {
 		t.Fatal("profile rerank should not be requested for by-question matching")
@@ -313,26 +356,26 @@ func TestRecommendByQuestionIgnoresTwoTowerRecallWhenUserEmbeddingAvailable(t *t
 		t.Fatalf("saved exposures = %d, want 1", len(repo.savedExposures))
 	}
 	exposure := repo.savedExposures[0]
-	if exposure.RequestID != "req-two-tower" || exposure.Strategy != StrategyQuestionVector || exposure.ModelVersion != "" {
+	if exposure.RequestID != "req-recbole" || exposure.Strategy != StrategyQuestionVector || exposure.ModelVersion != "" {
 		t.Fatalf("exposure = %+v, want question vector metadata", exposure)
 	}
 }
 
-func TestRandomPlayUsesActiveTwoTowerModelVersion(t *testing.T) {
+func TestRandomPlayUsesActiveRecBoleModelVersion(t *testing.T) {
 	repo := &fakeRepository{
-		activeTwoTowerVersion: "two_tower_v2",
-		activeTwoTowerFound:   true,
-		expectedTowerVersion:  "two_tower_v2",
-		expectedRecallVersion: "two_tower_v2",
-		twoTowerFound:         true,
-		twoTowerEmbedding:     UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: "two_tower_v2", Status: 1},
-		twoTowerCandidates:    []TwoTowerCandidate{{Candidate: Candidate{VideoSegmentID: 201, VideoID: 21, Distance: 0.10}}},
+		activeRecBoleVersion:   "recbole_v2",
+		activeRecBoleFound:     true,
+		expectedRecBoleVersion: "recbole_v2",
+		expectedRecallVersion:  "recbole_v2",
+		recBoleFound:           true,
+		recBoleEmbedding:       UserRecBoleEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: "recbole_v2", Status: 1},
+		recBoleCandidates:      []RecBoleCandidate{{Candidate: Candidate{VideoSegmentID: 201, VideoID: 21, Distance: 0.10}}},
 	}
 	svc := Service{
 		Repo:            repo,
 		Now:             time.Now,
 		InvalidArgument: invalidArgumentError,
-		Engine:          EngineTwoTower,
+		Engine:          EngineRecBole,
 	}
 
 	items, err := svc.RandomPlay(context.Background(), RandomPlayInput{UserID: 7, Limit: 1})
@@ -340,19 +383,19 @@ func TestRandomPlayUsesActiveTwoTowerModelVersion(t *testing.T) {
 		t.Fatalf("RandomPlay returned error: %v", err)
 	}
 	if len(items) != 1 || items[0].QuestionID != 0 || items[0].VideoSegmentID != 201 {
-		t.Fatalf("items = %+v, want random-play two tower segment 201", items)
+		t.Fatalf("items = %+v, want random-play RecBole segment 201", items)
 	}
-	if !repo.activeTwoTowerRequested {
-		t.Fatal("expected active two tower version to be requested")
+	if !repo.activeRecBoleRequested {
+		t.Fatal("expected active RecBole version to be requested")
 	}
 	if len(repo.savedExposures) != 1 {
 		t.Fatalf("saved exposures = %d, want 1", len(repo.savedExposures))
 	}
-	if got := repo.savedExposures[0].ModelVersion; got != "two_tower_v2" {
-		t.Fatalf("exposure model version = %q, want two_tower_v2", got)
+	if got := repo.savedExposures[0].ModelVersion; got != "recbole_v2" {
+		t.Fatalf("exposure model version = %q, want recbole_v2", got)
 	}
-	if got := repo.savedExposures[0].Strategy; got != StrategyTwoTower {
-		t.Fatalf("exposure strategy = %q, want %q", got, StrategyTwoTower)
+	if got := repo.savedExposures[0].Strategy; got != StrategyRecBole {
+		t.Fatalf("exposure strategy = %q, want %q", got, StrategyRecBole)
 	}
 }
 
@@ -374,9 +417,9 @@ func TestRandomPlayUsesKnowledgeMatchByDefault(t *testing.T) {
 			Status:         int16(domainvideo.StatusDone),
 			IsPublished:    true,
 		}},
-		twoTowerFound:      true,
-		twoTowerEmbedding:  UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: DefaultTwoTowerModelVersion, Status: 1},
-		twoTowerCandidates: []TwoTowerCandidate{{Candidate: Candidate{VideoSegmentID: 999, VideoID: 99, Distance: 0.1}}},
+		recBoleFound:      true,
+		recBoleEmbedding:  UserRecBoleEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: DefaultRecBoleModelVersion, Status: 1},
+		recBoleCandidates: []RecBoleCandidate{{Candidate: Candidate{VideoSegmentID: 999, VideoID: 99, Distance: 0.1}}},
 	}
 	gorse := &fakeGorseClient{ids: []uint64{101}}
 	embedder := &recordingEmbedder{vector: []float32{1, 2, 3}}
@@ -408,8 +451,8 @@ func TestRandomPlayUsesKnowledgeMatchByDefault(t *testing.T) {
 	if len(embedder.texts) != 1 || !strings.Contains(embedder.texts[0], "一次函数") || !strings.Contains(embedder.texts[0], "图像与斜率") {
 		t.Fatalf("embedder texts = %#v, want weak knowledge name and description", embedder.texts)
 	}
-	if repo.twoTowerRequested {
-		t.Fatal("two tower should not be requested by default knowledge_match engine")
+	if repo.recBoleRequested {
+		t.Fatal("RecBole should not be requested by default knowledge_match engine")
 	}
 	if gorse.userID != 0 {
 		t.Fatalf("gorse userID = %d, want no call", gorse.userID)
@@ -568,11 +611,11 @@ func TestRandomPlaySkipsRecentlyReturnedSegment(t *testing.T) {
 	}
 }
 
-func TestRandomPlayKnowledgeMatchDoesNotFallBackToTwoTower(t *testing.T) {
+func TestRandomPlayKnowledgeMatchDoesNotFallBackToRecBole(t *testing.T) {
 	repo := &fakeRepository{
-		twoTowerFound:      true,
-		twoTowerEmbedding:  UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: DefaultTwoTowerModelVersion, Status: 1},
-		twoTowerCandidates: []TwoTowerCandidate{{Candidate: Candidate{VideoSegmentID: 999, VideoID: 99, Distance: 0.1}}},
+		recBoleFound:      true,
+		recBoleEmbedding:  UserRecBoleEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: DefaultRecBoleModelVersion, Status: 1},
+		recBoleCandidates: []RecBoleCandidate{{Candidate: Candidate{VideoSegmentID: 999, VideoID: 99, Distance: 0.1}}},
 	}
 	svc := Service{
 		Repo:            repo,
@@ -587,8 +630,8 @@ func TestRandomPlayKnowledgeMatchDoesNotFallBackToTwoTower(t *testing.T) {
 	if len(items) != 0 {
 		t.Fatalf("items = %+v, want empty so outer random fallback can run", items)
 	}
-	if repo.twoTowerRequested {
-		t.Fatal("two tower should not be requested when knowledge match has no candidates")
+	if repo.recBoleRequested {
+		t.Fatal("RecBole should not be requested when knowledge match has no candidates")
 	}
 }
 
@@ -653,8 +696,8 @@ func TestRandomPlayUsesGorseWhenEngineEnabled(t *testing.T) {
 	if repo.hydrateUserID != 7 || !reflect.DeepEqual(repo.hydrateIDs, []uint64{101, 202}) {
 		t.Fatalf("hydrate userID=%d ids=%v, want 7 [101 202]", repo.hydrateUserID, repo.hydrateIDs)
 	}
-	if repo.twoTowerRequested {
-		t.Fatal("two tower should not be requested when gorse succeeds")
+	if repo.recBoleRequested {
+		t.Fatal("RecBole should not be requested when gorse succeeds")
 	}
 	if len(repo.saved) != 2 || repo.saved[0].segmentID != 101 || repo.saved[1].segmentID != 202 {
 		t.Fatalf("saved = %+v, want gorse recommendations", repo.saved)
@@ -670,13 +713,111 @@ func TestRandomPlayUsesGorseWhenEngineEnabled(t *testing.T) {
 	}
 }
 
-func TestRandomPlayGorseEngineDoesNotFallBackToTwoTowerWhenGorseReturnsTooFewCandidates(t *testing.T) {
+func TestPreviewRandomPlayUsesKnowledgeMatchWithoutRecordingSideEffects(t *testing.T) {
 	repo := &fakeRepository{
-		activeTwoTowerVersion: "two_tower_v2",
-		activeTwoTowerFound:   true,
-		twoTowerFound:         true,
-		twoTowerEmbedding:     UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: "two_tower_v2", Status: 1},
-		twoTowerCandidates:    []TwoTowerCandidate{{Candidate: Candidate{VideoSegmentID: 301, VideoID: 31, Distance: 0.10}}},
+		embeddingDim: 3,
+		weakKnowledge: []WeakKnowledge{{
+			KnowledgePointID: 1,
+			Mastery:          0.2,
+			Name:             "一次函数",
+			Description:      "图像 斜率",
+		}},
+		knowledgeVectorCandidates: []Candidate{
+			{VideoSegmentID: 101, VideoID: 11, SegmentTitle: "一次函数图像", Status: int16(domainvideo.StatusDone), IsPublished: true},
+			{VideoSegmentID: 202, VideoID: 22, SegmentTitle: "一次函数斜率", Status: int16(domainvideo.StatusDone), IsPublished: true},
+		},
+	}
+	recency := &fakeRecentSegmentStore{}
+	svc := Service{
+		Repo:             repo,
+		Embedder:         fakeEmbedder{vector: []float32{1, 0, 0}},
+		Now:              time.Now,
+		InvalidArgument:  invalidArgumentError,
+		Engine:           EngineKnowledgeMatch,
+		RecentSegments:   recency,
+		RecentSegmentTTL: 30 * time.Minute,
+		NewRequestID:     func() string { return "req-preview" },
+	}
+
+	items, err := svc.PreviewRandomPlay(context.Background(), RandomPlayInput{UserID: 7, Limit: 2})
+	if err != nil {
+		t.Fatalf("PreviewRandomPlay returned error: %v", err)
+	}
+	if len(items) != 2 || items[0].VideoSegmentID != 101 || items[1].VideoSegmentID != 202 {
+		t.Fatalf("items = %+v, want knowledge preview 101,202", items)
+	}
+	if repo.weakKnowledgeUserID != 7 || repo.weakKnowledgeLimit != 10 {
+		t.Fatalf("weak knowledge call userID=%d limit=%d, want 7 10", repo.weakKnowledgeUserID, repo.weakKnowledgeLimit)
+	}
+	if repo.knowledgeVectorUserID != 7 || repo.knowledgeVectorLimit != 50 {
+		t.Fatalf("knowledge vector call userID=%d limit=%d, want 7 50", repo.knowledgeVectorUserID, repo.knowledgeVectorLimit)
+	}
+	if len(repo.saved) != 0 {
+		t.Fatalf("saved recommendations = %+v, want none", repo.saved)
+	}
+	if len(repo.savedExposures) != 0 {
+		t.Fatalf("saved exposures = %+v, want none", repo.savedExposures)
+	}
+	if len(recency.marked) != 0 {
+		t.Fatalf("marked recent segments = %v, want none", recency.marked)
+	}
+}
+
+func TestPreviewRandomPlayUsesGorseWithoutRecordingSideEffects(t *testing.T) {
+	repo := &fakeRepository{
+		hydratedCandidates: []Candidate{
+			{VideoSegmentID: 101, VideoID: 11, SegmentTitle: "first", Status: int16(domainvideo.StatusDone), IsPublished: true},
+			{VideoSegmentID: 202, VideoID: 22, SegmentTitle: "second", Status: int16(domainvideo.StatusDone), IsPublished: true},
+		},
+	}
+	recency := &fakeRecentSegmentStore{}
+	gorse := &fakeGorseClient{ids: []uint64{101, 0, 202}}
+	svc := Service{
+		Repo:             repo,
+		Now:              time.Now,
+		InvalidArgument:  invalidArgumentError,
+		Gorse:            gorse,
+		Engine:           EngineGorse,
+		GorseOptions:     GorseOptions{CandidateLimit: 3, WriteBackEnabled: true},
+		RecentSegments:   recency,
+		RecentSegmentTTL: 30 * time.Minute,
+		NewRequestID:     func() string { return "req-preview-gorse" },
+	}
+
+	items, err := svc.PreviewRandomPlay(context.Background(), RandomPlayInput{UserID: 7, Limit: 2})
+	if err != nil {
+		t.Fatalf("PreviewRandomPlay returned error: %v", err)
+	}
+	if len(items) != 2 || items[0].VideoSegmentID != 101 || items[1].VideoSegmentID != 202 {
+		t.Fatalf("items = %+v, want gorse preview 101,202", items)
+	}
+	if gorse.userID != 7 || gorse.n != 3 {
+		t.Fatalf("gorse call userID=%d n=%d, want 7 3", gorse.userID, gorse.n)
+	}
+	if repo.hydrateUserID != 7 || !reflect.DeepEqual(repo.hydrateIDs, []uint64{101, 202}) {
+		t.Fatalf("hydrate userID=%d ids=%v, want 7 [101 202]", repo.hydrateUserID, repo.hydrateIDs)
+	}
+	if len(repo.saved) != 0 {
+		t.Fatalf("saved recommendations = %+v, want none", repo.saved)
+	}
+	if len(repo.savedExposures) != 0 {
+		t.Fatalf("saved exposures = %+v, want none", repo.savedExposures)
+	}
+	if len(recency.marked) != 0 {
+		t.Fatalf("marked recent segments = %v, want none", recency.marked)
+	}
+	if len(gorse.feedback) != 0 {
+		t.Fatalf("gorse feedback = %+v, want none", gorse.feedback)
+	}
+}
+
+func TestRandomPlayGorseEngineDoesNotFallBackToRecBoleWhenGorseReturnsTooFewCandidates(t *testing.T) {
+	repo := &fakeRepository{
+		activeRecBoleVersion: "recbole_v2",
+		activeRecBoleFound:   true,
+		recBoleFound:         true,
+		recBoleEmbedding:     UserRecBoleEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: "recbole_v2", Status: 1},
+		recBoleCandidates:    []RecBoleCandidate{{Candidate: Candidate{VideoSegmentID: 301, VideoID: 31, Distance: 0.10}}},
 	}
 	gorse := &fakeGorseClient{ids: []uint64{999}}
 	svc := Service{
@@ -698,18 +839,18 @@ func TestRandomPlayGorseEngineDoesNotFallBackToTwoTowerWhenGorseReturnsTooFewCan
 	if len(items) != 0 {
 		t.Fatalf("items = %+v, want empty so outer random fallback can run", items)
 	}
-	if repo.twoTowerRequested {
-		t.Fatal("two tower should not be requested when gorse engine is sparse")
+	if repo.recBoleRequested {
+		t.Fatal("RecBole should not be requested when gorse engine is sparse")
 	}
 }
 
-func TestRandomPlayTwoTowerEngineBypassesGorse(t *testing.T) {
+func TestRandomPlayRecBoleEngineBypassesGorse(t *testing.T) {
 	repo := &fakeRepository{
-		activeTwoTowerVersion: "two_tower_v2",
-		activeTwoTowerFound:   true,
-		twoTowerFound:         true,
-		twoTowerEmbedding:     UserTowerEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: "two_tower_v2", Status: 1},
-		twoTowerCandidates:    []TwoTowerCandidate{{Candidate: Candidate{VideoSegmentID: 401, VideoID: 41, Distance: 0.10}}},
+		activeRecBoleVersion: "recbole_v2",
+		activeRecBoleFound:   true,
+		recBoleFound:         true,
+		recBoleEmbedding:     UserRecBoleEmbedding{UserID: 7, Vector: []float32{0.2, 0.8}, ModelVersion: "recbole_v2", Status: 1},
+		recBoleCandidates:    []RecBoleCandidate{{Candidate: Candidate{VideoSegmentID: 401, VideoID: 41, Distance: 0.10}}},
 	}
 	gorse := &fakeGorseClient{ids: []uint64{101}}
 	svc := Service{
@@ -717,7 +858,7 @@ func TestRandomPlayTwoTowerEngineBypassesGorse(t *testing.T) {
 		Now:             time.Now,
 		InvalidArgument: invalidArgumentError,
 		Gorse:           gorse,
-		Engine:          EngineTwoTower,
+		Engine:          EngineRecBole,
 	}
 
 	items, err := svc.RandomPlay(context.Background(), RandomPlayInput{UserID: 7, Limit: 1})
@@ -728,7 +869,7 @@ func TestRandomPlayTwoTowerEngineBypassesGorse(t *testing.T) {
 		t.Fatalf("gorse userID = %d, want no call", gorse.userID)
 	}
 	if len(items) != 1 || items[0].VideoSegmentID != 401 {
-		t.Fatalf("items = %+v, want two tower segment 401", items)
+		t.Fatalf("items = %+v, want RecBole segment 401", items)
 	}
 }
 
@@ -784,14 +925,11 @@ func TestRecommendByQuestionRejectsMissingQuestionInput(t *testing.T) {
 func TestReportWatchIncrementsOnlyNewParentVideoWatch(t *testing.T) {
 	now := time.Unix(1, 0)
 	repo := &fakeRepository{segmentVideoID: 17, watchCreated: true}
-	updater := &fakeProfileUpdater{}
 	svc := Service{
 		Repo:                  repo,
 		Now:                   func() time.Time { return now },
 		InvalidArgument:       invalidArgumentError,
 		ErrVideoSegmentAbsent: errors.New("segment missing"),
-		ProfileUpdater:        updater,
-		UserTowerUpdater:      updater,
 	}
 
 	err := svc.ReportWatch(context.Background(), ReportWatchInput{
@@ -809,12 +947,6 @@ func TestReportWatchIncrementsOnlyNewParentVideoWatch(t *testing.T) {
 	}
 	if repo.savedWatch.videoID != 17 || repo.savedWatch.questionID != 3 || repo.savedWatch.segmentID != 204 {
 		t.Fatalf("saved watch = %+v", repo.savedWatch)
-	}
-	if updater.calls != 1 || updater.lastUserID != 7 {
-		t.Fatalf("profile updater calls=%d userID=%d, want one call for user 7", updater.calls, updater.lastUserID)
-	}
-	if updater.towerCalls != 1 || updater.lastTowerUserID != 7 {
-		t.Fatalf("tower updater calls=%d userID=%d, want one call for user 7", updater.towerCalls, updater.lastTowerUserID)
 	}
 	if repo.markedExposure.userID != 7 || repo.markedExposure.questionID != 3 || repo.markedExposure.segmentID != 204 || repo.markedExposure.now != now {
 		t.Fatalf("marked exposure = %+v", repo.markedExposure)
@@ -861,15 +993,15 @@ type fakeRepository struct {
 	incrementedVideoID                          uint64
 	savedExposures                              []ExposureRecord
 	markedExposure                              markedExposure
-	twoTowerEmbedding                           UserTowerEmbedding
-	twoTowerFound                               bool
-	twoTowerRequested                           bool
-	twoTowerCandidates                          []TwoTowerCandidate
-	twoTowerFindLimit                           int
-	activeTwoTowerVersion                       string
-	activeTwoTowerFound                         bool
-	activeTwoTowerRequested                     bool
-	expectedTowerVersion                        string
+	recBoleEmbedding                            UserRecBoleEmbedding
+	recBoleFound                                bool
+	recBoleRequested                            bool
+	recBoleCandidates                           []RecBoleCandidate
+	recBoleFindLimit                            int
+	activeRecBoleVersion                        string
+	activeRecBoleFound                          bool
+	activeRecBoleRequested                      bool
+	expectedRecBoleVersion                      string
 	expectedRecallVersion                       string
 	hydrateIDs                                  []uint64
 	hydrateUserID                               uint64
@@ -921,26 +1053,26 @@ func (r *fakeRepository) FindRecommendedSegmentsForProfileRerank(_ context.Conte
 	return r.profileCandidates, nil
 }
 
-func (r *fakeRepository) GetUserTowerEmbedding(_ context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error) {
-	r.twoTowerRequested = true
-	if r.expectedTowerVersion != "" && modelVersion != r.expectedTowerVersion {
-		return UserTowerEmbedding{}, false, errors.New("unexpected tower model version: " + modelVersion)
+func (r *fakeRepository) GetUserRecBoleEmbedding(_ context.Context, userID uint64, modelVersion string) (UserRecBoleEmbedding, bool, error) {
+	r.recBoleRequested = true
+	if r.expectedRecBoleVersion != "" && modelVersion != r.expectedRecBoleVersion {
+		return UserRecBoleEmbedding{}, false, errors.New("unexpected RecBole model version: " + modelVersion)
 	}
-	if r.twoTowerEmbedding.UserID != 0 && r.twoTowerEmbedding.UserID != userID {
-		return UserTowerEmbedding{}, false, nil
+	if r.recBoleEmbedding.UserID != 0 && r.recBoleEmbedding.UserID != userID {
+		return UserRecBoleEmbedding{}, false, nil
 	}
-	if r.twoTowerEmbedding.ModelVersion != "" && r.twoTowerEmbedding.ModelVersion != modelVersion {
-		return UserTowerEmbedding{}, false, nil
+	if r.recBoleEmbedding.ModelVersion != "" && r.recBoleEmbedding.ModelVersion != modelVersion {
+		return UserRecBoleEmbedding{}, false, nil
 	}
-	return r.twoTowerEmbedding, r.twoTowerFound, nil
+	return r.recBoleEmbedding, r.recBoleFound, nil
 }
 
-func (r *fakeRepository) FindRecommendedSegmentsForTwoTower(_ context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error) {
+func (r *fakeRepository) FindRecommendedSegmentsForRecBole(_ context.Context, input RecBoleQuery) ([]RecBoleCandidate, error) {
 	if r.expectedRecallVersion != "" && input.ModelVersion != r.expectedRecallVersion {
 		return nil, errors.New("unexpected recall model version: " + input.ModelVersion)
 	}
-	r.twoTowerFindLimit = input.Limit
-	return r.twoTowerCandidates, nil
+	r.recBoleFindLimit = input.Limit
+	return r.recBoleCandidates, nil
 }
 
 func (r *fakeRepository) HydrateRecommendedSegmentsByID(_ context.Context, userID uint64, ids []uint64) ([]Candidate, error) {
@@ -973,9 +1105,9 @@ func (r *fakeRepository) FindRecommendedSegmentsByWeakKnowledge(_ context.Contex
 	return r.knowledgeCandidates, nil
 }
 
-func (r *fakeRepository) GetActiveTwoTowerModelVersion(context.Context) (string, bool, error) {
-	r.activeTwoTowerRequested = true
-	return r.activeTwoTowerVersion, r.activeTwoTowerFound, nil
+func (r *fakeRepository) GetActiveRecBoleModelVersion(context.Context) (string, bool, error) {
+	r.activeRecBoleRequested = true
+	return r.activeRecBoleVersion, r.activeRecBoleFound, nil
 }
 
 func (r *fakeRepository) SaveUserVideoRecommendation(_ context.Context, userID uint64, questionID uint64, videoID uint64, segmentID uint64, score float64, now time.Time) error {
@@ -1119,15 +1251,6 @@ func invalidArgumentError(message string) error {
 	return errors.New(message)
 }
 
-type fakeProfileUpdater struct {
-	calls           int
-	lastUserID      uint64
-	towerCalls      int
-	lastTowerUserID uint64
-	err             error
-	towerErr        error
-}
-
 type fakeGorseClient struct {
 	userID   uint64
 	n        int
@@ -1160,16 +1283,4 @@ func (c *fakeGorseClient) UpsertItems(context.Context, []GorseItem) error {
 
 func (c *fakeGorseClient) PatchItem(context.Context, GorseItem) error {
 	return nil
-}
-
-func (u *fakeProfileUpdater) RebuildUserVideoProfile(_ context.Context, userID uint64, _ string, _ time.Time) error {
-	u.calls++
-	u.lastUserID = userID
-	return u.err
-}
-
-func (u *fakeProfileUpdater) RebuildUserTowerEmbedding(_ context.Context, userID uint64, _ string, _ time.Time) error {
-	u.towerCalls++
-	u.lastTowerUserID = userID
-	return u.towerErr
 }

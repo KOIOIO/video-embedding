@@ -36,7 +36,3 @@ type LeaseStore interface {
 func DefaultRetryPolicy(err error, retries int) RetryDecision {
 	return workerapp.DefaultRetryPolicy(err, retries)
 }
-
-func isTemporaryStorageError(err error) bool {
-	return workerapp.IsTemporaryStorageError(err)
-}

@@ -199,30 +199,6 @@ func TestGetTranscodeStatusPassesThroughStore(t *testing.T) {
 	}
 }
 
-func TestDeriveHLSURLFromRaw(t *testing.T) {
-	tests := []struct {
-		name       string
-		rawURL     string
-		rawPrefix  string
-		hlsPrefix  string
-		masterName string
-		want       string
-	}{
-		{name: "empty", rawURL: "", rawPrefix: "/videos/raw", hlsPrefix: "/videos/hls", masterName: "master.m3u8", want: ""},
-		{name: "invalid", rawURL: "/videos/raw/lesson.mp4", rawPrefix: "/videos/raw", hlsPrefix: "/videos/hls", masterName: "master.m3u8", want: ""},
-		{name: "valid", rawURL: "/videos/raw/2026/05/21/lesson.mp4", rawPrefix: "/videos/raw", hlsPrefix: "/videos/hls", masterName: "master.m3u8", want: "/videos/hls/2026/05/21/lesson/master.m3u8"},
-		{name: "configured", rawURL: "/media/source/2026/05/21/lesson.mp4", rawPrefix: "/media/source", hlsPrefix: "/media/stream", masterName: "playlist.m3u8", want: "/media/stream/2026/05/21/lesson/playlist.m3u8"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := deriveHLSURLFromRaw(tc.rawURL, tc.rawPrefix, tc.hlsPrefix, tc.masterName); got != tc.want {
-				t.Fatalf("deriveHLSURLFromRaw(%q) = %q, want %q", tc.rawURL, got, tc.want)
-			}
-		})
-	}
-}
-
 type playGetByIDResult struct {
 	video domainvideo.Video
 	ok    bool

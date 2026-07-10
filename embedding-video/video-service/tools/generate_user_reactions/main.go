@@ -299,10 +299,6 @@ func loadExistingPairs(ctx context.Context, db *sql.DB) (map[pairKey]bool, error
 	return pairs, rows.Err()
 }
 
-func buildReactionPlans(users []uint64, segments []videoSegment, count int, rng *rand.Rand, now time.Time) ([]reactionPlan, error) {
-	return buildReactionPlansExcluding(users, segments, count, nil, rng, now, defaultDaysBack*24*time.Hour)
-}
-
 func buildReactionPlansExcluding(users []uint64, segments []videoSegment, count int, excluded map[pairKey]bool, rng *rand.Rand, now time.Time, window time.Duration) ([]reactionPlan, error) {
 	if count < 0 {
 		return nil, errors.New("count must be >= 0")

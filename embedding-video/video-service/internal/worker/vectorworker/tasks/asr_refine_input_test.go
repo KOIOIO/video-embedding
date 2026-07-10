@@ -11,7 +11,7 @@ import (
 
 func TestBuildRefineSegmentInputUsesCoarseTextWhenConfidenceIsNotLow(t *testing.T) {
 	called := false
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           60,
 		EndSec:             120,
 		NextStartSec:       0,
@@ -20,7 +20,7 @@ func TestBuildRefineSegmentInputUsesCoarseTextWhenConfidenceIsNotLow(t *testing.
 	}, []CoarseItem{{StartSec: 60, EndSec: 120, Text: "这一段在讲定义。"}}, 180, func(context.Context, int, int) (string, error) {
 		called = true
 		return "", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -45,7 +45,7 @@ func TestBuildRefineSegmentInputUsesSingleShotASRForLowConfidence(t *testing.T) 
 	var calls int
 	var gotStart int
 	var gotEnd int
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           60,
 		EndSec:             120,
 		NextStartSec:       123,
@@ -56,7 +56,7 @@ func TestBuildRefineSegmentInputUsesSingleShotASRForLowConfidence(t *testing.T) 
 		gotStart = startSec
 		gotEnd = endSec
 		return "低置信度段补识别文本。", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestBuildRefineSegmentInputUsesSingleShotASRForLowConfidence(t *testing.T) 
 
 func TestBuildRefineSegmentInputFallsBackToCoarseTextWhenLowConfidenceASRFails(t *testing.T) {
 	var calls int
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           30,
 		EndSec:             70,
 		NextStartSec:       0,
@@ -88,7 +88,7 @@ func TestBuildRefineSegmentInputFallsBackToCoarseTextWhenLowConfidenceASRFails(t
 	}, []CoarseItem{{StartSec: 0, EndSec: 90, Text: "这部分是总结内容。"}}, 100, func(context.Context, int, int) (string, error) {
 		calls++
 		return "", context.DeadlineExceeded
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -107,14 +107,14 @@ func TestBuildRefineSegmentInputFallsBackToCoarseTextWhenLowConfidenceASRFails(t
 }
 
 func TestBuildRefineSegmentInputUsesContentSummaryOnlyWhenCoarseTextIsEmpty(t *testing.T) {
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           10,
 		EndSec:             20,
 		Summary:            "标题",
 		BoundaryConfidence: "high",
 	}, nil, 100, func(context.Context, int, int) (string, error) {
 		return "", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -159,7 +159,7 @@ func TestBuildRefineJobsUsesFullSegmentTimelineForNextStart(t *testing.T) {
 
 func TestBuildRefineSegmentInputUsesRefineASRWhenSummaryContentMismatchIsDetected(t *testing.T) {
 	var calls int
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           40,
 		EndSec:             60,
 		NextStartSec:       80,
@@ -168,7 +168,7 @@ func TestBuildRefineSegmentInputUsesRefineASRWhenSummaryContentMismatchIsDetecte
 	}, []CoarseItem{{StartSec: 40, EndSec: 60, Text: "先看定义"}}, 120, func(context.Context, int, int) (string, error) {
 		calls++
 		return "完整讲解定义和适用条件。", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -185,7 +185,7 @@ func TestBuildRefineSegmentInputUsesRefineASRWhenSummaryContentMismatchIsDetecte
 
 func TestBuildRefineSegmentInputSkipsRefineForHealthyHighConfidenceSegment(t *testing.T) {
 	var calls int
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           0,
 		EndSec:             45,
 		NextStartSec:       0,
@@ -194,7 +194,7 @@ func TestBuildRefineSegmentInputSkipsRefineForHealthyHighConfidenceSegment(t *te
 	}, []CoarseItem{{StartSec: 0, EndSec: 45, Text: "下面先看定义，这就是它的定义。"}}, 120, func(context.Context, int, int) (string, error) {
 		calls++
 		return "", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestBuildRefineSegmentInputSkipsRefineForHealthyHighConfidenceSegment(t *te
 }
 
 func TestBuildRefineSegmentInputRewritesSummaryFromStableCoarseText(t *testing.T) {
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           0,
 		EndSec:             45,
 		NextStartSec:       0,
@@ -218,7 +218,7 @@ func TestBuildRefineSegmentInputRewritesSummaryFromStableCoarseText(t *testing.T
 		BoundaryConfidence: "high",
 	}, []CoarseItem{{StartSec: 0, EndSec: 45, Text: "下面先看定义，这就是它的定义。"}}, 120, func(context.Context, int, int) (string, error) {
 		return "", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}
@@ -231,7 +231,7 @@ func TestBuildRefineSegmentInputRewritesSummaryFromStableCoarseText(t *testing.T
 }
 
 func TestBuildRefineSegmentInputRewritesUnsupportedLateSummaryFromCoarseText(t *testing.T) {
-	result, err := buildRefineSegmentInput(context.Background(), refineInputJob{
+	result, err := buildRefineSegmentInputWithSummaryRewrite(context.Background(), refineInputJob{
 		StartSec:           720,
 		EndSec:             790,
 		NextStartSec:       0,
@@ -239,7 +239,7 @@ func TestBuildRefineSegmentInputRewritesUnsupportedLateSummaryFromCoarseText(t *
 		BoundaryConfidence: "high",
 	}, []CoarseItem{{StartSec: 720, EndSec: 790, Text: "我们现在看函数单调性，先求导数，再判断导函数的正负。"}}, 900, func(context.Context, int, int) (string, error) {
 		return "", nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRefineSegmentInput error = %v", err)
 	}

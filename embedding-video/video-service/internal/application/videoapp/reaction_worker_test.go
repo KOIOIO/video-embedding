@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestVideoReactionWorkerRebuildsProfileAfterPersistingEvent(t *testing.T) {
+func TestVideoReactionWorkerDoesNotRebuildProfileAfterPersistingEvent(t *testing.T) {
 	queue := &reactionWorkerTestQueue{
 		msg: VideoReactionQueueMessage{
 			MessageID: "1-0",
@@ -19,9 +19,7 @@ func TestVideoReactionWorkerRebuildsProfileAfterPersistingEvent(t *testing.T) {
 		},
 	}
 	repo := &reactionWorkerVideoRepo{found: true}
-	updater := &reactionWorkerProfileUpdater{}
 	worker := NewVideoReactionWorker(queue, repo)
-	worker.ProfileUpdater = updater
 
 	if err := worker.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
@@ -29,18 +27,12 @@ func TestVideoReactionWorkerRebuildsProfileAfterPersistingEvent(t *testing.T) {
 	if repo.videoID != 11 || repo.userID != 7 || repo.reactionType != VideoReactionLike || !repo.active {
 		t.Fatalf("repo call = %+v", repo)
 	}
-	if updater.calls != 1 || updater.lastUserID != 7 {
-		t.Fatalf("profile updater calls=%d userID=%d, want one call for user 7", updater.calls, updater.lastUserID)
-	}
-	if updater.towerCalls != 1 || updater.lastTowerUserID != 7 || updater.lastTowerVersion != "two_tower_v2" {
-		t.Fatalf("tower updater calls=%d userID=%d version=%q, want one call for user 7 version two_tower_v2", updater.towerCalls, updater.lastTowerUserID, updater.lastTowerVersion)
-	}
 	if queue.ackedID != "1-0" {
 		t.Fatalf("ackedID = %q, want 1-0", queue.ackedID)
 	}
 }
 
-func TestSegmentReactionWorkerRebuildsProfileAfterPersistingEvent(t *testing.T) {
+func TestSegmentReactionWorkerDoesNotRebuildProfileAfterPersistingEvent(t *testing.T) {
 	queue := &reactionWorkerTestQueue{
 		msg: VideoReactionQueueMessage{
 			MessageID: "2-0",
@@ -53,18 +45,13 @@ func TestSegmentReactionWorkerRebuildsProfileAfterPersistingEvent(t *testing.T) 
 		},
 	}
 	repo := &reactionWorkerSegmentRepo{found: true}
-	updater := &reactionWorkerProfileUpdater{}
 	worker := NewSegmentReactionWorker(queue, repo)
-	worker.ProfileUpdater = updater
 
 	if err := worker.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
 	}
 	if repo.segmentID != 22 || repo.userID != 8 || repo.reactionType != VideoReactionDoubleLike || !repo.active {
 		t.Fatalf("repo call = %+v", repo)
-	}
-	if updater.calls != 1 || updater.lastUserID != 8 {
-		t.Fatalf("profile updater calls=%d userID=%d, want one call for user 8", updater.calls, updater.lastUserID)
 	}
 	if queue.ackedID != "2-0" {
 		t.Fatalf("ackedID = %q, want 2-0", queue.ackedID)
@@ -127,29 +114,4 @@ func (r *reactionWorkerSegmentRepo) ApplySegmentReactionState(_ context.Context,
 	r.reactionType = reactionType
 	r.active = active
 	return r.found, nil
-}
-
-type reactionWorkerProfileUpdater struct {
-	calls            int
-	lastUserID       uint64
-	towerCalls       int
-	lastTowerUserID  uint64
-	lastTowerVersion string
-}
-
-func (u *reactionWorkerProfileUpdater) RebuildUserVideoProfile(_ context.Context, userID uint64, _ string, _ time.Time) error {
-	u.calls++
-	u.lastUserID = userID
-	return nil
-}
-
-func (*reactionWorkerProfileUpdater) GetActiveTwoTowerModelVersion(context.Context) (string, bool, error) {
-	return "two_tower_v2", true, nil
-}
-
-func (u *reactionWorkerProfileUpdater) RebuildUserTowerEmbedding(_ context.Context, userID uint64, modelVersion string, _ time.Time) error {
-	u.towerCalls++
-	u.lastTowerUserID = userID
-	u.lastTowerVersion = modelVersion
-	return nil
 }

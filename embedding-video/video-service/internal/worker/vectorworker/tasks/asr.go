@@ -216,10 +216,6 @@ func buildRefineJobs(pending []model.EduVideoSegment, all []model.EduVideoSegmen
 	return jobs
 }
 
-func buildRefineSegmentInput(ctx context.Context, job refineInputJob, coarseItems []CoarseItem, videoDurationSec int, transcribeRange func(context.Context, int, int) (string, error)) (refineSegmentInputResult, error) {
-	return buildRefineSegmentInputWithSummaryRewrite(ctx, job, coarseItems, videoDurationSec, transcribeRange, nil)
-}
-
 func buildRefineSegmentInputWithSummaryRewrite(ctx context.Context, job refineInputJob, coarseItems []CoarseItem, videoDurationSec int, transcribeRange func(context.Context, int, int) (string, error), rewriteSummary summaryRewriter) (refineSegmentInputResult, error) {
 	coarseText := buildTranscriptFromCoarseItems(coarseItems, job.StartSec, job.EndSec)
 	seg := LLMSegment{

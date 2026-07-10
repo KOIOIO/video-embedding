@@ -2,7 +2,7 @@
 
 ## 部署边界
 
-Gorse 和业务 HTTP/worker 解耦部署。默认 `docker-compose.yml` 不启动 Gorse；推荐引擎使用根目录的 `docker-compose.gorse.yml` 单独启动，形态和双塔训练链路一样独立。
+Gorse 和业务 HTTP/worker 解耦部署。默认 `docker-compose.yml` 不启动 Gorse；推荐引擎使用根目录的 `docker-compose.gorse.yml` 单独启动，形态和 RecBole 训练链路一样独立。
 
 业务服务仍是 API 和数据事实源。Gorse 只负责推荐用户、物品、反馈数据集、模型训练和推荐候选服务。
 
@@ -195,4 +195,4 @@ Gorse:
 docker compose -f docker-compose.gorse.yml down
 ```
 
-这不会删除 PostgreSQL 业务数据，也不会影响双塔训练目录。
+这不会删除 PostgreSQL 业务数据，也不会影响 RecBole 训练目录。

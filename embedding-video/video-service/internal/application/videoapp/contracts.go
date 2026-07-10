@@ -55,9 +55,9 @@ type VideoProfileRepository interface {
 	FindRecommendedSegmentsForProfileRerank(ctx context.Context, input ProfileRerankQuery) ([]ProfileRerankCandidate, error)
 }
 
-type TwoTowerRepository interface {
-	GetUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error)
-	FindRecommendedSegmentsForTwoTower(ctx context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error)
+type RecBoleRepository interface {
+	GetUserRecBoleEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserRecBoleEmbedding, bool, error)
+	FindRecommendedSegmentsForRecBole(ctx context.Context, input RecBoleQuery) ([]RecBoleCandidate, error)
 }
 
 type GorseHydrationRepository interface {
@@ -69,12 +69,8 @@ type WeakKnowledgeVectorRepository interface {
 	FindRecommendedSegmentsByWeakKnowledgeVector(ctx context.Context, input WeakKnowledgeVectorQuery) ([]RecommendCandidate, error)
 }
 
-type TwoTowerModelVersionRepository interface {
-	GetActiveTwoTowerModelVersion(ctx context.Context) (string, bool, error)
-}
-
-type VideoProfileUpdater interface {
-	RebuildUserVideoProfile(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
+type RecBoleModelVersionRepository interface {
+	GetActiveRecBoleModelVersion(ctx context.Context) (string, bool, error)
 }
 
 type ArchiveProcessingProgress struct {
@@ -85,10 +81,6 @@ type ArchiveProcessingProgress struct {
 
 type ArchiveProcessingProgressRepository interface {
 	GetArchiveProcessingProgress(ctx context.Context, videoIDs []uint64) (ArchiveProcessingProgress, error)
-}
-
-type UserTowerEmbeddingUpdater interface {
-	RebuildUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
 }
 
 type RecommendationExposureRepository interface {
@@ -150,6 +142,7 @@ type VideoReactionQueueMessage struct {
 type VideoReactionStore interface {
 	HasCounts(ctx context.Context, videoID uint64) (bool, error)
 	HasUserReaction(ctx context.Context, videoID uint64, userID uint64) (bool, error)
+	GetUserReaction(ctx context.Context, videoID uint64, userID uint64) (VideoReactionType, bool, bool, error)
 	Submit(ctx context.Context, videoID uint64, userID uint64, reactionType VideoReactionType, seed VideoReactionCounts, seedUserReaction VideoReactionType, seedUserActive bool) (VideoReactionResult, error)
 	GetCounts(ctx context.Context, videoID uint64, seed VideoReactionCounts) (VideoReactionCounts, error)
 }

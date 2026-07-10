@@ -442,26 +442,6 @@ func TestUploadVideoCoverRollsBackObjectWhenUpdateReturnsFalse(t *testing.T) {
 	}
 }
 
-func TestContentTypeFromExtension(t *testing.T) {
-	tests := []struct {
-		ext  string
-		want string
-	}{
-		{ext: ".jpg", want: "image/jpeg"},
-		{ext: ".jpeg", want: "image/jpeg"},
-		{ext: ".png", want: "image/png"},
-		{ext: ".webp", want: "image/webp"},
-		{ext: ".gif", want: "image/gif"},
-		{ext: ".bin", want: "application/octet-stream"},
-	}
-
-	for _, tc := range tests {
-		if got := contentTypeFromExtension(tc.ext); got != tc.want {
-			t.Fatalf("contentTypeFromExtension(%q) = %q, want %q", tc.ext, got, tc.want)
-		}
-	}
-}
-
 type uploadHTTPTestRepo struct {
 	createdID           uint64
 	nextIDs             []uint64

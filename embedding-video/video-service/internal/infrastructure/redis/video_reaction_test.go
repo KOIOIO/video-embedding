@@ -121,6 +121,34 @@ func TestVideoReactionBufferSeedsCountsAndUserState(t *testing.T) {
 	}
 }
 
+func TestVideoReactionBufferGetUserReactionReadsCachedState(t *testing.T) {
+	ctx := context.Background()
+	buffer, _, cleanup := newTestVideoReactionBuffer(t)
+	defer cleanup()
+
+	if _, err := buffer.Submit(ctx, 21, 7, videoapp.VideoReactionLike, videoapp.VideoReactionCounts{}, "", false); err != nil {
+		t.Fatalf("submit reaction: %v", err)
+	}
+	reactionType, active, found, err := buffer.GetUserReaction(ctx, 21, 7)
+	if err != nil {
+		t.Fatalf("GetUserReaction returned error: %v", err)
+	}
+	if !found || !active || reactionType != videoapp.VideoReactionLike {
+		t.Fatalf("reaction type=%q active=%v found=%v, want like active", reactionType, active, found)
+	}
+
+	if _, err := buffer.Submit(ctx, 21, 7, videoapp.VideoReactionLike, videoapp.VideoReactionCounts{}, videoapp.VideoReactionLike, true); err != nil {
+		t.Fatalf("cancel reaction: %v", err)
+	}
+	reactionType, active, found, err = buffer.GetUserReaction(ctx, 21, 7)
+	if err != nil {
+		t.Fatalf("GetUserReaction after cancel returned error: %v", err)
+	}
+	if !found || active || reactionType != "" {
+		t.Fatalf("reaction type=%q active=%v found=%v, want cached inactive state", reactionType, active, found)
+	}
+}
+
 func TestVideoReactionBufferGetCountsDoesNotReturnDislikeCount(t *testing.T) {
 	ctx := context.Background()
 	buffer, rdb, cleanup := newTestVideoReactionBuffer(t)

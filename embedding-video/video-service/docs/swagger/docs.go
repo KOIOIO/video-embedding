@@ -15,26 +15,26 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/internal/recommendations/external/two-tower": {
+        "/api/internal/recommendations/external/recbole": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "internal"
+                    "视频服务"
                 ],
-                "summary": "Get two-tower item IDs for Gorse external recommender",
+                "summary": "获取 RecBole 召回视频片段ID",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "User ID",
+                        "description": "用户ID",
                         "name": "user_id",
                         "in": "query",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "Number of item IDs, capped at 500",
+                        "description": "返回的视频片段ID数量，最多500个",
                         "name": "n",
                         "in": "query"
                     }
@@ -70,21 +70,21 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "questions"
+                    "视频服务"
                 ],
-                "summary": "List questions",
+                "summary": "查询题目列表",
                 "parameters": [
                     {
                         "type": "integer",
                         "default": 1,
-                        "description": "Page number",
+                        "description": "页码",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "default": 20,
-                        "description": "Page size",
+                        "description": "每页数量",
                         "name": "page_size",
                         "in": "query"
                     }
@@ -117,13 +117,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "questions"
+                    "视频服务"
                 ],
-                "summary": "Get question detail",
+                "summary": "查询题目详情",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Question ID",
+                        "description": "题目ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -163,26 +163,26 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "recommendations"
+                    "视频服务"
                 ],
-                "summary": "List recommendations",
+                "summary": "查询推荐列表",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Question ID",
+                        "description": "题目ID",
                         "name": "question_id",
                         "in": "query",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "User ID",
+                        "description": "用户ID",
                         "name": "user_id",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Result limit",
+                        "description": "返回数量",
                         "name": "limit",
                         "in": "query"
                     }
@@ -218,12 +218,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "recommendations"
+                    "视频服务"
                 ],
-                "summary": "Recommend videos by question",
+                "summary": "根据题目推荐视频",
                 "parameters": [
                     {
-                        "description": "Recommendation request",
+                        "description": "推荐请求参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -266,13 +266,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Get transcode task status",
+                "summary": "查询转码任务状态",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Transcode task ID",
+                        "description": "转码任务ID",
                         "name": "taskId",
                         "in": "path",
                         "required": true
@@ -312,13 +312,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Random play video segment",
+                "summary": "随机播放视频片段",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "User ID for two-tower personalized recommendation",
+                        "description": "用户ID，用于个性化推荐和最近播放去重",
                         "name": "user_id",
                         "in": "query"
                     }
@@ -357,13 +357,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Get a video segment's like and double-like counts",
+                "summary": "查询视频片段点赞和双击数量",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video segment ID",
+                        "description": "视频片段ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -406,19 +406,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Submit or cancel a video segment reaction",
+                "summary": "提交或取消视频片段互动",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video segment ID",
+                        "description": "视频片段ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Reaction request",
+                        "description": "互动参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -461,9 +461,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "List videos",
+                "summary": "查询视频列表",
                 "parameters": [
                     {
                         "enum": [
@@ -473,7 +473,7 @@ const docTemplate = `{
                         ],
                         "type": "string",
                         "default": "ALL",
-                        "description": "Filter type",
+                        "description": "视频类型筛选",
                         "name": "type",
                         "in": "query"
                     }
@@ -507,32 +507,32 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Upload a video",
+                "summary": "上传单个视频",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Video file",
+                        "description": "视频文件",
                         "name": "file",
                         "in": "formData",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "Video title",
+                        "description": "视频标题",
                         "name": "title",
                         "in": "formData"
                     },
                     {
                         "type": "string",
-                        "description": "Video description",
+                        "description": "视频描述",
                         "name": "description",
                         "in": "formData"
                     },
                     {
                         "type": "integer",
-                        "description": "Uploader user ID, defaults to 1",
+                        "description": "上传用户ID，默认1",
                         "name": "user_id",
                         "in": "formData"
                     }
@@ -568,26 +568,26 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Upload a zip archive containing videos",
+                "summary": "上传视频压缩包",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Zip archive",
+                        "description": "视频压缩包",
                         "name": "file",
                         "in": "formData",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "Video description",
+                        "description": "视频描述",
                         "name": "description",
                         "in": "formData"
                     },
                     {
                         "type": "integer",
-                        "description": "Uploader user ID, defaults to 1",
+                        "description": "上传用户ID，默认1",
                         "name": "user_id",
                         "in": "formData"
                     }
@@ -620,13 +620,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Get zip archive processing progress",
+                "summary": "查询视频压缩包处理进度",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Archive batch ID",
+                        "description": "压缩包批次ID",
                         "name": "batchId",
                         "in": "path",
                         "required": true
@@ -669,12 +669,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Initiate a chunked zip archive upload",
+                "summary": "初始化视频压缩包分片上传",
                 "parameters": [
                     {
-                        "description": "Chunked archive upload metadata",
+                        "description": "压缩包分片上传元信息",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -711,13 +711,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Complete a chunked zip archive upload",
+                "summary": "完成视频压缩包分片上传",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Upload ID",
+                        "description": "上传任务ID",
                         "name": "uploadId",
                         "in": "path",
                         "required": true
@@ -754,12 +754,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Initiate a chunked video upload",
+                "summary": "初始化视频分片上传",
                 "parameters": [
                     {
-                        "description": "Chunked upload metadata",
+                        "description": "分片上传元信息",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -796,13 +796,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Get chunked upload status",
+                "summary": "查询视频分片上传状态",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Upload ID",
+                        "description": "上传任务ID",
                         "name": "uploadId",
                         "in": "path",
                         "required": true
@@ -845,26 +845,26 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Upload one video chunk",
+                "summary": "上传视频分片",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Upload ID",
+                        "description": "上传任务ID",
                         "name": "uploadId",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "Zero-based chunk index",
+                        "description": "分片序号，从0开始",
                         "name": "chunkIndex",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Raw chunk bytes",
+                        "description": "分片二进制内容",
                         "name": "chunk",
                         "in": "body",
                         "required": true,
@@ -901,13 +901,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Complete a chunked video upload",
+                "summary": "完成视频分片上传",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Upload ID",
+                        "description": "上传任务ID",
                         "name": "uploadId",
                         "in": "path",
                         "required": true
@@ -941,13 +941,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Delete a video",
+                "summary": "删除视频",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -988,19 +988,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Update video metadata",
+                "summary": "修改视频基础信息",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Updated metadata",
+                        "description": "视频基础信息",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1046,20 +1046,20 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Upload a video cover",
+                "summary": "上传视频封面",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "file",
-                        "description": "Cover file",
+                        "description": "封面文件",
                         "name": "file",
                         "in": "formData",
                         "required": true
@@ -1099,13 +1099,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Resolve a video's playback URL",
+                "summary": "获取视频播放地址",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1148,19 +1148,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Set video published status",
+                "summary": "设置视频发布状态",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Publish request",
+                        "description": "发布状态参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1203,13 +1203,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Get a video's like and double-like counts",
+                "summary": "查询视频点赞和双击数量",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1252,19 +1252,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Submit or cancel a video reaction",
+                "summary": "提交或取消视频互动",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Reaction request",
+                        "description": "互动参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1310,19 +1310,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Set video recommendation status",
+                "summary": "设置视频推荐状态",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Recommendation request",
+                        "description": "推荐状态参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1365,13 +1365,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "List similar videos",
+                "summary": "查询相似视频",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1379,7 +1379,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 6,
-                        "description": "Result limit",
+                        "description": "返回数量",
                         "name": "limit",
                         "in": "query"
                     }
@@ -1412,13 +1412,13 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "videos"
+                    "视频服务"
                 ],
-                "summary": "Get a video's view count",
+                "summary": "查询视频播放次数",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Video ID",
+                        "description": "视频ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1461,12 +1461,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "recommendations"
+                    "视频服务"
                 ],
-                "summary": "Report watch progress",
+                "summary": "上报视频观看进度",
                 "parameters": [
                     {
-                        "description": "Watch report request",
+                        "description": "观看进度参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1808,6 +1808,12 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "title": {
+                    "type": "string"
+                },
+                "user_reacted": {
+                    "type": "boolean"
+                },
+                "user_reaction_type": {
                     "type": "string"
                 },
                 "video_id": {
@@ -2435,8 +2441,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "Video Embedding HTTP API",
-	Description:      "Standalone REST API for video upload, playback, recommendation, and question lookup.",
+	Title:            "衡水平板视频服务接口",
+	Description:      "提供视频上传、播放、推荐、题目查询等 HTTP 接口。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -2,7 +2,10 @@ package persistence
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"database/sql"
 	"math"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,7 +16,6 @@ import (
 	"gorm.io/gorm/clause"
 
 	"nlp-video-analysis/internal/application/videoapp"
-	profileapp "nlp-video-analysis/internal/application/videoapp/profile"
 	domainvideo "nlp-video-analysis/internal/domain/video"
 	"nlp-video-analysis/internal/infrastructure/persistence/sqlqueries"
 	"nlp-video-analysis/internal/model"
@@ -22,6 +24,8 @@ import (
 type GormVideoRepository struct {
 	db *gorm.DB
 }
+
+const readyVideoSegmentStatus int16 = 1
 
 // NewGormVideoRepository 创建基于 GORM 的视频仓储实现。
 func NewGormVideoRepository(db *gorm.DB) *GormVideoRepository {
@@ -924,24 +928,24 @@ func (r *GormVideoRepository) FindRecommendedSegmentsForProfileRerank(ctx contex
 	return rows, err
 }
 
-func (r *GormVideoRepository) GetUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string) (videoapp.UserTowerEmbedding, bool, error) {
+func (r *GormVideoRepository) GetUserRecBoleEmbedding(ctx context.Context, userID uint64, modelVersion string) (videoapp.UserRecBoleEmbedding, bool, error) {
 	var row struct {
 		UserID       uint64 `gorm:"column:user_id"`
-		TowerVector  string `gorm:"column:tower_vector"`
+		Embedding    string `gorm:"column:embedding"`
 		ModelVersion string `gorm:"column:model_version"`
 		Status       int16  `gorm:"column:status"`
 	}
-	if err := r.db.WithContext(ctx).Raw(sqlqueries.GetUserTowerEmbeddingQuery, userID, modelVersion).Scan(&row).Error; err != nil {
-		return videoapp.UserTowerEmbedding{}, false, err
+	if err := r.db.WithContext(ctx).Raw(sqlqueries.GetUserRecBoleEmbeddingQuery, userID, "recbole", modelVersion).Scan(&row).Error; err != nil {
+		return videoapp.UserRecBoleEmbedding{}, false, err
 	}
 	if row.UserID == 0 {
-		return videoapp.UserTowerEmbedding{}, false, nil
+		return videoapp.UserRecBoleEmbedding{}, false, nil
 	}
-	vector, err := parseVectorText(row.TowerVector)
+	vector, err := parseVectorText(row.Embedding)
 	if err != nil {
-		return videoapp.UserTowerEmbedding{}, false, err
+		return videoapp.UserRecBoleEmbedding{}, false, err
 	}
-	return videoapp.UserTowerEmbedding{
+	return videoapp.UserRecBoleEmbedding{
 		UserID:       row.UserID,
 		Vector:       vector,
 		ModelVersion: row.ModelVersion,
@@ -949,11 +953,12 @@ func (r *GormVideoRepository) GetUserTowerEmbedding(ctx context.Context, userID 
 	}, true, nil
 }
 
-func (r *GormVideoRepository) FindRecommendedSegmentsForTwoTower(ctx context.Context, input videoapp.TwoTowerQuery) ([]videoapp.TwoTowerCandidate, error) {
-	rows := make([]videoapp.TwoTowerCandidate, 0, input.Limit)
+func (r *GormVideoRepository) FindRecommendedSegmentsForRecBole(ctx context.Context, input videoapp.RecBoleQuery) ([]videoapp.RecBoleCandidate, error) {
+	rows := make([]videoapp.RecBoleCandidate, 0, input.Limit)
 	err := r.db.WithContext(ctx).Raw(
-		sqlqueries.RecommendByTwoTowerQuery,
+		sqlqueries.RecommendByRecBoleQuery,
 		input.UserVector,
+		"recbole",
 		input.ModelVersion,
 		input.UserVector,
 		input.Limit,
@@ -1250,11 +1255,11 @@ func knowledgeMatchTokens(knowledge weakKnowledgeRow) []string {
 	return tokens
 }
 
-func (r *GormVideoRepository) GetActiveTwoTowerModelVersion(ctx context.Context) (string, bool, error) {
+func (r *GormVideoRepository) GetActiveRecBoleModelVersion(ctx context.Context) (string, bool, error) {
 	var row struct {
 		ModelVersion string `gorm:"column:model_version"`
 	}
-	if err := r.db.WithContext(ctx).Raw(sqlqueries.GetActiveRecommendModelVersionQuery, "two_tower").Scan(&row).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(sqlqueries.GetActiveRecommendModelVersionQuery, "recbole").Scan(&row).Error; err != nil {
 		return "", false, err
 	}
 	version := strings.TrimSpace(row.ModelVersion)
@@ -1262,427 +1267,6 @@ func (r *GormVideoRepository) GetActiveTwoTowerModelVersion(ctx context.Context)
 		return "", false, nil
 	}
 	return version, true, nil
-}
-
-func (r *GormVideoRepository) RebuildUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string, now time.Time) error {
-	if userID == 0 {
-		return nil
-	}
-	modelVersion = strings.TrimSpace(modelVersion)
-	if modelVersion == "" {
-		modelVersion = "two_tower_v1"
-	}
-	events, err := r.loadUserTowerEvents(ctx, userID, modelVersion)
-	if err != nil {
-		return err
-	}
-	vector, status := buildTowerVector(events, now)
-	if len(vector) == 0 {
-		vector = make([]float32, 64)
-	}
-	return r.db.WithContext(ctx).Exec(`
-INSERT INTO edu_user_tower_embedding
-  (user_id, tower_vector, model_version, status, deleted, create_time, update_time)
-VALUES
-  (?, ?, ?, ?, 0, ?, ?)
-ON CONFLICT (user_id, model_version)
-DO UPDATE SET
-  tower_vector = EXCLUDED.tower_vector,
-  status = EXCLUDED.status,
-  deleted = 0,
-  update_time = EXCLUDED.update_time;`,
-		userID,
-		pgvector.NewVector(vector),
-		modelVersion,
-		status,
-		now,
-		now,
-	).Error
-}
-
-type towerEvent struct {
-	ReactionType    string
-	Source          string
-	Vector          []float32
-	WatchDuration   int
-	SegmentDuration int
-	EventTime       time.Time
-}
-
-func (r *GormVideoRepository) loadUserTowerEvents(ctx context.Context, userID uint64, modelVersion string) ([]towerEvent, error) {
-	var rows []struct {
-		Source          string    `gorm:"column:source"`
-		ReactionType    string    `gorm:"column:reaction_type"`
-		Vector          string    `gorm:"column:embedding"`
-		WatchDuration   int       `gorm:"column:watch_duration"`
-		SegmentDuration int       `gorm:"column:segment_duration"`
-		EventTime       time.Time `gorm:"column:event_time"`
-	}
-	if err := r.db.WithContext(ctx).Raw(`
-WITH item_vectors AS (
-  SELECT video_segment_id, video_id, embedding
-  FROM edu_video_item_embedding
-  WHERE model_version = ? AND status = 1 AND deleted = 0
-)
-SELECT 'segment_reaction' AS source,
-       ur.reaction_type AS reaction_type,
-       iv.embedding::text AS embedding,
-       0 AS watch_duration,
-       1 AS segment_duration,
-       ur.update_time AS event_time
-FROM edu_user_reaction ur
-JOIN item_vectors iv ON iv.video_segment_id = ur.video_segment_id AND iv.video_id = ur.video_id
-WHERE ur.user_id = ? AND ur.deleted = 0
-
-UNION ALL
-
-SELECT 'video_reaction' AS source,
-       vur.reaction_type AS reaction_type,
-       iv.embedding::text AS embedding,
-       0 AS watch_duration,
-       1 AS segment_duration,
-       vur.update_time AS event_time
-FROM edu_video_user_reaction vur
-JOIN item_vectors iv ON iv.video_id = vur.video_id
-WHERE vur.user_id = ? AND vur.deleted = 0
-
-UNION ALL
-
-SELECT 'watch' AS source,
-       '' AS reaction_type,
-       iv.embedding::text AS embedding,
-       COALESCE(uvr.watch_duration, 0) AS watch_duration,
-       GREATEST(COALESCE(s.end_time, 0) - COALESCE(s.start_time, 0), 1) AS segment_duration,
-       uvr.update_time AS event_time
-FROM edu_user_video_recommend uvr
-JOIN item_vectors iv ON iv.video_segment_id = uvr.video_segment_id AND iv.video_id = uvr.video_id
-JOIN edu_video_segment s ON s.id = uvr.video_segment_id
-WHERE uvr.user_id = ?
-  AND uvr.deleted = 0
-  AND uvr.is_watched = TRUE
-ORDER BY event_time DESC
-LIMIT 1000`, modelVersion, userID, userID, userID).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	events := make([]towerEvent, 0, len(rows))
-	for _, row := range rows {
-		vector, err := parseVectorText(row.Vector)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, towerEvent{
-			ReactionType:    row.ReactionType,
-			Source:          row.Source,
-			Vector:          vector,
-			WatchDuration:   row.WatchDuration,
-			SegmentDuration: row.SegmentDuration,
-			EventTime:       row.EventTime,
-		})
-	}
-	return events, nil
-}
-
-func buildTowerVector(events []towerEvent, now time.Time) ([]float32, int16) {
-	var sum []float64
-	var denominator float64
-	positiveCount := 0
-	for _, event := range events {
-		weight := towerEventWeight(event)
-		if weight == 0 || len(event.Vector) == 0 {
-			continue
-		}
-		weight *= towerTimeDecay(now.Sub(event.EventTime))
-		if weight == 0 {
-			continue
-		}
-		if sum == nil {
-			sum = make([]float64, len(event.Vector))
-		}
-		if len(event.Vector) != len(sum) {
-			continue
-		}
-		for i, value := range event.Vector {
-			sum[i] += float64(value) * weight
-		}
-		denominator += math.Abs(weight)
-		if weight > 0 {
-			positiveCount++
-		}
-	}
-	if denominator == 0 || len(sum) == 0 || positiveCount == 0 {
-		return nil, 0
-	}
-	vector := make([]float32, len(sum))
-	for i, value := range sum {
-		vector[i] = float32(value / denominator)
-	}
-	normalizeFloat32(vector)
-	return vector, 1
-}
-
-func towerEventWeight(event towerEvent) float64 {
-	switch event.Source {
-	case "segment_reaction":
-		switch event.ReactionType {
-		case "double_like":
-			return 3
-		case "like":
-			return 2
-		case "dislike":
-			return -2
-		}
-	case "video_reaction":
-		switch event.ReactionType {
-		case "double_like":
-			return 1.5
-		case "like":
-			return 1
-		case "dislike":
-			return -1
-		}
-	case "watch":
-		if event.WatchDuration <= 0 {
-			return 0
-		}
-		duration := event.SegmentDuration
-		if duration <= 0 {
-			duration = 1
-		}
-		ratio := float64(event.WatchDuration) / float64(duration)
-		switch {
-		case ratio >= 0.8:
-			return 1.2
-		case ratio >= 0.4:
-			return 0.7
-		default:
-			return 0.3
-		}
-	}
-	return 0
-}
-
-func towerTimeDecay(age time.Duration) float64 {
-	if age <= 7*24*time.Hour {
-		return 1
-	}
-	if age <= 30*24*time.Hour {
-		return 0.7
-	}
-	if age <= 90*24*time.Hour {
-		return 0.4
-	}
-	return 0.2
-}
-
-func normalizeFloat32(vector []float32) {
-	var sum float64
-	for _, value := range vector {
-		sum += float64(value) * float64(value)
-	}
-	norm := math.Sqrt(sum)
-	if norm == 0 {
-		return
-	}
-	for i := range vector {
-		vector[i] = float32(float64(vector[i]) / norm)
-	}
-}
-
-// RebuildUserVideoProfile 重新聚合用户视频行为并写入画像表。
-func (r *GormVideoRepository) RebuildUserVideoProfile(ctx context.Context, userID uint64, modelVersion string, now time.Time) error {
-	if userID == 0 {
-		return nil
-	}
-	modelVersion = strings.TrimSpace(modelVersion)
-	if modelVersion == "" {
-		modelVersion = "video_profile_v1"
-	}
-	events, err := r.loadUserVideoProfileEvents(ctx, userID)
-	if err != nil {
-		return err
-	}
-	built := profileapp.BuildUserVideoProfile(events, now)
-	status := int16(0)
-	vector := built.Vector
-	if built.Valid {
-		status = 1
-	} else {
-		vector = make([]float32, 1536)
-	}
-	return r.db.WithContext(ctx).Exec(`
-INSERT INTO edu_user_video_profile
-  (user_id, profile_vector, positive_count, negative_count, watch_count,
-   source_event_count, last_event_time, model_version, status, deleted,
-   create_time, update_time)
-VALUES
-  (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-ON CONFLICT (user_id, model_version)
-DO UPDATE SET
-  profile_vector = EXCLUDED.profile_vector,
-  positive_count = EXCLUDED.positive_count,
-  negative_count = EXCLUDED.negative_count,
-  watch_count = EXCLUDED.watch_count,
-  source_event_count = EXCLUDED.source_event_count,
-  last_event_time = EXCLUDED.last_event_time,
-  status = EXCLUDED.status,
-  deleted = 0,
-  update_time = EXCLUDED.update_time;`,
-		userID,
-		pgvector.NewVector(vector),
-		built.PositiveCount,
-		built.NegativeCount,
-		built.WatchCount,
-		built.SourceEventCount,
-		built.LastEventTime,
-		modelVersion,
-		status,
-		now,
-		now,
-	).Error
-}
-
-func (r *GormVideoRepository) loadUserVideoProfileEvents(ctx context.Context, userID uint64) ([]profileapp.WeightedEvent, error) {
-	events := make([]profileapp.WeightedEvent, 0, 128)
-	segmentEvents, err := r.loadSegmentReactionProfileEvents(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	events = append(events, segmentEvents...)
-	videoEvents, err := r.loadVideoReactionProfileEvents(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	events = append(events, videoEvents...)
-	watchEvents, err := r.loadWatchProfileEvents(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	events = append(events, watchEvents...)
-	return events, nil
-}
-
-func (r *GormVideoRepository) loadSegmentReactionProfileEvents(ctx context.Context, userID uint64) ([]profileapp.WeightedEvent, error) {
-	var rows []struct {
-		ReactionType string    `gorm:"column:reaction_type"`
-		Vector       string    `gorm:"column:embedding"`
-		EventTime    time.Time `gorm:"column:event_time"`
-	}
-	if err := r.db.WithContext(ctx).Raw(`
-SELECT ur.reaction_type AS reaction_type,
-       s.embedding::text AS embedding,
-       ur.update_time AS event_time
-FROM edu_user_reaction ur
-JOIN edu_video_segment s ON s.id = ur.video_segment_id
-JOIN edu_video_resource r ON r.id = s.video_id
-WHERE ur.user_id = ?
-  AND ur.deleted = 0
-  AND s.deleted = 0
-  AND s.status = 1
-  AND s.embedding IS NOT NULL
-  AND r.deleted = 0
-ORDER BY ur.update_time DESC
-LIMIT 500;`, userID).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	events := make([]profileapp.WeightedEvent, 0, len(rows))
-	for _, row := range rows {
-		vector, err := parseVectorText(row.Vector)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, profileapp.WeightedEvent{
-			SourceType:   profileapp.SourceSegmentReaction,
-			ReactionType: profileapp.ReactionType(row.ReactionType),
-			Vector:       vector,
-			EventTime:    row.EventTime,
-		})
-	}
-	return events, nil
-}
-
-func (r *GormVideoRepository) loadVideoReactionProfileEvents(ctx context.Context, userID uint64) ([]profileapp.WeightedEvent, error) {
-	var rows []struct {
-		ReactionType string    `gorm:"column:reaction_type"`
-		Vector       string    `gorm:"column:embedding"`
-		EventTime    time.Time `gorm:"column:event_time"`
-	}
-	if err := r.db.WithContext(ctx).Raw(`
-WITH video_vectors AS (
-  SELECT video_id, AVG(embedding)::text AS embedding
-  FROM edu_video_segment
-  WHERE deleted = 0 AND status = 1 AND embedding IS NOT NULL
-  GROUP BY video_id
-)
-SELECT vur.reaction_type AS reaction_type,
-       vv.embedding AS embedding,
-       vur.update_time AS event_time
-FROM edu_video_user_reaction vur
-JOIN video_vectors vv ON vv.video_id = vur.video_id
-JOIN edu_video_resource r ON r.id = vur.video_id
-WHERE vur.user_id = ?
-  AND vur.deleted = 0
-  AND r.deleted = 0
-ORDER BY vur.update_time DESC
-LIMIT 500;`, userID).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	events := make([]profileapp.WeightedEvent, 0, len(rows))
-	for _, row := range rows {
-		vector, err := parseVectorText(row.Vector)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, profileapp.WeightedEvent{
-			SourceType:   profileapp.SourceVideoReaction,
-			ReactionType: profileapp.ReactionType(row.ReactionType),
-			Vector:       vector,
-			EventTime:    row.EventTime,
-		})
-	}
-	return events, nil
-}
-
-func (r *GormVideoRepository) loadWatchProfileEvents(ctx context.Context, userID uint64) ([]profileapp.WeightedEvent, error) {
-	var rows []struct {
-		Vector          string    `gorm:"column:embedding"`
-		WatchDuration   int       `gorm:"column:watch_duration"`
-		SegmentDuration int       `gorm:"column:segment_duration"`
-		EventTime       time.Time `gorm:"column:event_time"`
-	}
-	if err := r.db.WithContext(ctx).Raw(`
-SELECT s.embedding::text AS embedding,
-       COALESCE(uvr.watch_duration, 0) AS watch_duration,
-       GREATEST(s.end_time - s.start_time, 1) AS segment_duration,
-       uvr.update_time AS event_time
-FROM edu_user_video_recommend uvr
-JOIN edu_video_segment s ON s.id = uvr.video_segment_id
-JOIN edu_video_resource r ON r.id = s.video_id
-WHERE uvr.user_id = ?
-  AND uvr.deleted = 0
-  AND uvr.is_watched = TRUE
-  AND s.deleted = 0
-  AND s.status = 1
-  AND s.embedding IS NOT NULL
-  AND r.deleted = 0
-ORDER BY uvr.update_time DESC
-LIMIT 500;`, userID).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	events := make([]profileapp.WeightedEvent, 0, len(rows))
-	for _, row := range rows {
-		vector, err := parseVectorText(row.Vector)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, profileapp.WeightedEvent{
-			SourceType:      profileapp.SourceWatch,
-			Vector:          vector,
-			WatchDuration:   row.WatchDuration,
-			SegmentDuration: row.SegmentDuration,
-			EventTime:       row.EventTime,
-		})
-	}
-	return events, nil
 }
 
 // FindRandomPlayableSegment 随机返回一个未删除、已发布且已转码完成的视频片段。
@@ -1718,40 +1302,57 @@ func (r *GormVideoRepository) findRandomPlayableSegment(ctx context.Context, exc
 	}
 
 	var item row
-	query := r.db.WithContext(ctx).
-		Table("edu_video_segment AS s").
-		Select(`
-			s.id AS video_segment_id,
-			s.video_id AS video_id,
-			s.start_time AS start_time_sec,
-			s.end_time AS end_time_sec,
-			CASE
-				WHEN TRIM(COALESCE(s.content_summary, '')) <> '' THEN s.content_summary
-				ELSE r.title
-			END AS title,
-			r.user_id AS user_id,
-			r.title AS video_title,
-			r.description AS description,
-			r.video_url AS video_url,
-			r.duration AS duration,
-			r.cover_url AS cover_url,
-			r.status AS status,
-			r.error_msg AS error_msg,
-			r.is_published AS is_published,
-			r.is_recommend AS is_recommend,
-			r.view_count AS view_count,
-			r.create_time AS create_time,
-			r.update_time AS update_time,
-			r.deleted AS deleted`).
-		Joins("JOIN edu_video_resource AS r ON r.id = s.video_id").
-		Where("s.deleted = ? AND s.status = ? AND r.deleted = ? AND r.is_published = ? AND r.status = ? AND TRIM(COALESCE(r.video_url, '')) <> ''", 0, 1, 0, true, int16(domainvideo.StatusDone))
-	if len(excludedSegmentIDs) > 0 {
-		query = query.Where("s.id NOT IN ?", excludedSegmentIDs)
+	baseQuery := func() *gorm.DB {
+		query := r.db.WithContext(ctx).
+			Table("edu_video_segment AS s").
+			Joins("JOIN edu_video_resource AS r ON r.id = s.video_id").
+			Where("s.deleted = ? AND s.status = ? AND r.deleted = ? AND r.is_published = ? AND r.status = ? AND TRIM(COALESCE(r.video_url, '')) <> ''", 0, 1, 0, true, int16(domainvideo.StatusDone))
+		if len(excludedSegmentIDs) > 0 {
+			query = query.Where("s.id NOT IN ?", excludedSegmentIDs)
+		}
+		return query
 	}
-	err := query.
-		Order("RANDOM()").
-		Limit(1).
-		Scan(&item).Error
+
+	var maxSegment struct {
+		ID uint64 `gorm:"column:id"`
+	}
+	if err := baseQuery().Select("s.id").Order("s.id DESC").Limit(1).Scan(&maxSegment).Error; err != nil {
+		return videoapp.RecommendResultItem{}, false, err
+	}
+	if maxSegment.ID == 0 {
+		return videoapp.RecommendResultItem{}, false, nil
+	}
+
+	pivot := randomUint64InRange(1, maxSegment.ID)
+	scanCandidate := func(query *gorm.DB) error {
+		return query.
+			Select(`
+				s.id AS video_segment_id,
+				s.video_id AS video_id,
+				s.start_time AS start_time_sec,
+				s.end_time AS end_time_sec,
+				CASE
+					WHEN TRIM(COALESCE(s.content_summary, '')) <> '' THEN s.content_summary
+					ELSE r.title
+				END AS title,
+				r.user_id AS user_id,
+				r.title AS video_title,
+				r.description AS description,
+				r.video_url AS video_url,
+				r.duration AS duration,
+				r.cover_url AS cover_url,
+				r.status AS status,
+				r.error_msg AS error_msg,
+				r.is_published AS is_published,
+				r.is_recommend AS is_recommend,
+				r.view_count AS view_count,
+				r.create_time AS create_time,
+				r.update_time AS update_time,
+				r.deleted AS deleted`).
+			Limit(1).
+			Scan(&item).Error
+	}
+	err := scanCandidate(baseQuery().Where("s.id >= ?", pivot).Order("s.id ASC"))
 	if err != nil {
 		return videoapp.RecommendResultItem{}, false, err
 	}
@@ -1785,6 +1386,18 @@ func (r *GormVideoRepository) findRandomPlayableSegment(ctx context.Context, exc
 	}, true, nil
 }
 
+func randomUint64InRange(min uint64, max uint64) uint64 {
+	if max <= min {
+		return min
+	}
+	span := max - min + 1
+	n, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetUint64(span))
+	if err != nil {
+		return min + uint64(time.Now().UnixNano())%span
+	}
+	return min + n.Uint64()
+}
+
 // SaveUserVideoRecommendation 写入或更新用户推荐记录。
 func (r *GormVideoRepository) SaveUserVideoRecommendation(ctx context.Context, userID uint64, questionID uint64, videoID uint64, segmentID uint64, score float64, now time.Time) error {
 	return r.db.WithContext(ctx).Exec(sqlqueries.UpsertUserVideoRecommendQuery, userID, videoID, questionID, segmentID, score, now, now).Error
@@ -1815,6 +1428,221 @@ func (r *GormVideoRepository) SaveRecommendationExposures(ctx context.Context, e
 		})
 	}
 	return r.db.WithContext(ctx).CreateInBatches(rows, 100).Error
+}
+
+func (r *GormVideoRepository) GetRecommendationDatasourceStats(ctx context.Context) (videoapp.RecommendationDatasourceStats, error) {
+	db := r.db.WithContext(ctx)
+	var stats videoapp.RecommendationDatasourceStats
+	if err := db.Model(&model.EduVideoResource{}).Where("deleted = ?", 0).Count(&stats.VideoTotal).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduVideoResource{}).Where("deleted = ? AND is_published = ?", 0, true).Count(&stats.PublishedVideos).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduVideoResource{}).Where("deleted = ? AND is_recommend = ?", 0, true).Count(&stats.RecommendVideos).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduVideoSegment{}).Where("deleted = ?", 0).Count(&stats.SegmentTotal).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduVideoSegment{}).Where("deleted = ? AND status = ?", 0, readyVideoSegmentStatus).Count(&stats.PlayableSegments).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduVideoSegment{}).Where("deleted = ? AND embedding IS NOT NULL", 0).Count(&stats.EmbeddedSegments).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduRecommendExposure{}).Where("deleted = ?", 0).Count(&stats.ExposureTotal).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduRecommendExposure{}).Where("deleted = ? AND watched = ?", 0, true).Count(&stats.WatchedExposures).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduUserVideoRecommend{}).Where("deleted = ?", 0).Count(&stats.RecommendationRows).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduUserVideoRecommend{}).Where("deleted = ? AND is_watched = ?", 0, true).Count(&stats.WatchedRecommendations).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Table("recsys.recommend_user_embedding").Where("deleted = ? AND status = ?", 0, 1).Distinct("user_id").Count(&stats.RecBoleUsers).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Table("recsys.recommend_item_embedding").Where("deleted = ? AND status = ?", 0, 1).Distinct("video_segment_id").Count(&stats.RecBoleItems).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	if err := db.Model(&model.EduUserReaction{}).Where("deleted = ?", 0).Count(&stats.ReactionRows).Error; err != nil {
+		return videoapp.RecommendationDatasourceStats{}, err
+	}
+	return stats, nil
+}
+
+func (r *GormVideoRepository) ListRecommendationRecentRequests(ctx context.Context, limit int) ([]videoapp.RecommendationRecentRequest, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	var rows []struct {
+		RequestID     string         `gorm:"column:request_id"`
+		UserID        uint64         `gorm:"column:user_id"`
+		QuestionID    uint64         `gorm:"column:question_id"`
+		Exposures     int64          `gorm:"column:exposures"`
+		Watched       int64          `gorm:"column:watched"`
+		Strategy      string         `gorm:"column:strategy"`
+		ModelVersion  string         `gorm:"column:model_version"`
+		LastEventTime sql.NullString `gorm:"column:last_event_time"`
+	}
+	err := r.db.WithContext(ctx).
+		Model(&model.EduRecommendExposure{}).
+		Select(`
+request_id AS request_id,
+MAX(user_id) AS user_id,
+MAX(question_id) AS question_id,
+COUNT(*) AS exposures,
+SUM(CASE WHEN watched THEN 1 ELSE 0 END) AS watched,
+MAX(strategy) AS strategy,
+MAX(model_version) AS model_version,
+MAX(create_time) AS last_event_time`).
+		Where("deleted = ? AND request_id <> ?", 0, "").
+		Group("request_id").
+		Order("last_event_time DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]videoapp.RecommendationRecentRequest, 0, len(rows))
+	for _, row := range rows {
+		lastEventTime, _ := parseDBTime(row.LastEventTime.String)
+		out = append(out, videoapp.RecommendationRecentRequest{
+			RequestID:     row.RequestID,
+			UserID:        row.UserID,
+			QuestionID:    row.QuestionID,
+			Exposures:     row.Exposures,
+			Watched:       row.Watched,
+			WatchRate:     ratioFloat(row.Watched, row.Exposures),
+			Strategy:      row.Strategy,
+			ModelVersion:  row.ModelVersion,
+			LastEventTime: lastEventTime,
+		})
+	}
+	return out, nil
+}
+
+func (r *GormVideoRepository) ListRecommendationDataFreshness(ctx context.Context) ([]videoapp.RecommendationDataFreshness, error) {
+	definitions := []struct {
+		source string
+		label  string
+		query  string
+	}{
+		{source: "recommendation_exposure", label: "推荐曝光", query: `SELECT MAX(create_time) AS latest_at FROM edu_recommend_exposure WHERE deleted = 0`},
+		{source: "watch_records", label: "观看记录", query: `SELECT MAX(update_time) AS latest_at FROM edu_user_video_recommend WHERE deleted = 0`},
+		{source: "segment_reactions", label: "片段 Reaction", query: `SELECT MAX(update_time) AS latest_at FROM edu_user_reaction WHERE deleted = 0`},
+		{source: "video_reactions", label: "视频 Reaction", query: `SELECT MAX(update_time) AS latest_at FROM edu_video_user_reaction WHERE deleted = 0`},
+		{source: "recbole_user_embedding", label: "RecBole 用户向量", query: `SELECT MAX(update_time) AS latest_at FROM recsys.recommend_user_embedding WHERE deleted = 0 AND status = 1`},
+		{source: "recbole_item_embedding", label: "RecBole 片段向量", query: `SELECT MAX(update_time) AS latest_at FROM recsys.recommend_item_embedding WHERE deleted = 0 AND status = 1`},
+	}
+	out := make([]videoapp.RecommendationDataFreshness, 0, len(definitions))
+	for _, definition := range definitions {
+		latest, found, err := r.latestRecommendationTime(ctx, definition.query)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, videoapp.RecommendationDataFreshness{
+			Source:   definition.source,
+			Label:    definition.label,
+			LatestAt: latest,
+			HasData:  found,
+		})
+	}
+	return out, nil
+}
+
+func (r *GormVideoRepository) latestRecommendationTime(ctx context.Context, query string) (time.Time, bool, error) {
+	var row struct {
+		LatestAt sql.NullString `gorm:"column:latest_at"`
+	}
+	if err := r.db.WithContext(ctx).Raw(query).Scan(&row).Error; err != nil {
+		return time.Time{}, false, err
+	}
+	if !row.LatestAt.Valid {
+		return time.Time{}, false, nil
+	}
+	latestAt, ok := parseDBTime(row.LatestAt.String)
+	return latestAt, ok, nil
+}
+
+func ratioFloat(numerator int64, denominator int64) float64 {
+	if denominator == 0 {
+		return 0
+	}
+	return float64(numerator) / float64(denominator)
+}
+
+func parseDBTime(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	formats := []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05",
+	}
+	for _, format := range formats {
+		if parsed, err := time.Parse(format, value); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func (r *GormVideoRepository) ListRecommendationEffectMetrics(ctx context.Context, days int) (videoapp.RecommendationEffectMetrics, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+	now := time.Now()
+	cutoff := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -days+1)
+	var daily []videoapp.RecommendationDailyEffectMetric
+	if err := r.db.WithContext(ctx).Raw(`
+SELECT
+  DATE(create_time) AS day,
+  COUNT(*) AS exposures,
+  COALESCE(SUM(CASE WHEN watched THEN 1 ELSE 0 END), 0) AS watched,
+  CASE WHEN COUNT(*) = 0 THEN 0 ELSE CAST(SUM(CASE WHEN watched THEN 1 ELSE 0 END) AS REAL) / COUNT(*) END AS watch_rate
+FROM edu_recommend_exposure
+WHERE deleted = 0 AND create_time >= ?
+GROUP BY DATE(create_time)
+ORDER BY day ASC
+`, cutoff).Scan(&daily).Error; err != nil {
+		return videoapp.RecommendationEffectMetrics{}, err
+	}
+
+	var strategies []videoapp.RecommendationStrategyEffectMetric
+	if err := r.db.WithContext(ctx).Raw(`
+SELECT
+  strategy AS strategy,
+  COALESCE(model_version, '') AS model_version,
+  COUNT(*) AS exposures,
+  COALESCE(SUM(CASE WHEN watched THEN 1 ELSE 0 END), 0) AS watched,
+  CASE WHEN COUNT(*) = 0 THEN 0 ELSE CAST(SUM(CASE WHEN watched THEN 1 ELSE 0 END) AS REAL) / COUNT(*) END AS watch_rate,
+  COALESCE(AVG(rank), 0) AS average_rank,
+  COALESCE(AVG(score), 0) AS average_score
+FROM edu_recommend_exposure
+WHERE deleted = 0 AND create_time >= ?
+GROUP BY strategy, COALESCE(model_version, '')
+ORDER BY exposures DESC, strategy ASC, model_version ASC
+`, cutoff).Scan(&strategies).Error; err != nil {
+		return videoapp.RecommendationEffectMetrics{}, err
+	}
+	return videoapp.RecommendationEffectMetrics{Daily: daily, Strategies: strategies}, nil
 }
 
 // ListRecommendations 查询用户的推荐记录列表。
@@ -2088,13 +1916,7 @@ func EnsureIntegrity(db *gorm.DB) error {
 	if err := db.Exec(sqlqueries.AddVideoResourceUserIDQuery).Error; err != nil {
 		return err
 	}
-	if err := db.Exec(sqlqueries.CreateVideoItemEmbeddingTableQuery).Error; err != nil {
-		return err
-	}
-	if err := db.Exec(sqlqueries.CreateUserTowerEmbeddingTableQuery).Error; err != nil {
-		return err
-	}
-	if err := db.Exec(sqlqueries.CreateRecommendModelVersionTableQuery).Error; err != nil {
+	if err := EnsureRecSysSchema(db); err != nil {
 		return err
 	}
 	_ = db.Exec(sqlqueries.CreateUserQuestionIndexQuery).Error
@@ -2105,9 +1927,6 @@ func EnsureIntegrity(db *gorm.DB) error {
 	_ = db.Exec(sqlqueries.CreateUserReactionVideoIndexQuery).Error
 	_ = db.Exec(sqlqueries.CreateUserReactionSegmentIndexQuery).Error
 	_ = db.Exec(sqlqueries.CreateVideoResourceUserIndexQuery).Error
-	_ = db.Exec(sqlqueries.CreateVideoItemEmbeddingModelIndexQuery).Error
-	_ = db.Exec(sqlqueries.CreateUserTowerEmbeddingModelIndexQuery).Error
-	_ = db.Exec(sqlqueries.CreateRecommendModelVersionActiveIndexQuery).Error
 	_ = db.Exec(sqlqueries.CreateRecommendExposureLookupIndexQuery).Error
 	_ = db.Exec(sqlqueries.CreateRecommendExposureRequestIndexQuery).Error
 
@@ -2123,16 +1942,6 @@ func EnsureIntegrity(db *gorm.DB) error {
 	if err := db.Exec(sqlqueries.CreateUserVideoProfileUniqueConstraintQuery).Error; err != nil {
 		return err
 	}
-	if err := db.Exec(sqlqueries.CreateVideoItemEmbeddingUniqueConstraintQuery).Error; err != nil {
-		return err
-	}
-	if err := db.Exec(sqlqueries.CreateUserTowerEmbeddingUniqueConstraintQuery).Error; err != nil {
-		return err
-	}
-	if err := db.Exec(sqlqueries.CreateRecommendModelVersionUniqueConstraintQuery).Error; err != nil {
-		return err
-	}
-
 	if err := db.Exec(sqlqueries.CleanOrphanSegmentsQuery).Error; err != nil {
 		return err
 	}

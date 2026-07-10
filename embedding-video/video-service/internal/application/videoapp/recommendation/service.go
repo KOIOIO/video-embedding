@@ -37,20 +37,20 @@ type Candidate struct {
 }
 
 const (
-	DefaultProfileModelVersion  = "video_profile_v1"
-	DefaultTwoTowerModelVersion = "two_tower_v1"
-	MaxProfileRerankCandidates  = 300
-	WeakKnowledgeRecallLimit    = 50
-	StrategyQuestionVector      = "question_vector"
-	StrategyProfileRerank       = "profile_rerank"
-	StrategyTwoTower            = "two_tower"
-	StrategyGorse               = "gorse"
-	StrategyKnowledgeMatch      = "knowledge_match"
-	GorseModelVersion           = "gorse"
-	KnowledgeMatchModelVersion  = "knowledge_match_v1"
-	EngineKnowledgeMatch        = "knowledge_match"
-	EngineGorse                 = "gorse"
-	EngineTwoTower              = "two_tower"
+	DefaultProfileModelVersion = "video_profile_v1"
+	DefaultRecBoleModelVersion = "recbole_v1"
+	MaxProfileRerankCandidates = 300
+	WeakKnowledgeRecallLimit   = 50
+	StrategyQuestionVector     = "question_vector"
+	StrategyProfileRerank      = "profile_rerank"
+	StrategyRecBole            = "recbole"
+	StrategyGorse              = "gorse"
+	StrategyKnowledgeMatch     = "knowledge_match"
+	GorseModelVersion          = "gorse"
+	KnowledgeMatchModelVersion = "knowledge_match_v1"
+	EngineKnowledgeMatch       = "knowledge_match"
+	EngineGorse                = "gorse"
+	EngineRecBole              = "recbole"
 )
 
 type UserVideoProfile struct {
@@ -72,25 +72,25 @@ type ProfileRerankQuery struct {
 	Limit          int
 }
 
-type UserTowerEmbedding struct {
+type UserRecBoleEmbedding struct {
 	UserID       uint64
 	Vector       []float32
 	ModelVersion string
 	Status       int16
 }
 
-func (e UserTowerEmbedding) IsUsable() bool {
+func (e UserRecBoleEmbedding) IsUsable() bool {
 	return e.UserID != 0 && e.Status == 1 && len(e.Vector) > 0
 }
 
-type TwoTowerQuery struct {
+type RecBoleQuery struct {
 	UserID       uint64
 	UserVector   pgvector.Vector
 	ModelVersion string
 	Limit        int
 }
 
-type TwoTowerCandidate struct {
+type RecBoleCandidate struct {
 	Candidate
 }
 
@@ -113,6 +113,8 @@ type ResultItem struct {
 	VideoID        uint64
 	VideoSegmentID uint64
 	RecommendScore float64
+	Strategy       string
+	ModelVersion   string
 	IsWatched      bool
 	WatchDuration  int
 	StartTimeSec   int
@@ -202,9 +204,9 @@ type ProfileRepository interface {
 	FindRecommendedSegmentsForProfileRerank(ctx context.Context, input ProfileRerankQuery) ([]ProfileCandidate, error)
 }
 
-type TwoTowerRepository interface {
-	GetUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserTowerEmbedding, bool, error)
-	FindRecommendedSegmentsForTwoTower(ctx context.Context, input TwoTowerQuery) ([]TwoTowerCandidate, error)
+type RecBoleRepository interface {
+	GetUserRecBoleEmbedding(ctx context.Context, userID uint64, modelVersion string) (UserRecBoleEmbedding, bool, error)
+	FindRecommendedSegmentsForRecBole(ctx context.Context, input RecBoleQuery) ([]RecBoleCandidate, error)
 }
 
 type GorseHydrationRepository interface {
@@ -216,16 +218,8 @@ type WeakKnowledgeVectorRepository interface {
 	FindRecommendedSegmentsByWeakKnowledgeVector(ctx context.Context, input WeakKnowledgeVectorQuery) ([]Candidate, error)
 }
 
-type TwoTowerModelVersionRepository interface {
-	GetActiveTwoTowerModelVersion(ctx context.Context) (string, bool, error)
-}
-
-type ProfileUpdater interface {
-	RebuildUserVideoProfile(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
-}
-
-type UserTowerUpdater interface {
-	RebuildUserTowerEmbedding(ctx context.Context, userID uint64, modelVersion string, now time.Time) error
+type RecBoleModelVersionRepository interface {
+	GetActiveRecBoleModelVersion(ctx context.Context) (string, bool, error)
 }
 
 type RecentSegmentStore interface {
@@ -249,8 +243,6 @@ type Service struct {
 	IsProviderUnavailable func(error) bool
 	NewDegradedError      func(reason string, items []ResultItem) error
 	ErrVideoSegmentAbsent error
-	ProfileUpdater        ProfileUpdater
-	UserTowerUpdater      UserTowerUpdater
 	RecentSegments        RecentSegmentStore
 	RecentSegmentTTL      time.Duration
 	NewRequestID          func() string
@@ -317,7 +309,7 @@ func (s Service) RecommendByQuestion(ctx context.Context, input RecommendByQuest
 			return nil, err
 		}
 
-		items = append(items, buildResultItem(input.QuestionID, c, score, false, 0))
+		items = append(items, withRecommendationSource(buildResultItem(input.QuestionID, c, score, false, 0), StrategyQuestionVector, ""))
 		exposures = append(exposures, buildExposureRecord(requestID, userID, input.QuestionID, c.VideoID, c.VideoSegmentID, i+1, score, StrategyQuestionVector, "", now))
 	}
 	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
@@ -327,17 +319,56 @@ func (s Service) RecommendByQuestion(ctx context.Context, input RecommendByQuest
 	return items, nil
 }
 
-func (s Service) RandomPlay(ctx context.Context, input RandomPlayInput) ([]ResultItem, error) {
-	if input.UserID == 0 {
-		return nil, nil
+func (s Service) PreviewRecommendByQuestion(ctx context.Context, input RecommendByQuestionInput) ([]ResultItem, error) {
+	questionText := strings.TrimSpace(input.QuestionText)
+	if input.QuestionID == 0 && questionText == "" {
+		return nil, s.InvalidArgument("question_text is required when question_id is absent")
 	}
 	limit := input.Limit
 	if limit <= 0 {
-		limit = 1
+		limit = 10
 	}
 	if limit > 50 {
 		limit = 50
 	}
+
+	targetDim, err := s.Repo.GetSegmentEmbeddingDim(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if targetDim <= 0 {
+		targetDim = 1536
+	}
+
+	queryVec, err := s.BuildQuestionVector(ctx, input.QuestionID, questionText, targetDim)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates, err := s.Repo.FindRecommendedSegments(ctx, queryVec, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	items := make([]ResultItem, 0, len(candidates))
+	for _, c := range candidates {
+		score := 0.0
+		if c.Distance >= 0 {
+			score = 1.0 / (1.0 + c.Distance)
+		}
+		items = append(items, withRecommendationSource(buildResultItem(input.QuestionID, c, score, false, 0), StrategyQuestionVector, ""))
+	}
+	return items, nil
+}
+
+func (s Service) RandomPlay(ctx context.Context, input RandomPlayInput) ([]ResultItem, error) {
+	if input.UserID == 0 {
+		return nil, nil
+	}
+	limit := normalizeRandomPlayLimit(input.Limit)
 
 	if s.recommendationEngine() == EngineGorse && !s.GorseOptions.ShadowMode {
 		if items, ok, err := s.recommendByGorse(ctx, input.UserID, limit); err != nil {
@@ -346,22 +377,51 @@ func (s Service) RandomPlay(ctx context.Context, input RandomPlayInput) ([]Resul
 			return items, nil
 		}
 	}
-	if s.recommendationEngine() == EngineTwoTower {
-		return s.randomPlayByTwoTower(ctx, input.UserID, limit)
+	if s.recommendationEngine() == EngineRecBole {
+		return s.randomPlayByRecBole(ctx, input.UserID, limit)
 	}
 	return s.recommendByKnowledgeMatch(ctx, input.UserID, limit)
 }
 
-func (s Service) randomPlayByTwoTower(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {
-	twoTowerRepo, ok := s.Repo.(TwoTowerRepository)
+func (s Service) PreviewRandomPlay(ctx context.Context, input RandomPlayInput) ([]ResultItem, error) {
+	if input.UserID == 0 {
+		return nil, nil
+	}
+	limit := normalizeRandomPlayLimit(input.Limit)
+	engine := s.recommendationEngine()
+	if engine == EngineGorse && !s.GorseOptions.ShadowMode {
+		if items, ok, err := s.previewByGorse(ctx, input.UserID, limit); err != nil {
+			return nil, err
+		} else if ok {
+			return items, nil
+		}
+	}
+	if engine == EngineRecBole {
+		return s.previewByRecBole(ctx, input.UserID, limit)
+	}
+	return s.previewByKnowledgeMatch(ctx, input.UserID, limit)
+}
+
+func normalizeRandomPlayLimit(limit int) int {
+	if limit <= 0 {
+		return 1
+	}
+	if limit > 50 {
+		return 50
+	}
+	return limit
+}
+
+func (s Service) randomPlayByRecBole(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {
+	recBoleRepo, ok := s.Repo.(RecBoleRepository)
 	if !ok {
 		return nil, nil
 	}
-	modelVersion, err := s.activeTwoTowerModelVersion(ctx)
+	modelVersion, err := s.activeRecBoleModelVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userEmbedding, found, err := twoTowerRepo.GetUserTowerEmbedding(ctx, userID, modelVersion)
+	userEmbedding, found, err := recBoleRepo.GetUserRecBoleEmbedding(ctx, userID, modelVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -369,38 +429,29 @@ func (s Service) randomPlayByTwoTower(ctx context.Context, userID uint64, limit 
 		return nil, nil
 	}
 
-	return s.recommendByTwoTower(ctx, twoTowerRepo, RecommendByQuestionInput{
+	return s.recommendByRecBole(ctx, recBoleRepo, RecommendByQuestionInput{
 		UserID: userID,
 		Limit:  limit,
 	}, userID, userEmbedding, modelVersion, limit)
 }
 
-func (s Service) RecommendTwoTowerItemIDs(ctx context.Context, userID uint64, limit int) ([]uint64, error) {
-	if userID == 0 {
-		return nil, nil
-	}
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
-	twoTowerRepo, ok := s.Repo.(TwoTowerRepository)
+func (s Service) previewByRecBole(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {
+	recBoleRepo, ok := s.Repo.(RecBoleRepository)
 	if !ok {
 		return nil, nil
 	}
-	modelVersion, err := s.activeTwoTowerModelVersion(ctx)
+	modelVersion, err := s.activeRecBoleModelVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userEmbedding, found, err := twoTowerRepo.GetUserTowerEmbedding(ctx, userID, modelVersion)
+	userEmbedding, found, err := recBoleRepo.GetUserRecBoleEmbedding(ctx, userID, modelVersion)
 	if err != nil {
 		return nil, err
 	}
 	if !found || !userEmbedding.IsUsable() {
 		return nil, nil
 	}
-	candidates, err := twoTowerRepo.FindRecommendedSegmentsForTwoTower(ctx, TwoTowerQuery{
+	candidates, err := recBoleRepo.FindRecommendedSegmentsForRecBole(ctx, RecBoleQuery{
 		UserID:       userID,
 		UserVector:   pgvector.NewVector(userEmbedding.Vector),
 		ModelVersion: modelVersion,
@@ -412,11 +463,59 @@ func (s Service) RecommendTwoTowerItemIDs(ctx context.Context, userID uint64, li
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	candidates = s.filterRecentTwoTowerCandidates(ctx, userID, candidates)
+	candidates = s.filterRecentRecBoleCandidates(ctx, userID, candidates)
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	items := BuildTwoTowerRankedItems(candidates, limit)
+	items := BuildRecBoleRankedItems(candidates, limit)
+	for i := range items {
+		items[i] = withRecommendationSource(items[i], StrategyRecBole, modelVersion)
+	}
+	return items, nil
+}
+
+func (s Service) RecommendRecBoleItemIDs(ctx context.Context, userID uint64, limit int) ([]uint64, error) {
+	if userID == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	recBoleRepo, ok := s.Repo.(RecBoleRepository)
+	if !ok {
+		return nil, nil
+	}
+	modelVersion, err := s.activeRecBoleModelVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	userEmbedding, found, err := recBoleRepo.GetUserRecBoleEmbedding(ctx, userID, modelVersion)
+	if err != nil {
+		return nil, err
+	}
+	if !found || !userEmbedding.IsUsable() {
+		return nil, nil
+	}
+	candidates, err := recBoleRepo.FindRecommendedSegmentsForRecBole(ctx, RecBoleQuery{
+		UserID:       userID,
+		UserVector:   pgvector.NewVector(userEmbedding.Vector),
+		ModelVersion: modelVersion,
+		Limit:        profileCandidateLimit(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	candidates = s.filterRecentRecBoleCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	items := BuildRecBoleRankedItems(candidates, limit)
 	ids := make([]uint64, 0, len(items))
 	seen := make(map[uint64]bool, len(items))
 	for _, item := range items {
@@ -459,7 +558,7 @@ func (s Service) recommendByKnowledgeMatch(ctx context.Context, userID uint64, l
 	exposures := make([]ExposureRecord, 0, len(candidates))
 	for i, candidate := range candidates {
 		score := gorseRankScore(i)
-		item := buildResultItem(0, candidate, score, false, 0)
+		item := withRecommendationSource(buildResultItem(0, candidate, score, false, 0), StrategyKnowledgeMatch, KnowledgeMatchModelVersion)
 		items = append(items, item)
 		s.markRecentReturned(ctx, userID, candidate.VideoSegmentID)
 		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, 0, candidate.VideoID, candidate.VideoSegmentID, score, now); err != nil {
@@ -469,6 +568,29 @@ func (s Service) recommendByKnowledgeMatch(ctx context.Context, userID uint64, l
 	}
 	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
 		return nil, err
+	}
+	return items, nil
+}
+
+func (s Service) previewByKnowledgeMatch(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {
+	const weakKnowledgeLimit = 10
+	candidates, err := s.recommendWeakKnowledgeCandidates(ctx, userID, limit, weakKnowledgeLimit)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	candidates = s.filterRecentCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+	items := make([]ResultItem, 0, len(candidates))
+	for i, candidate := range candidates {
+		items = append(items, withRecommendationSource(buildResultItem(0, candidate, gorseRankScore(i), false, 0), StrategyKnowledgeMatch, KnowledgeMatchModelVersion))
 	}
 	return items, nil
 }
@@ -686,7 +808,7 @@ func (s Service) recommendByGorse(ctx context.Context, userID uint64, limit int)
 	feedback := make([]GorseFeedback, 0, len(candidates))
 	for i, candidate := range candidates {
 		score := gorseRankScore(i)
-		item := buildResultItem(0, candidate, score, false, 0)
+		item := withRecommendationSource(buildResultItem(0, candidate, score, false, 0), StrategyGorse, GorseModelVersion)
 		items = append(items, item)
 		s.markRecentReturned(ctx, userID, candidate.VideoSegmentID)
 		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, 0, candidate.VideoID, candidate.VideoSegmentID, score, now); err != nil {
@@ -711,25 +833,72 @@ func (s Service) recommendByGorse(ctx context.Context, userID uint64, limit int)
 	return items, true, nil
 }
 
-func (s Service) activeTwoTowerModelVersion(ctx context.Context) (string, error) {
-	repo, ok := s.Repo.(TwoTowerModelVersionRepository)
-	if !ok {
-		return DefaultTwoTowerModelVersion, nil
+func (s Service) previewByGorse(ctx context.Context, userID uint64, limit int) ([]ResultItem, bool, error) {
+	if s.Gorse == nil {
+		return nil, false, nil
 	}
-	version, found, err := repo.GetActiveTwoTowerModelVersion(ctx)
+	hydrator, ok := s.Repo.(GorseHydrationRepository)
+	if !ok {
+		return nil, false, nil
+	}
+	candidateLimit := s.GorseOptions.CandidateLimit
+	if candidateLimit <= 0 {
+		candidateLimit = profileCandidateLimit(limit)
+	}
+	if candidateLimit < limit {
+		candidateLimit = limit
+	}
+	ids, err := s.Gorse.Recommend(ctx, userID, candidateLimit)
+	if err != nil {
+		return nil, false, nil
+	}
+	ids = uniquePositiveUint64s(ids)
+	if len(ids) == 0 {
+		return nil, false, nil
+	}
+	candidates, err := hydrator.HydrateRecommendedSegmentsByID(ctx, userID, ids)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(candidates) == 0 {
+		return nil, false, nil
+	}
+	if minItems := s.GorseOptions.MinRecommendItems; minItems > 0 && len(candidates) < minItems {
+		return nil, false, nil
+	}
+	candidates = s.filterRecentCandidates(ctx, userID, candidates)
+	if len(candidates) == 0 {
+		return nil, false, nil
+	}
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+	items := make([]ResultItem, 0, len(candidates))
+	for i, candidate := range candidates {
+		items = append(items, withRecommendationSource(buildResultItem(0, candidate, gorseRankScore(i), false, 0), StrategyGorse, GorseModelVersion))
+	}
+	return items, true, nil
+}
+
+func (s Service) activeRecBoleModelVersion(ctx context.Context) (string, error) {
+	repo, ok := s.Repo.(RecBoleModelVersionRepository)
+	if !ok {
+		return DefaultRecBoleModelVersion, nil
+	}
+	version, found, err := repo.GetActiveRecBoleModelVersion(ctx)
 	if err != nil {
 		return "", err
 	}
 	version = strings.TrimSpace(version)
 	if !found || version == "" {
-		return DefaultTwoTowerModelVersion, nil
+		return DefaultRecBoleModelVersion, nil
 	}
 	return version, nil
 }
 
-func (s Service) recommendByTwoTower(ctx context.Context, repo TwoTowerRepository, input RecommendByQuestionInput, userID uint64, userEmbedding UserTowerEmbedding, modelVersion string, limit int) ([]ResultItem, error) {
+func (s Service) recommendByRecBole(ctx context.Context, repo RecBoleRepository, input RecommendByQuestionInput, userID uint64, userEmbedding UserRecBoleEmbedding, modelVersion string, limit int) ([]ResultItem, error) {
 	candidateLimit := profileCandidateLimit(limit)
-	candidates, err := repo.FindRecommendedSegmentsForTwoTower(ctx, TwoTowerQuery{
+	candidates, err := repo.FindRecommendedSegmentsForRecBole(ctx, RecBoleQuery{
 		UserID:       userID,
 		UserVector:   pgvector.NewVector(userEmbedding.Vector),
 		ModelVersion: modelVersion,
@@ -741,21 +910,22 @@ func (s Service) recommendByTwoTower(ctx context.Context, repo TwoTowerRepositor
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	candidates = s.filterRecentTwoTowerCandidates(ctx, userID, candidates)
+	candidates = s.filterRecentRecBoleCandidates(ctx, userID, candidates)
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	items := BuildTwoTowerRankedItems(candidates, limit)
+	items := BuildRecBoleRankedItems(candidates, limit)
 	now := s.Now()
 	exposures := make([]ExposureRecord, 0, len(items))
 	requestID := s.newRequestID()
 	for i := range items {
 		items[i].QuestionID = input.QuestionID
+		items[i] = withRecommendationSource(items[i], StrategyRecBole, modelVersion)
 		s.markRecentReturned(ctx, userID, items[i].VideoSegmentID)
 		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, items[i].RecommendScore, now); err != nil {
 			return nil, err
 		}
-		exposures = append(exposures, buildExposureRecord(requestID, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, i+1, items[i].RecommendScore, StrategyTwoTower, modelVersion, now))
+		exposures = append(exposures, buildExposureRecord(requestID, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, i+1, items[i].RecommendScore, StrategyRecBole, modelVersion, now))
 	}
 	if err := s.saveRecommendationExposures(ctx, exposures); err != nil {
 		return nil, err
@@ -787,6 +957,7 @@ func (s Service) recommendByProfileRerank(ctx context.Context, repo ProfileRepos
 	requestID := s.newRequestID()
 	for i := range items {
 		items[i].QuestionID = input.QuestionID
+		items[i] = withRecommendationSource(items[i], StrategyProfileRerank, DefaultProfileModelVersion)
 		s.markRecentReturned(ctx, userID, items[i].VideoSegmentID)
 		if err := s.Repo.SaveUserVideoRecommendation(ctx, userID, input.QuestionID, items[i].VideoID, items[i].VideoSegmentID, items[i].RecommendScore, now); err != nil {
 			return nil, err
@@ -841,7 +1012,7 @@ func (s Service) filterRecentCandidates(ctx context.Context, userID uint64, cand
 	return filtered
 }
 
-func (s Service) filterRecentTwoTowerCandidates(ctx context.Context, userID uint64, candidates []TwoTowerCandidate) []TwoTowerCandidate {
+func (s Service) filterRecentRecBoleCandidates(ctx context.Context, userID uint64, candidates []RecBoleCandidate) []RecBoleCandidate {
 	base := make([]Candidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		base = append(base, candidate.Candidate)
@@ -854,7 +1025,7 @@ func (s Service) filterRecentTwoTowerCandidates(ctx context.Context, userID uint
 	for _, candidate := range filteredBase {
 		kept[candidate.VideoSegmentID] = true
 	}
-	filtered := make([]TwoTowerCandidate, 0, len(filteredBase))
+	filtered := make([]RecBoleCandidate, 0, len(filteredBase))
 	for _, candidate := range candidates {
 		if kept[candidate.VideoSegmentID] {
 			filtered = append(filtered, candidate)
@@ -980,20 +1151,6 @@ func (s Service) ReportWatch(ctx context.Context, input ReportWatchInput) error 
 	}
 	if exposureRepo, ok := s.Repo.(ExposureRepository); ok {
 		if err := exposureRepo.MarkRecommendationExposureWatched(ctx, userID, input.QuestionID, input.VideoSegmentID, now); err != nil {
-			return err
-		}
-	}
-	if s.ProfileUpdater != nil {
-		if err := s.ProfileUpdater.RebuildUserVideoProfile(ctx, userID, DefaultProfileModelVersion, now); err != nil {
-			return err
-		}
-	}
-	if s.UserTowerUpdater != nil {
-		modelVersion, err := s.activeTwoTowerModelVersion(ctx)
-		if err != nil {
-			return err
-		}
-		if err := s.UserTowerUpdater.RebuildUserTowerEmbedding(ctx, userID, modelVersion, now); err != nil {
 			return err
 		}
 	}
@@ -1219,7 +1376,7 @@ func (s Service) degradedRecommendByQuestionWithText(ctx context.Context, input 
 		if c.Distance >= 0 {
 			score = 1.0 / (1.0 + c.Distance)
 		}
-		items = append(items, buildResultItem(input.QuestionID, c, score, false, 0))
+		items = append(items, withRecommendationSource(buildResultItem(input.QuestionID, c, score, false, 0), StrategyQuestionVector, ""))
 		_ = s.Repo.SaveUserVideoRecommendation(ctx, MaxUint(input.UserID, 1), input.QuestionID, c.VideoID, c.VideoSegmentID, score, now)
 	}
 	return items, s.NewDegradedError("provider_unavailable", items)
@@ -1249,4 +1406,10 @@ func buildResultItem(questionID uint64, c Candidate, score float64, watched bool
 			UpdateTime:  c.UpdateTime,
 		},
 	}
+}
+
+func withRecommendationSource(item ResultItem, strategy string, modelVersion string) ResultItem {
+	item.Strategy = strategy
+	item.ModelVersion = modelVersion
+	return item
 }
