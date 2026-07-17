@@ -14,6 +14,5 @@
 - `../video-service/README.md`
 - `../video-service/docs/`
 - `../recbole-training/README.md`
-- `../recommendation-console/README.md`
-- `../hls-web/README.md`
+- `../hls-web/README.md`（含推荐控制台工作区）
 - `../legacy-video/README.md`

@@ -8,8 +8,7 @@
 
 - `video-service/`：推荐部署的 Go HTTP 视频服务，提供上传、转码、播放、推荐、观看记录、题库查询和异步 worker。
 - `recbole-training/`：RecBole 推荐离线训练代码、样本导出流水线和模型产物目录。
-- `recommendation-console/`：Vue 3 + Vite 推荐链路诊断控制台前端。
-- `hls-web/`：Vue 3 + Vite 视频服务调试前端，用于本地联调上传、播放、反馈和推荐接口。
+- `hls-web/`：Vue 3 + Vite 统一前端，包含视频联调工作区和推荐控制台工作区。
 - `legacy-video/`：历史 Go 后端工程，当前不作为后续对接入口。
 - `gorse/`：Gorse 推荐引擎配置与初始化脚本。
 - `docs/`：仓库级设计文档等材料。
@@ -45,10 +44,9 @@
     ├── video-vectorization-cost-report.md
     ├── video-service/                  # 推荐部署的 HTTP 后端
     ├── recbole-training/               # RecBole 推荐训练代码与模型产物
-    ├── recommendation-console/         # 推荐控制台前端
     ├── two-tower-training/             # 旧双塔训练代码（历史保留）
     ├── legacy-video/                   # 历史 Go 后端工程
-    ├── hls-web/                        # Vue 3 + Vite 前端调试工程
+    ├── hls-web/                        # Vue 3 + Vite 统一前端（视频 + 推荐控制台）
     ├── gorse/                          # Gorse 推荐引擎配置
     └── docs/                           # 仓库级设计文档
 ```
@@ -57,7 +55,7 @@
 
 - HTTP 后端服务说明：[`video-service/README.md`](video-service/README.md)
 - RecBole 训练说明：[`recbole-training/README.md`](recbole-training/README.md)
-- 推荐控制台说明：[`recommendation-console/README.md`](recommendation-console/README.md)
+- 推荐控制台说明：已合并至 [`hls-web`](hls-web)，切换工作区即可使用
 - 前端调试工程说明：[`hls-web/README.md`](hls-web/README.md)
 - 历史后端工程说明：[`legacy-video/README.md`](legacy-video/README.md)
 - 接口契约：[`video-service/docs/swagger/swagger.yaml`](video-service/docs/swagger/swagger.yaml)
@@ -173,11 +171,11 @@ RecBole 推荐链路：`cmd/recboletrainer` 定时导出训练数据 → Python 
 - `video-service/docs/swagger/swagger.yaml`
 - `recbole-training/scripts/run_recbole_pipeline.sh`
 - `hls-web/vite.config.js`
-- `recommendation-console/vite.config.js`
 
 ## 补充说明
 
 - `video-service/` 是当前对外对接入口；新集成应优先使用标准 REST 路径。
 - 根目录 compose 更偏便捷部署和联调形态，不等同于完整生产编排。
 - `legacy-video/` 和 `two-tower-training/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。
-- 推荐控制台 (`recommendation-console/`) 是只读诊断工具，用于查看推荐数据源、模型效果和曝光指标。
+- 推荐控制台已合入 `hls-web`，在工作区切换器中选择"推荐控制台"即可使用。
+- `legacy-video/` 和 `two-tower-training/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。
