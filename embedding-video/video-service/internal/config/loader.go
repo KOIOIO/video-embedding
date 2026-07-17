@@ -58,6 +58,12 @@ func applyEnvOverrides(c *Config) {
 	if value := firstEnv("GORSE_API_KEY"); value != "" {
 		c.Gorse.APIKey = value
 	}
+	if value := firstEnv("GORSE_DASHBOARD_USERNAME"); value != "" {
+		c.Gorse.DashboardUsername = value
+	}
+	if value := firstEnv("GORSE_DASHBOARD_PASSWORD"); value != "" {
+		c.Gorse.DashboardPassword = value
+	}
 	if value := firstEnv("ASR_API_KEY", "DASHSCOPE_API_KEY", "OPENAI_API_KEY"); value != "" {
 		c.ASR.APIKey = value
 	}

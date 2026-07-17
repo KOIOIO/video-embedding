@@ -1,0 +1,10 @@
+# Optional cloud override. Apply it together with the production stack:
+# docker compose -f docker-compose.yml -f docker-compose.cloud.yml up -d
+services:
+  api:
+    ports:
+      - "${VIDEO_HTTP_PORT:-8083}:8081"
+
+  frontend:
+    ports:
+      - "${VIDEO_WEB_PORT:-1325}:8080"

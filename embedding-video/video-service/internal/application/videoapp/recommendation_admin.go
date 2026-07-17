@@ -2,6 +2,7 @@ package videoapp
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -78,6 +79,31 @@ type RecommendationStrategyEffectMetric struct {
 
 type RecommendationEffectMetricsInput struct {
 	Days int
+}
+
+var ErrInvalidGorsePerformanceMetric = errors.New("invalid gorse performance metric")
+
+type RecommendationGorsePerformanceInput struct {
+	Metric string
+	Begin  time.Time
+	End    time.Time
+}
+
+type RecommendationGorseMetric struct {
+	Value string
+	Label string
+}
+
+type RecommendationGorsePerformancePoint struct {
+	Timestamp time.Time
+	Value     float64
+}
+
+type RecommendationGorsePerformance struct {
+	Metric           string
+	Label            string
+	AvailableMetrics []RecommendationGorseMetric
+	Points           []RecommendationGorsePerformancePoint
 }
 
 type RecommendationDiagnosticsInput struct {
@@ -244,7 +270,7 @@ func (s *Service) RecommendationAdminOverview(ctx context.Context) (Recommendati
 		GeneratedAt: now,
 		PreviewOnly: true,
 		Gorse: RecommendationAdminGorseOverview{
-			Configured:        s.GorseClient != nil,
+			Configured:        s.GorseClient != nil || s.GorseDashboardClient != nil,
 			CandidateLimit:    s.GorseOptions.CandidateLimit,
 			MinRecommendItems: s.GorseOptions.MinRecommendItems,
 			WriteBackEnabled:  s.GorseOptions.WriteBackEnabled,
@@ -301,6 +327,97 @@ func (s *Service) RecommendationEffectMetrics(ctx context.Context, input Recomme
 		return RecommendationEffectMetrics{}, nil
 	}
 	return repo.ListRecommendationEffectMetrics(ctx, days)
+}
+
+func (s *Service) RecommendationGorsePerformance(ctx context.Context, input RecommendationGorsePerformanceInput) (RecommendationGorsePerformance, error) {
+	if s.GorseDashboardClient == nil {
+		return RecommendationGorsePerformance{}, errors.New("gorse dashboard client is not configured")
+	}
+	feedbackTypes, err := s.GorseDashboardClient.PositiveFeedbackTypes(ctx)
+	if err != nil {
+		return RecommendationGorsePerformance{}, err
+	}
+	metrics := buildGorsePerformanceMetrics(feedbackTypes)
+	metric := strings.TrimSpace(input.Metric)
+	if metric == "" {
+		metric = "positive_feedback_ratio"
+	}
+	label := ""
+	for _, candidate := range metrics {
+		if candidate.Value == metric {
+			label = candidate.Label
+			break
+		}
+	}
+	if label == "" {
+		return RecommendationGorsePerformance{}, ErrInvalidGorsePerformanceMetric
+	}
+	points, err := s.GorseDashboardClient.Timeseries(ctx, metric, input.Begin, input.End)
+	if err != nil {
+		return RecommendationGorsePerformance{}, err
+	}
+	out := make([]RecommendationGorsePerformancePoint, 0, len(points))
+	for _, point := range points {
+		out = append(out, RecommendationGorsePerformancePoint{Timestamp: point.Timestamp, Value: point.Value})
+	}
+	return RecommendationGorsePerformance{
+		Metric:           metric,
+		Label:            label,
+		AvailableMetrics: metrics,
+		Points:           out,
+	}, nil
+}
+
+func buildGorsePerformanceMetrics(feedbackTypes []string) []RecommendationGorseMetric {
+	metrics := []RecommendationGorseMetric{{Value: "positive_feedback_ratio", Label: "正向反馈率（全部）"}}
+	seen := map[string]struct{}{"positive_feedback_ratio": {}}
+	for _, feedbackType := range feedbackTypes {
+		feedbackType = strings.TrimSpace(feedbackType)
+		if !safeGorseFeedbackType(feedbackType) {
+			continue
+		}
+		value := "positive_feedback_ratio_" + feedbackType
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		metrics = append(metrics, RecommendationGorseMetric{
+			Value: value,
+			Label: "正向反馈率（" + formatGorseFeedbackLabel(feedbackType) + "）",
+		})
+	}
+	metrics = append(metrics,
+		RecommendationGorseMetric{Value: "cf_ndcg", Label: "协同过滤 · NDCG"},
+		RecommendationGorseMetric{Value: "cf_precision", Label: "协同过滤 · Precision"},
+		RecommendationGorseMetric{Value: "cf_recall", Label: "协同过滤 · Recall"},
+		RecommendationGorseMetric{Value: "ctr_auc", Label: "点击率模型 · AUC"},
+		RecommendationGorseMetric{Value: "ctr_precision", Label: "点击率模型 · Precision"},
+		RecommendationGorseMetric{Value: "ctr_recall", Label: "点击率模型 · Recall"},
+	)
+	return metrics
+}
+
+func safeGorseFeedbackType(value string) bool {
+	if value == "" || strings.ContainsAny(value, "/\\") {
+		return false
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func formatGorseFeedbackLabel(value string) string {
+	words := strings.Split(value, "_")
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 func (s *Service) RecommendationDiagnostics(ctx context.Context, input RecommendationDiagnosticsInput) (RecommendationDiagnostics, error) {

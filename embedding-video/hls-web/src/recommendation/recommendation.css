@@ -1,4 +1,4 @@
-:root {
+.recommendation-workspace {
   font-family:
     ui-sans-serif,
     "PingFang SC",
@@ -15,7 +15,7 @@
   box-sizing: border-box;
 }
 
-body {
+.recommendation-workspace {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
@@ -23,6 +23,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -32,48 +33,9 @@ button:disabled {
   opacity: 0.58;
 }
 
-a {
+a,
+.preview-table-wrap :deep(a) {
   color: #2d5f93;
-}
-
-.login-shell {
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
-  padding: 24px;
-  background:
-    linear-gradient(90deg, rgba(24, 32, 31, 0.06) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(24, 32, 31, 0.05) 1px, transparent 1px),
-    #eef1eb;
-  background-size: 28px 28px;
-}
-
-.login-panel {
-  display: grid;
-  gap: 28px;
-  width: min(100%, 420px);
-  padding: 28px;
-  background: #fbfaf3;
-  border: 1px solid rgba(24, 32, 31, 0.14);
-  border-radius: 8px;
-  box-shadow: 0 18px 50px rgba(24, 32, 31, 0.12);
-}
-
-.login-brand strong {
-  color: #18201f;
-}
-
-.login-brand small {
-  color: #53645f;
-}
-
-.login-form {
-  display: grid;
-  gap: 14px;
-}
-
-.login-form .control-button {
-  width: 100%;
 }
 
 .console-shell {
@@ -498,6 +460,7 @@ label span {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   min-width: 0;
@@ -513,6 +476,11 @@ input {
   padding: 0 10px;
 }
 
+select {
+  height: 40px;
+  padding: 0 34px 0 10px;
+}
+
 textarea {
   min-height: 88px;
   padding: 10px;
@@ -520,9 +488,193 @@ textarea {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   border-color: #4f80b8;
   box-shadow: 0 0 0 3px rgba(79, 128, 184, 0.16);
+}
+
+.gorse-performance-panel {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #fbfaf3;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-heading) {
+  align-items: end;
+  padding: 20px;
+  border-bottom: 1px solid rgba(24, 32, 31, 0.14);
+}
+
+.gorse-performance-panel :deep(.gorse-performance-filters) {
+  display: grid;
+  grid-template-columns: 142px 142px minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  min-width: min(100%, 680px);
+}
+
+.gorse-performance-panel :deep(.gorse-performance-filters label) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-filters label span) {
+  color: #53645f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-filters input),
+.gorse-performance-panel :deep(.gorse-performance-filters select),
+.gorse-performance-panel :deep(.gorse-performance-filters button) {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-filters input),
+.gorse-performance-panel :deep(.gorse-performance-filters select) {
+  padding: 0 10px;
+  color: #18201f;
+  background: #fbfaf3;
+  border: 1px solid rgba(24, 32, 31, 0.18);
+  border-radius: 8px;
+  outline: none;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-filters input:focus),
+.gorse-performance-panel :deep(.gorse-performance-filters select:focus) {
+  border-color: #4f80b8;
+  box-shadow: 0 0 0 3px rgba(79, 128, 184, 0.16);
+}
+
+.gorse-performance-panel :deep(.gorse-performance-error) {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16px 20px 0;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-error button) {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(123, 29, 29, 0.24);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gorse-performance-panel :deep(.gorse-chart-stage) {
+  position: relative;
+  min-height: 280px;
+  margin: 20px;
+  overflow: hidden;
+  color: #e9f0ec;
+  background: #172321;
+  border: 1px solid #2f4540;
+  border-radius: 6px;
+}
+
+.gorse-performance-panel :deep(.gorse-chart-state) {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  color: #aebdb8;
+  font-size: 14px;
+}
+
+.gorse-performance-panel :deep(.gorse-trend-chart) {
+  display: block;
+  width: 100%;
+  min-width: 620px;
+  aspect-ratio: 18 / 7;
+  min-height: 280px;
+  max-height: 390px;
+}
+
+.gorse-performance-panel :deep(.gorse-grid-lines line) {
+  stroke: #2c3c38;
+  stroke-width: 1;
+}
+
+.gorse-performance-panel :deep(.gorse-axis-labels text) {
+  fill: #96aaa4;
+  font-size: 11px;
+}
+
+.gorse-performance-panel :deep(.gorse-area) {
+  fill: #2fba9c;
+  opacity: 0.16;
+}
+
+.gorse-performance-panel :deep(.gorse-line) {
+  fill: none;
+  stroke: #49d4b6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.gorse-performance-panel :deep(.gorse-chart-points circle) {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 2;
+  cursor: crosshair;
+}
+
+.gorse-performance-panel :deep(.gorse-chart-points circle:hover),
+.gorse-performance-panel :deep(.gorse-chart-points circle:focus) {
+  fill: #172321;
+  stroke: #d7ff65;
+  outline: none;
+}
+
+.gorse-performance-panel :deep(.gorse-tooltip rect) {
+  fill: #fbfaf3;
+  stroke: #2f4540;
+}
+
+.gorse-performance-panel :deep(.gorse-tooltip text:first-of-type) {
+  fill: #18201f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gorse-performance-panel :deep(.gorse-tooltip text:last-of-type) {
+  fill: #53645f;
+  font-size: 9px;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-summary) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(24, 32, 31, 0.14);
+}
+
+.gorse-performance-panel :deep(.gorse-performance-summary > div) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-summary > div + div) {
+  border-left: 1px solid rgba(24, 32, 31, 0.12);
+}
+
+.gorse-performance-panel :deep(.gorse-performance-summary span) {
+  color: #53645f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gorse-performance-panel :deep(.gorse-performance-summary strong) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 18px;
 }
 
 .inline-error {
@@ -581,15 +733,15 @@ textarea:focus {
   min-width: 900px;
 }
 
-.preview-table {
+.preview-table-wrap :deep(.preview-table) {
   width: 100%;
   min-width: 760px;
   border-collapse: collapse;
   background: #fbfaf3;
 }
 
-.preview-table th,
-.preview-table td {
+.preview-table-wrap :deep(.preview-table th),
+.preview-table-wrap :deep(.preview-table td) {
   padding: 11px 12px;
   font-size: 13px;
   text-align: left;
@@ -597,7 +749,7 @@ textarea:focus {
   border-bottom: 1px solid rgba(24, 32, 31, 0.1);
 }
 
-.preview-table th {
+.preview-table-wrap :deep(.preview-table th) {
   color: #53645f;
   font-size: 11px;
   font-weight: 900;
@@ -605,20 +757,21 @@ textarea:focus {
   background: #edf0e6;
 }
 
-.preview-table td {
+.preview-table-wrap :deep(.preview-table td) {
   color: #18201f;
 }
 
-.preview-table td:nth-child(3) {
+.preview-table-wrap :deep(.preview-table td:nth-child(3)) {
   min-width: 160px;
 }
 
-.preview-table td:last-child {
+.preview-table-wrap :deep(.preview-table td:last-child) {
   max-width: 260px;
   overflow-wrap: anywhere;
 }
 
-.strategy-chip {
+.strategy-chip,
+.preview-table-wrap :deep(.strategy-chip) {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -630,7 +783,8 @@ textarea:focus {
   border-radius: 999px;
 }
 
-.strategy-chip + small {
+.strategy-chip + small,
+.preview-table-wrap :deep(.strategy-chip + small) {
   display: block;
   margin-top: 4px;
   color: #53645f;
@@ -694,7 +848,8 @@ textarea:focus {
   border-radius: 999px;
 }
 
-.empty-state {
+.empty-state,
+.preview-table-wrap :deep(.empty-state) {
   margin: 0;
   padding: 20px;
   color: #53645f;
@@ -723,6 +878,17 @@ textarea:focus {
   .pipeline-row {
     grid-template-columns: 1fr;
   }
+
+  .gorse-performance-panel :deep(.gorse-performance-heading),
+  .gorse-performance-panel :deep(.gorse-performance-filters) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .gorse-performance-panel :deep(.gorse-metric-select) {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
@@ -750,6 +916,22 @@ textarea:focus {
   .control-form,
   .question-form {
     grid-template-columns: 1fr;
+  }
+
+  .gorse-performance-panel :deep(.gorse-performance-heading),
+  .gorse-performance-panel :deep(.gorse-performance-filters),
+  .gorse-performance-panel :deep(.gorse-performance-summary) {
+    grid-template-columns: 1fr;
+  }
+
+  .gorse-performance-panel :deep(.gorse-chart-stage) {
+    margin: 14px;
+    overflow-x: auto;
+  }
+
+  .gorse-performance-panel :deep(.gorse-performance-summary > div + div) {
+    border-top: 1px solid rgba(24, 32, 31, 0.12);
+    border-left: 0;
   }
 
   h1 {

@@ -1,4 +1,4 @@
-export const ARCHIVE_PROGRESS_STORAGE_KEY = 'video-archive-progress'
+export const ARCHIVE_PROGRESS_STORAGE_KEY = 'hengshui-video-archive-progress'
 
 export function saveArchiveUpload(upload, storage = globalThis.localStorage) {
   const batchId = String(upload?.batch_id || '').trim()

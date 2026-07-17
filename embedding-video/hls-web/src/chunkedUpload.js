@@ -1,5 +1,5 @@
 const DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024
-const STORAGE_KEY_PREFIX = 'video-upload'
+const STORAGE_KEY_PREFIX = 'hengshui-video-upload'
 
 export function buildUploadSessionKey(file) {
   return [

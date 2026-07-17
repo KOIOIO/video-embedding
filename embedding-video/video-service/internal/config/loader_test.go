@@ -372,6 +372,8 @@ RustFS:
   SecretKey: "file-sk"
 Gorse:
   APIKey: "file-gorse"
+  DashboardUsername: "file-admin"
+  DashboardPassword: "file-password"
 `)
 	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -382,6 +384,8 @@ Gorse:
 	t.Setenv("COS_SECRET_ID", "env-ak")
 	t.Setenv("COS_SECRET_KEY", "env-sk")
 	t.Setenv("GORSE_API_KEY", "env-gorse")
+	t.Setenv("GORSE_DASHBOARD_USERNAME", "env-admin")
+	t.Setenv("GORSE_DASHBOARD_PASSWORD", "env-password")
 
 	cfg := MustLoad(cfgPath)
 
@@ -396,6 +400,9 @@ Gorse:
 	}
 	if cfg.Gorse.APIKey != "env-gorse" {
 		t.Fatalf("Gorse.APIKey = %q, want env override", cfg.Gorse.APIKey)
+	}
+	if cfg.Gorse.DashboardUsername != "env-admin" || cfg.Gorse.DashboardPassword != "env-password" {
+		t.Fatalf("Gorse dashboard credentials = %q/%q, want env overrides", cfg.Gorse.DashboardUsername, cfg.Gorse.DashboardPassword)
 	}
 }
 

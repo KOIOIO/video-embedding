@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const appVue = readFileSync(resolve(here, 'App.vue'), 'utf8')
+const appVue = readFileSync(resolve(here, 'workspaces/VideoWorkspace.vue'), 'utf8')
 const styles = readFileSync(resolve(here, 'style.css'), 'utf8')
 const playerVue = readFileSync(resolve(here, 'components/HlsPlayer.vue'), 'utf8')
 

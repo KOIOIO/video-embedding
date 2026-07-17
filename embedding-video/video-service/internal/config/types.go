@@ -217,6 +217,8 @@ type RecommendationConfig struct {
 type GorseConfig struct {
 	Endpoint          string `yaml:"Endpoint"`
 	APIKey            string `yaml:"APIKey"`
+	DashboardUsername string `yaml:"DashboardUsername"`
+	DashboardPassword string `yaml:"DashboardPassword"`
 	TimeoutSeconds    int    `yaml:"TimeoutSeconds"`
 	ShadowMode        bool   `yaml:"ShadowMode"`
 	SyncEnabled       bool   `yaml:"SyncEnabled"`

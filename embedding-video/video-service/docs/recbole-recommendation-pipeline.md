@@ -2,7 +2,7 @@
 
 ## 当前定位
 
-`GET /api/video-segments/random-play` 仍是个性化推荐展示入口。默认配置继续使用 `Recommendation.Engine=gorse`，Gorse 可以把 `/api/internal/recommendations/external/recbole` 配置为 external 候选源；如果显式设置 `Recommendation.Engine=recbole`，Go 服务会直接从 `recsys` 读取 RecBole user/item embedding 做 pgvector 召回。
+`GET /api/video-segments/random-play` 是个性化推荐展示入口。当前 `configs/video.yml` 与 `configs/video_prod.yml` 都使用 `Recommendation.Engine=recbole`，Go 服务直接从 `recsys` 读取 active RecBole user/item embedding 做 pgvector 召回。若切换为 `gorse`，Gorse 可以把 `/api/internal/recommendations/external/recbole` 配置为 external 候选源。
 
 ## 数据与训练
 
@@ -37,6 +37,7 @@ recsys.recommend_item_embedding
 旧 public embedding/version 表不再由服务启动或导入工具创建。确认新链路通过验证并完成备份后，使用显式清理工具删除：
 
 ```bash
+cd video-service
 go run ./tools/drop_legacy_recommendation_tables --execute --confirm drop-legacy-recommendation-tables
 ```
 

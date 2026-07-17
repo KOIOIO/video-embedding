@@ -201,6 +201,7 @@ func TestRecommendationAdminRoutesAreRegistered(t *testing.T) {
 		{name: "diagnostics", method: http.MethodGet, path: "/api/admin/recommendation/diagnostics", want: http.StatusOK},
 		{name: "datasources", method: http.MethodGet, path: "/api/admin/recommendation/datasources", want: http.StatusOK},
 		{name: "effects", method: http.MethodGet, path: "/api/admin/recommendation/effects?days=bad", want: http.StatusBadRequest},
+		{name: "gorse performance", method: http.MethodGet, path: "/api/admin/recommendation/gorse/performance?metric=cf_ndcg&begin=bad&end=2026-07-16T00:00:00Z", want: http.StatusBadRequest},
 		{name: "random trace", method: http.MethodGet, path: "/api/admin/recommendation/trace/random-play?user_id=bad", want: http.StatusBadRequest},
 		{name: "question trace", method: http.MethodPost, path: "/api/admin/recommendation/trace/by-question", body: `{"question_text":"   "}`, want: http.StatusBadRequest},
 		{name: "redis state", method: http.MethodGet, path: "/api/admin/recommendation/redis-state?user_id=bad", want: http.StatusBadRequest},
