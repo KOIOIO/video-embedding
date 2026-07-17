@@ -1,0 +1,30 @@
+FROM golang:1.26.1-bookworm AS go-build
+
+WORKDIR /src/hengshui-tablet-video-http
+
+COPY hengshui-tablet-video-http/go.mod hengshui-tablet-video-http/go.sum ./
+RUN go mod download
+
+COPY hengshui-tablet-video-http/ ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/recboletrainer ./cmd/recboletrainer
+
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+COPY --from=go-build /usr/local/go /usr/local/go
+COPY --from=go-build /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=go-build /out/recboletrainer /usr/local/bin/recboletrainer
+
+COPY recbole-training/requirements.txt /tmp/requirements.txt
+RUN python3 -m venv /opt/recbole-venv \
+    && /opt/recbole-venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/recbole-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY hengshui-tablet-video-http/ ./hengshui-tablet-video-http/
+COPY recbole-training/ ./recbole-training/
+
+WORKDIR /app/hengshui-tablet-video-http
+
+ENV PATH="/opt/recbole-venv/bin:/usr/local/go/bin:${PATH}" \
+    TZ=Asia/Shanghai

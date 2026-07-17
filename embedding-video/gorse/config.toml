@@ -1,6 +1,6 @@
 [database]
-cache_store = "postgres://postgres:postgres@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
-data_store = "postgres://postgres:postgres@postgres:5432/video_embedding?sslmode=disable&search_path=gorse,public"
+cache_store = "__GORSE_CACHE_STORE__"
+data_store = "__GORSE_DATA_STORE__"
 vector_store = "sqlite:///var/lib/gorse/blob/vector.db"
 table_prefix = "video_gorse_"
 cache_table_prefix = "video_gorse_cache_"
@@ -16,11 +16,11 @@ host = "0.0.0.0"
 port = 8086
 http_host = "0.0.0.0"
 http_port = 8088
-dashboard_user_name = "admin"
-dashboard_password = "admin123"
+dashboard_user_name = "__GORSE_DASHBOARD_USERNAME__"
+dashboard_password = "__GORSE_DASHBOARD_PASSWORD__"
 
 [server]
-api_key = ""
+api_key = "__GORSE_SERVER_API_KEY__"
 default_n = 10
 auto_insert_user = true
 auto_insert_item = false
@@ -67,8 +67,7 @@ function pull(url) {
 }
 
 var path = "/api/internal/recommendations/external/recbole?user_id=" + user_id + "&n=100";
-pull("http://backend:8083" + path) ||
-  "[]";
+pull("http://api:8081" + path) || "[]";
 """
 
 [recommend.collaborative]
@@ -89,7 +88,7 @@ optimize_period = "360m"
 optimize_trials = 10
 
 [recommend.fallback]
-recommenders = ["external/two_tower", "latest", "non-personalized/popular_weekly", "item-to-item/neighbors"]
+recommenders = ["external/recbole", "latest", "non-personalized/popular_weekly", "item-to-item/neighbors"]
 
 [blob]
 uri = "/var/lib/gorse/blob"

@@ -144,6 +144,8 @@ Recommendation:
 Gorse:
   Endpoint: "http://localhost:8087"
   APIKey: ""
+  DashboardUsername: ""
+  DashboardPassword: ""
   TimeoutSeconds: 2
   ShadowMode: false
   SyncEnabled: true

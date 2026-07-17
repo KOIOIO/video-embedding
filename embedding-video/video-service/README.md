@@ -1,4 +1,4 @@
-# Video Service — HTTP 视频服务
+# 衡桃学堂 HTTP 视频服务
 
 ## 项目简介
 
@@ -137,7 +137,7 @@ flowchart TD
 - `cmd/httpapi` 提供统一 HTTP 接口，Java 直接调用这一层。
 - `cmd/worker` 是当前默认的 worker 启动入口，用于消费转码和向量化任务队列。
 - 视频文件与 HLS 产物存放在对象存储中，通过 `Storage.MediaRoutePrefix` 配置的路由代理访问，默认兼容 `/videos/*filepath`。
-- `/api/video-segments/random-play` 是当前个性化推荐的主要展现入口；配置 `Recommendation.Engine=gorse` 时优先使用 Gorse，Gorse 可配置 `external/recbole` 作为补候选来源，Go 服务负责 Redis random-play bucket、可播放过滤、曝光记录和最终兜底。
+- `/api/video-segments/random-play` 是当前个性化推荐的主要展现入口；当前两份示例配置均使用 `Recommendation.Engine=recbole`，从 `recsys` 的 active RecBole embedding 做召回。设为 `gorse` 时可改由 Gorse 提供候选，Go 服务仍负责 Redis random-play bucket、可播放过滤、曝光记录和最终兜底。
 - `/api/recommendations/by-question` 面向题目文本匹配，主要基于题目文本向量与视频片段向量做召回，不依赖 RecBole 用户向量。
 - `recbole_trainer` 是独立训练调度进程，线上主服务容器默认不执行 Python 训练。
 - 推荐链路在外部 AI provider 不可用时会自动进入降级模式，优先返回可用结果而不是直接报错。
@@ -319,6 +319,7 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 | `GET` | `/healthz` | 健康检查 |
 | `GET` | `/api/healthz` | API 健康检查 |
 | `GET` | `/api/system/metrics` | 查询系统运行指标 |
+| `GET` | `/api/admin/recommendation/gorse/performance` | 查询 Gorse 推荐性能指标与时间序列；仅供受保护的推荐管理控制台使用 |
 | `POST` | `/api/videos` | 上传视频 |
 | `POST` | `/api/videos/archive` | 上传归档视频 |
 | `POST` | `/api/videos/uploads` | 创建普通视频分片上传会话 |
@@ -602,6 +603,8 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 | `RUSTFS_ACCESS_KEY` | 对象存储 AccessKey，COS 变量未设置时使用 |
 | `RUSTFS_SECRET_KEY` | 对象存储 SecretKey，COS 变量未设置时使用 |
 | `GORSE_API_KEY` | Go 服务调用 Gorse server 的 API Key |
+| `GORSE_DASHBOARD_USERNAME` | Gorse Dashboard 登录用户，供推荐性能管理接口建立内部会话 |
+| `GORSE_DASHBOARD_PASSWORD` | Gorse Dashboard 登录密码；必须与 Gorse 容器运行配置一致 |
 | `DASHSCOPE_API_KEY` | DashScope / 百炼兼容接口 API Key，供推荐 embedding 和向量化 worker 使用 |
 | `OPENAI_API_KEY` | OpenAI 兼容接口 API Key 兜底 |
 | `EMBEDDING_API_KEY` | 推荐链路 embedding 客户端 API Key 兜底 |
@@ -953,7 +956,7 @@ Java 新接入建议统一只用下面这套路径风格：
 
 这样可以隔离 HTTP 请求与耗时任务，隔离在线推荐与离线训练，并便于独立扩缩容。
 
-根目录 `docker-compose.yml` 当前提供一个便捷部署形态：`backend_http` 同一容器中后台启动 worker，再以前台进程启动 HTTP API；`recbole_trainer` 使用独立 profile；`frontend_web` 是 `hls-web` 调试前端。
+根目录 `docker-compose.yml` 以独立 `api`、`worker`、`recbole_trainer`、`frontend` 和 Gorse 集群部署。API、worker 与训练调度可分别重启和扩缩容；前端为构建后的 Nginx 静态服务。生产镜像内置 FFmpeg，`configs/video_prod.yml` 使用原生模式，不挂载宿主 Docker socket。
 
 ## 适合优先查看的文件
 

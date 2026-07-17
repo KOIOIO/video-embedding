@@ -1,11 +1,41 @@
 import sys
 import types
 import unittest
+from unittest import mock
 
 from recbole_recommendation import train
 
 
 class RecBoleTrainTest(unittest.TestCase):
+    def test_hides_wrapper_args_from_recbole_and_restores_them(self) -> None:
+        seen_argv: list[list[str]] = []
+
+        def fake_run_recbole(**_kwargs):
+            seen_argv.append(sys.argv.copy())
+            return {}
+
+        fake_quick_start = types.ModuleType("recbole.quick_start")
+        fake_quick_start.run_recbole = fake_run_recbole
+        original_quick_start = sys.modules.get("recbole.quick_start")
+        original_argv = sys.argv
+        wrapper_argv = ["train.py", "--dataset-dir", "data/example", "--epochs", "20"]
+        sys.modules["recbole.quick_start"] = fake_quick_start
+        sys.argv = wrapper_argv
+        try:
+            with mock.patch.object(train, "allow_trusted_torch_checkpoint_loads"):
+                train.run_recbole_training(
+                    types.SimpleNamespace(model="BPR", dataset="video_dataset"),
+                    {"epochs": 20},
+                )
+            self.assertEqual(seen_argv, [["train.py"]])
+            self.assertIs(sys.argv, wrapper_argv)
+        finally:
+            sys.argv = original_argv
+            if original_quick_start is None:
+                sys.modules.pop("recbole.quick_start", None)
+            else:
+                sys.modules["recbole.quick_start"] = original_quick_start
+
     def test_allows_trusted_torch_checkpoint_loads_by_default(self) -> None:
         calls: list[dict] = []
 

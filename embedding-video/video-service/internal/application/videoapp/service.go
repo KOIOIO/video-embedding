@@ -19,6 +19,7 @@ type Service struct {
 	SegmentReactionStore VideoReactionStore
 	RecommendationEngine string
 	GorseClient          recommendationapp.GorseClient
+	GorseDashboardClient recommendationapp.GorseDashboardClient
 	GorseOptions         recommendationapp.GorseOptions
 	RecentSegments       recommendationapp.RecentSegmentStore
 	RecentSegmentTTL     time.Duration

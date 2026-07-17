@@ -20,7 +20,7 @@ import (
 const (
 	defaultBucket         = "video-embedding-storage"
 	defaultSourceEndpoint = "127.0.0.1:9000"
-	defaultTargetEndpoint = "127.0.0.1:9001"
+	defaultTargetEndpoint = "10.200.10.201:9001"
 )
 
 type options struct {

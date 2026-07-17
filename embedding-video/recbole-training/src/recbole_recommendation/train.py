@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from . import config as config_builder
@@ -11,7 +12,7 @@ from . import metrics as metrics_io
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a RecBole model and export embeddings.")
     parser.add_argument("--dataset-dir", required=True)
-    parser.add_argument("--dataset", default="hengshui_video")
+    parser.add_argument("--dataset", default="video_dataset")
     parser.add_argument("--output", required=True)
     parser.add_argument("--model-version", required=True)
     parser.add_argument("--model", default="BPR")
@@ -42,7 +43,12 @@ def run_recbole_training(args: argparse.Namespace, cfg: dict) -> dict:
     except ImportError as exc:
         raise RuntimeError("RecBole is not installed; install requirements.txt in recbole-training") from exc
 
-    result = run_recbole(model=args.model, dataset=args.dataset, config_dict=cfg)
+    original_argv = sys.argv
+    try:
+        sys.argv = [original_argv[0]]
+        result = run_recbole(model=args.model, dataset=args.dataset, config_dict=cfg)
+    finally:
+        sys.argv = original_argv
     if isinstance(result, dict):
         return result
     return {}

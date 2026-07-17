@@ -351,11 +351,21 @@ LIMIT $1`
 
 func buildInteractionRows(events []interactionEvent) []interactionRow {
 	rows := make([]interactionRow, 0, len(events))
+	rowIndexes := make(map[[2]uint64]int, len(events))
 	for _, event := range events {
 		row, ok := interactionFromEvent(event)
-		if ok {
-			rows = append(rows, row)
+		if !ok {
+			continue
 		}
+		key := [2]uint64{row.UserID, row.VideoSegmentID}
+		if index, exists := rowIndexes[key]; exists {
+			if row.Timestamp > rows[index].Timestamp {
+				rows[index] = row
+			}
+			continue
+		}
+		rowIndexes[key] = len(rows)
+		rows = append(rows, row)
 	}
 	return rows
 }

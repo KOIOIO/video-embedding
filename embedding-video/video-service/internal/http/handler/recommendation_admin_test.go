@@ -21,6 +21,7 @@ type stubRecommendationAdminApp struct {
 	diagnosticsFunc        func(context.Context, videoapp.RecommendationDiagnosticsInput) (videoapp.RecommendationDiagnostics, error)
 	datasourceStatsFunc    func(context.Context) (videoapp.RecommendationDatasourceStats, error)
 	effectMetricsFunc      func(context.Context, videoapp.RecommendationEffectMetricsInput) (videoapp.RecommendationEffectMetrics, error)
+	gorsePerformanceFunc   func(context.Context, videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error)
 	traceRandomPlayFunc    func(context.Context, videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendationTrace, error)
 	traceQuestionFunc      func(context.Context, videoapp.RecommendByQuestionInput) (videoapp.RecommendationTrace, error)
 	redisStateFunc         func(context.Context, videoapp.RecommendationRedisStateInput) (videoapp.RecommendationRedisState, error)
@@ -31,6 +32,7 @@ type stubRecommendationAdminApp struct {
 	previewRandomPlayInput videoapp.RandomPlayVideoSegmentInput
 	previewQuestionInput   videoapp.RecommendByQuestionInput
 	effectMetricsInput     videoapp.RecommendationEffectMetricsInput
+	gorsePerformanceInput  videoapp.RecommendationGorsePerformanceInput
 	diagnosticsInput       videoapp.RecommendationDiagnosticsInput
 	redisStateInput        videoapp.RecommendationRedisStateInput
 }
@@ -63,6 +65,74 @@ func (s *stubRecommendationAdminApp) RecommendationEffectMetrics(ctx context.Con
 		return s.effectMetricsFunc(ctx, input)
 	}
 	return videoapp.RecommendationEffectMetrics{}, nil
+}
+
+func (s *stubRecommendationAdminApp) RecommendationGorsePerformance(ctx context.Context, input videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error) {
+	s.gorsePerformanceInput = input
+	if s.gorsePerformanceFunc != nil {
+		return s.gorsePerformanceFunc(ctx, input)
+	}
+	return videoapp.RecommendationGorsePerformance{}, nil
+}
+
+func TestRecommendationAdminGorsePerformanceReturnsNormalizedTimeseries(t *testing.T) {
+	begin := time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 16, 23, 59, 59, 0, time.UTC)
+	stub := &stubRecommendationAdminApp{
+		gorsePerformanceFunc: func(_ context.Context, input videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error) {
+			return videoapp.RecommendationGorsePerformance{
+				Metric: "positive_feedback_ratio",
+				Label:  "正向反馈率（全部）",
+				AvailableMetrics: []videoapp.RecommendationGorseMetric{{
+					Value: "positive_feedback_ratio",
+					Label: "正向反馈率（全部）",
+				}},
+				Points: []videoapp.RecommendationGorsePerformancePoint{{
+					Timestamp: time.Date(2026, 7, 14, 0, 0, 0, 0, time.UTC),
+					Value:     0.375,
+				}},
+			}, nil
+		},
+	}
+	h := handler.NewRecommendationAdminHandler(stub)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/gorse/performance?metric=positive_feedback_ratio&begin=2026-07-09T00:00:00Z&end=2026-07-16T23:59:59Z", nil)
+	router := gin.New()
+	router.GET("/api/admin/recommendation/gorse/performance", h.GorsePerformance)
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.gorsePerformanceInput.Metric != "positive_feedback_ratio" || !stub.gorsePerformanceInput.Begin.Equal(begin) || !stub.gorsePerformanceInput.End.Equal(end) {
+		t.Fatalf("input = %+v", stub.gorsePerformanceInput)
+	}
+	assertBodyContains(t, w.Body.Bytes(), `"metric":"positive_feedback_ratio"`)
+	assertBodyContains(t, w.Body.Bytes(), `"label":"正向反馈率（全部）"`)
+	assertBodyContains(t, w.Body.Bytes(), `"available_metrics"`)
+	assertBodyContains(t, w.Body.Bytes(), `"timestamp":"2026-07-14T00:00:00Z"`)
+	assertBodyContains(t, w.Body.Bytes(), `"value":0.375`)
+}
+
+func TestRecommendationAdminGorsePerformanceRejectsInvalidQueries(t *testing.T) {
+	h := handler.NewRecommendationAdminHandler(&stubRecommendationAdminApp{})
+	router := gin.New()
+	router.GET("/api/admin/recommendation/gorse/performance", h.GorsePerformance)
+
+	tests := []string{
+		"metric=..%2F..%2Fconfig&begin=2026-07-09T00:00:00Z&end=2026-07-16T23:59:59Z",
+		"metric=cf_ndcg&begin=bad&end=2026-07-16T23:59:59Z",
+		"metric=cf_ndcg&begin=2026-07-17T00:00:00Z&end=2026-07-16T00:00:00Z",
+	}
+	for _, query := range tests {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/gorse/performance?"+query, nil)
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("query %q: expected 400, got %d: %s", query, w.Code, w.Body.String())
+		}
+	}
 }
 
 func TestRecommendationAdminDiagnostics_ReturnsHealthAndRecentRequests(t *testing.T) {

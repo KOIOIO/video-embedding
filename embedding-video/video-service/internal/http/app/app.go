@@ -127,6 +127,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	gorseClient, recommendationEngine, gorseOptions := recommendationRuntimeFromConfig(cfg)
 	service.RecommendationEngine = recommendationEngine
 	service.GorseClient = gorseClient
+	service.GorseDashboardClient = gorseDashboardRuntimeFromConfig(cfg)
 	service.GorseOptions = gorseOptions
 	service.RecentSegments = infraredis.NewRecentSegmentStoreWithOptions(rdb, infraredis.RecentSegmentStoreOptions{
 		Prefix:  config.RandomPlayRecentPrefix(cfg),
@@ -154,6 +155,18 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			CORSMaxAge:           config.CORSMaxAge(cfg),
 		},
 	}, nil
+}
+
+func gorseDashboardRuntimeFromConfig(cfg config.Config) recommendationapp.GorseDashboardClient {
+	if strings.TrimSpace(config.GorseEndpoint(cfg)) == "" {
+		return nil
+	}
+	return recommendationapp.NewGorseDashboardHTTPClient(recommendationapp.GorseDashboardClientConfig{
+		Endpoint: config.GorseEndpoint(cfg),
+		Username: cfg.Gorse.DashboardUsername,
+		Password: cfg.Gorse.DashboardPassword,
+		Timeout:  config.GorseTimeout(cfg),
+	})
 }
 
 func recommendationRuntimeFromConfig(cfg config.Config) (recommendationapp.GorseClient, string, recommendationapp.GorseOptions) {

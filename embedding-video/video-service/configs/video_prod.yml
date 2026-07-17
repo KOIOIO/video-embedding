@@ -32,7 +32,7 @@ Storage:
   VectorTempPath: "./storage/tmp/video_vectorize"
 
 FFmpeg:
-  UseDocker: true
+  UseDocker: false
   DockerImage: "jrottenberg/ffmpeg"
   HLS:
     Time: 6
@@ -144,8 +144,10 @@ Recommendation:
   RandomPlayRecentMaxSize: 200
 
 Gorse:
-  Endpoint: "http://gorse:8087"
+  Endpoint: "http://gorse:8088"
   APIKey: ""
+  DashboardUsername: ""
+  DashboardPassword: ""
   TimeoutSeconds: 2
   ShadowMode: false
   SyncEnabled: true

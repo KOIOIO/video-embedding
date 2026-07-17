@@ -191,3 +191,30 @@ func TestInteractionFromEventMapsRatingsConservatively(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildInteractionRowsKeepsLatestEventPerUserAndSegment(t *testing.T) {
+	older := time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Hour)
+	events := []interactionEvent{
+		{
+			UserID: 7, VideoSegmentID: 101, Source: "segment_reaction", ReactionType: "like", EventTime: older,
+		},
+		{
+			UserID: 7, VideoSegmentID: 101, Source: "exposure", EventTime: newer,
+		},
+		{
+			UserID: 7, VideoSegmentID: 102, Source: "segment_reaction", ReactionType: "double_like", EventTime: older,
+		},
+	}
+
+	rows := buildInteractionRows(events)
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2: %+v", len(rows), rows)
+	}
+	if rows[0].VideoSegmentID != 101 || rows[0].Source != "exposure" || rows[0].Timestamp != float64(newer.Unix()) {
+		t.Fatalf("rows[0] = %+v, want latest event for user 7 segment 101", rows[0])
+	}
+	if rows[1].VideoSegmentID != 102 {
+		t.Fatalf("rows[1] = %+v, want user 7 segment 102", rows[1])
+	}
+}

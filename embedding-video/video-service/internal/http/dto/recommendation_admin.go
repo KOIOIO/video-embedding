@@ -106,6 +106,23 @@ type RecommendationEffectMetricsData struct {
 	Strategies []RecommendationStrategyEffectMetricData `json:"strategies"`
 }
 
+type RecommendationGorsePerformanceData struct {
+	Metric           string                                    `json:"metric"`
+	Label            string                                    `json:"label"`
+	AvailableMetrics []RecommendationGorseMetricData           `json:"available_metrics"`
+	Points           []RecommendationGorsePerformancePointData `json:"points"`
+}
+
+type RecommendationGorseMetricData struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type RecommendationGorsePerformancePointData struct {
+	Timestamp time.Time `json:"timestamp"`
+	Value     float64   `json:"value"`
+}
+
 type RecommendationDailyEffectMetricData struct {
 	Day       string  `json:"day"`
 	Exposures int64   `json:"exposures"`

@@ -31,13 +31,13 @@ class RecBoleExportEmbeddingsTest(unittest.TestCase):
             data = root / "data"
             out = root / "artifacts"
             data.mkdir()
-            (data / "hengshui_video.item").write_text(
+            (data / "video_dataset.item").write_text(
                 "item_id:token,video_id:token\n101,11\n", encoding="utf-8"
             )
-            (data / "hengshui_video.user").write_text(
+            (data / "video_dataset.user").write_text(
                 "user_id:token,grade_id:token\n7,10\n", encoding="utf-8"
             )
-            export_embeddings.export_from_atomic_files(data, "hengshui_video", out, "recbole_v1", 2)
+            export_embeddings.export_from_atomic_files(data, "video_dataset", out, "recbole_v1", 2)
             with (out / "item_embeddings.csv").open() as f:
                 item_rows = list(csv.DictReader(f))
             with (out / "user_embeddings.csv").open() as f:

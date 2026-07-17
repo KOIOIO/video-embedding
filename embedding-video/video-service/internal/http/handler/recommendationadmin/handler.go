@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -24,6 +25,7 @@ type recommendationAdminApp interface {
 	RecommendationDiagnostics(ctx context.Context, input videoapp.RecommendationDiagnosticsInput) (videoapp.RecommendationDiagnostics, error)
 	RecommendationDatasourceStats(ctx context.Context) (videoapp.RecommendationDatasourceStats, error)
 	RecommendationEffectMetrics(ctx context.Context, input videoapp.RecommendationEffectMetricsInput) (videoapp.RecommendationEffectMetrics, error)
+	RecommendationGorsePerformance(ctx context.Context, input videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error)
 	RecommendationTraceRandomPlay(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendationTrace, error)
 	RecommendationTraceByQuestion(ctx context.Context, input videoapp.RecommendByQuestionInput) (videoapp.RecommendationTrace, error)
 	RecommendationRedisState(ctx context.Context, input videoapp.RecommendationRedisStateInput) (videoapp.RecommendationRedisState, error)
@@ -93,6 +95,42 @@ func (h *Handler) Effects(c *gin.Context) {
 		return
 	}
 	writeSuccess(c, mapEffectMetrics(days, metrics))
+}
+
+func (h *Handler) GorsePerformance(c *gin.Context) {
+	metric := strings.TrimSpace(c.Query("metric"))
+	if !validGorseMetricQuery(metric) {
+		httperrors.Write(c, httperrors.InvalidArgument("metric is invalid"))
+		return
+	}
+	begin, err := time.Parse(time.RFC3339, strings.TrimSpace(c.Query("begin")))
+	if err != nil {
+		httperrors.Write(c, httperrors.InvalidArgument("begin must be RFC3339"))
+		return
+	}
+	end, err := time.Parse(time.RFC3339, strings.TrimSpace(c.Query("end")))
+	if err != nil {
+		httperrors.Write(c, httperrors.InvalidArgument("end must be RFC3339"))
+		return
+	}
+	if begin.After(end) {
+		httperrors.Write(c, httperrors.InvalidArgument("begin must not be after end"))
+		return
+	}
+	performance, err := h.app.RecommendationGorsePerformance(c.Request.Context(), videoapp.RecommendationGorsePerformanceInput{
+		Metric: metric,
+		Begin:  begin,
+		End:    end,
+	})
+	if errors.Is(err, videoapp.ErrInvalidGorsePerformanceMetric) {
+		httperrors.Write(c, httperrors.InvalidArgument("metric is not available"))
+		return
+	}
+	if err != nil {
+		httperrors.Write(c, httperrors.Internal("gorse performance query failed"))
+		return
+	}
+	writeSuccess(c, mapGorsePerformance(performance))
 }
 
 func (h *Handler) PreviewRandomPlay(c *gin.Context) {
@@ -389,6 +427,23 @@ func mapEffectMetrics(days int, metrics videoapp.RecommendationEffectMetrics) dt
 	}
 }
 
+func mapGorsePerformance(performance videoapp.RecommendationGorsePerformance) dto.RecommendationGorsePerformanceData {
+	metrics := make([]dto.RecommendationGorseMetricData, 0, len(performance.AvailableMetrics))
+	for _, metric := range performance.AvailableMetrics {
+		metrics = append(metrics, dto.RecommendationGorseMetricData{Value: metric.Value, Label: metric.Label})
+	}
+	points := make([]dto.RecommendationGorsePerformancePointData, 0, len(performance.Points))
+	for _, point := range performance.Points {
+		points = append(points, dto.RecommendationGorsePerformancePointData{Timestamp: point.Timestamp, Value: point.Value})
+	}
+	return dto.RecommendationGorsePerformanceData{
+		Metric:           performance.Metric,
+		Label:            performance.Label,
+		AvailableMetrics: metrics,
+		Points:           points,
+	}
+}
+
 func mapStrategyEffects(rows []videoapp.RecommendationStrategyEffectMetric) []dto.RecommendationStrategyEffectMetricData {
 	strategies := make([]dto.RecommendationStrategyEffectMetricData, 0, len(rows))
 	for _, row := range rows {
@@ -478,6 +533,18 @@ func parseOptionalDaysQuery(c *gin.Context) (int, error) {
 		return 90, nil
 	}
 	return value, nil
+}
+
+func validGorseMetricQuery(metric string) bool {
+	if metric == "" || strings.ContainsAny(metric, "/\\") {
+		return false
+	}
+	for _, r := range metric {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func parseRequiredUintQuery(c *gin.Context, name string) (uint64, error) {
