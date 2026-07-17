@@ -30,6 +30,9 @@ func EnsureSchema(db *gorm.DB) error {
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_embedding ON edu_video_segment USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_user ON edu_user_video_recommend(user_id);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_video ON edu_user_video_recommend(video_id);`).Error
+		_ = tx.Exec(`ALTER TABLE edu_user_video_recommend DROP CONSTRAINT IF EXISTS uk_user_question_segment;`).Error
+		_ = tx.Exec(`ALTER TABLE edu_user_video_recommend DROP CONSTRAINT IF EXISTS uk_user_video_segment;`).Error
+		_ = tx.Exec(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='uk_user_question_segment') THEN ALTER TABLE edu_user_video_recommend ADD CONSTRAINT uk_user_question_segment UNIQUE (user_id, question_id, video_segment_id); END IF; END $$;`).Error
 		return EnsureIntegrity(tx)
 	})
 }
