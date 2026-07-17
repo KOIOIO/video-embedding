@@ -12,14 +12,14 @@ class RecBoleConfigTest(unittest.TestCase):
 
         self.assertEqual(cfg["model"], "BPR")
         self.assertEqual(cfg["embedding_size"], 64)
-        self.assertEqual(cfg["dataset"], "hengshui_video")
+        self.assertEqual(cfg["dataset"], "video_dataset")
         self.assertIn("Recall", cfg["metrics"])
         self.assertIn("NDCG", cfg["metrics"])
         self.assertIn("Hit", cfg["metrics"])
         self.assertIn("Precision", cfg["metrics"])
 
     def test_dataset_path_points_at_atomic_parent(self) -> None:
-        cfg = config.build_config("/tmp/recbole/data/recbole_v1", dataset="hengshui_video")
+        cfg = config.build_config("/tmp/recbole/data/recbole_v1", dataset="video_dataset")
         self.assertEqual(cfg["data_path"], "/tmp/recbole/data")
 
 

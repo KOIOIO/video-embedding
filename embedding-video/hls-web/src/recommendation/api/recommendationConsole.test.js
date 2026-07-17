@@ -5,6 +5,7 @@ import {
   fetchRecommendationDiagnostics,
   fetchRecommendationDatasources,
   fetchRecommendationEffects,
+  fetchGorsePerformance,
   fetchRecommendationOverview,
   fetchRecommendationRedisState,
   previewByQuestion,
@@ -78,6 +79,26 @@ describe('recommendation console API helpers', () => {
     )
 
     expect(calls).toEqual([{ url: '/api/admin/recommendation/effects?days=14', options: undefined }])
+  })
+
+  it('requests Gorse performance with encoded metric and date range', async () => {
+    const calls = []
+    await fetchGorsePerformance(
+      {
+        metric: 'cf_ndcg',
+        begin: '2026-07-09T00:00:00.000Z',
+        end: '2026-07-16T23:59:59.999Z',
+      },
+      (url, options) => {
+        calls.push({ url, options })
+        return Promise.resolve({ success: true })
+      },
+    )
+
+    expect(calls).toEqual([{
+      url: '/api/admin/recommendation/gorse/performance?metric=cf_ndcg&begin=2026-07-09T00%3A00%3A00.000Z&end=2026-07-16T23%3A59%3A59.999Z',
+      options: undefined,
+    }])
   })
 
   it('requests redis state with a user id', async () => {

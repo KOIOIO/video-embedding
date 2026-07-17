@@ -1,8 +1,10 @@
 # Gorse 推荐引擎运行手册
 
+> 适用范围：仅当 `Recommendation.Engine=gorse` 时启用本手册中的主链路切换步骤。当前 `configs/video.yml` 和 `configs/video_prod.yml` 均使用 `recbole` 作为主推荐链路，但启用了 Gorse 同步和 Dashboard 性能趋势；worker 会立即执行并周期执行同步，失败仅记录警告而不会退出 worker。若不部署 Gorse，先将 `Gorse.SyncEnabled` 设为 `false`。`Gorse.WriteBackEnabled` 只在 Gorse 主链路返回候选时生效。本次按 2026-07-16 的配置与代码状态复核。
+
 ## 部署边界
 
-Gorse 和业务 HTTP/worker 解耦部署。默认 `docker-compose.yml` 不启动 Gorse；推荐引擎使用根目录的 `docker-compose.gorse.yml` 单独启动，形态和 RecBole 训练链路一样独立。
+Gorse 和业务 HTTP/worker 解耦部署。根目录 `docker-compose.yml` 使用官方 `zhenghaoz/gorse-in-one` 镜像运行独立 `gorse` 服务，但默认不向宿主机发布端口。`docker-compose.gorse.yml` 只是诊断 override，用于临时暴露 Dashboard 和 master gRPC 端口。
 
 业务服务仍是 API 和数据事实源。Gorse 只负责推荐用户、物品、反馈数据集、模型训练和推荐候选服务。
 
@@ -42,12 +44,13 @@ GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-
 隔离方式有两层：
 
 1. `search_path=gorse,public`：Gorse 建表优先进入 `gorse` schema。
-2. `table_prefix = "hstv_gorse_"`：即使误进同 schema，也能从表名前缀识别。
+2. `table_prefix = "video_gorse_"`：即使误进同 schema，也能从表名前缀识别。
 
 如需修改 PostgreSQL 地址、账号、密码、库名或 schema，同步修改：
 
 1. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_DATA_STORE` 和 `GORSE_CACHE_STORE`。
 2. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` / `GORSE_SERVER_API_KEY`，如果 API key 也改了。
+3. `GORSE_DASHBOARD_USERNAME` / `GORSE_DASHBOARD_PASSWORD`。Gorse 容器和 Go API 必须读取同一组值，生产环境不得保留示例密码。
 
 ## 启动和停止
 
@@ -56,35 +59,34 @@ GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-
 ```bash
 cp .env.deploy.example .env.deploy
 # 编辑 .env.deploy，填入真实 POSTGRES_DSN、GORSE_* 和 API key
-docker compose -f docker-compose.gorse.yml up -d
-docker compose -f docker-compose.gorse.yml ps
+docker compose up -d
+docker compose ps
 ```
 
 停止：
 
 ```bash
-docker compose -f docker-compose.gorse.yml down
+docker compose stop gorse
 ```
 
 删除 Gorse 本地模型/blob/cache volume：
 
 ```bash
-docker compose -f docker-compose.gorse.yml down -v
+docker compose down -v
 ```
 
 ## 端口
 
 | 服务 | 默认端口 | 用途 |
 | --- | ---: | --- |
-| `gorse` | `8087` | Go 服务调用的推荐 REST API |
-| `gorse_master` | `8088` | Gorse dashboard/admin HTTP |
-| `gorse_master` | `8086` | Gorse 内部 master gRPC |
-| `gorse_worker` | `8089` | worker HTTP |
+| `gorse` | `8088` | 推荐 REST API、Dashboard 和 admin HTTP；生产 Compose 默认仅容器网络可达 |
+| `gorse` | `8086` | 内部 master gRPC |
 
 可通过环境变量覆盖端口：
 
 ```bash
-GORSE_SERVER_PORT=18087 GORSE_DASHBOARD_PORT=18088 docker compose -f docker-compose.gorse.yml up -d
+GORSE_MASTER_GRPC_PORT=18086 GORSE_DASHBOARD_PORT=18088 \
+  docker compose -f docker-compose.yml -f docker-compose.gorse.yml up -d
 ```
 
 ## Go 服务接入
@@ -93,17 +95,19 @@ GORSE_SERVER_PORT=18087 GORSE_DASHBOARD_PORT=18088 docker compose -f docker-comp
 
 ```yaml
 Gorse:
-  Endpoint: "http://localhost:8087"
+  Endpoint: "http://localhost:8088"
   APIKey: ""
+  DashboardUsername: ""
+  DashboardPassword: ""
 ```
 
-`APIKey` 由私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` 注入。
+`APIKey`、`DashboardUsername` 和 `DashboardPassword` 分别由私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY`、`GORSE_DASHBOARD_USERNAME` 和 `GORSE_DASHBOARD_PASSWORD` 注入。
 
 生产容器如果和 `docker-compose.gorse.yml` 使用同一个 Docker Compose project/network，可使用：
 
 ```yaml
 Gorse:
-  Endpoint: "http://gorse:8087"
+  Endpoint: "http://gorse:8088"
 ```
 
 若业务服务和 Gorse 分开部署在不同主机，则把 `Gorse.Endpoint` 改成 Gorse server 的实际内网地址。
@@ -142,16 +146,22 @@ go run ./tools/sync_gorse_recommendation_data --config configs/video.yml
 ## 健康检查
 
 ```bash
-curl -f -H "X-API-Key: ${GORSE_API_KEY}" 'http://localhost:8087/api/recommend/1?n=10'
+curl -f -H "X-API-Key: ${GORSE_API_KEY}" 'http://localhost:8088/api/recommend/1?n=10'
 ```
 
 如果用户 `1` 没有足够数据，返回空列表不一定表示服务异常。优先检查：
 
 ```bash
-docker compose -f docker-compose.gorse.yml logs --tail=100 gorse_master
-docker compose -f docker-compose.gorse.yml logs --tail=100 gorse
-docker compose -f docker-compose.gorse.yml logs --tail=100 gorse_worker
+docker compose logs --tail=100 gorse
 ```
+
+推荐控制台的“命中效果”页通过以下受保护的管理接口读取 Dashboard 时间序列：
+
+```text
+GET /api/admin/recommendation/gorse/performance?metric=<metric>&begin=<RFC3339>&end=<RFC3339>
+```
+
+支持正向反馈率（全部及 Gorse 配置的各正向反馈类型）、协同过滤 NDCG / Precision / Recall、点击率模型 AUC / Precision / Recall。Go 服务负责 Dashboard 登录、Cookie 会话和指标白名单，浏览器无需访问 `8088`。
 
 ## MinIO/S3 blob 存储
 
@@ -192,7 +202,7 @@ Gorse:
 然后重启业务 HTTP/worker。Gorse 服务可继续保留，也可单独停止：
 
 ```bash
-docker compose -f docker-compose.gorse.yml down
+docker compose stop gorse
 ```
 
 这不会删除 PostgreSQL 业务数据，也不会影响 RecBole 训练目录。

@@ -9,7 +9,7 @@ DEFAULT_METRICS = ["Recall", "NDCG", "Hit", "Precision"]
 
 def build_config(
     dataset_dir: str | Path,
-    dataset: str = "hengshui_video",
+    dataset: str = "video_dataset",
     model: str = "BPR",
     embedding_size: int = 64,
 ) -> dict[str, Any]:

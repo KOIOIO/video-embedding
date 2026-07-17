@@ -62,6 +62,7 @@ func New(httpApp *app.App) *gin.Engine {
 	r.GET("/api/admin/recommendation/diagnostics", recommendationAdminHandler.Diagnostics)
 	r.GET("/api/admin/recommendation/datasources", recommendationAdminHandler.Datasources)
 	r.GET("/api/admin/recommendation/effects", recommendationAdminHandler.Effects)
+	r.GET("/api/admin/recommendation/gorse/performance", recommendationAdminHandler.GorsePerformance)
 	r.GET("/api/admin/recommendation/trace/random-play", recommendationAdminHandler.TraceRandomPlay)
 	r.POST("/api/admin/recommendation/trace/by-question", recommendationAdminHandler.TraceByQuestion)
 	r.GET("/api/admin/recommendation/redis-state", recommendationAdminHandler.RedisState)

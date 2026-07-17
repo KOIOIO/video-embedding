@@ -30,6 +30,10 @@ func (h *RecommendationAdminHandler) Effects(c *gin.Context) {
 	h.inner.Effects(c)
 }
 
+func (h *RecommendationAdminHandler) GorsePerformance(c *gin.Context) {
+	h.inner.GorsePerformance(c)
+}
+
 func (h *RecommendationAdminHandler) TraceRandomPlay(c *gin.Context) {
 	h.inner.TraceRandomPlay(c)
 }

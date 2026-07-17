@@ -1,5 +1,7 @@
 # Vector Worker 边界判定重构设计文档
 
+> 文档性质：重构设计提案，不是已完成能力说明。当前实现、配置项和测试以 `internal/worker/vectorworker/` 为准；本次按 2026-07-15 的代码状态复核。
+
 ## 1. 背景
 
 当前 `video-service` 中，`vector_worker` 在 `hierarchical` 模式下已经具备：

@@ -10,26 +10,17 @@ import {
   previewRandomPlay,
   traceByQuestion,
   traceRandomPlay,
-} from './api/recommendationConsole.js'
-import PreviewTable from './components/PreviewTable.vue'
+} from '../recommendation/api/recommendationConsole.js'
+import PreviewTable from '../recommendation/components/PreviewTable.vue'
+import GorsePerformanceChart from '../recommendation/components/GorsePerformanceChart.vue'
 import {
   isKnownSection,
-  isValidConsoleLogin,
   readActiveSection,
-  readAuthenticated,
   writeActiveSection,
-  writeAuthenticated,
-} from './config/consoleSession.js'
-import { navigationItems, panelRows } from './config/navigation.js'
+} from '../recommendation/config/sectionSession.js'
+import { navigationItems, panelRows } from '../recommendation/config/navigation.js'
 
-const browserStorage = typeof window === 'undefined' ? null : window.localStorage
-const isAuthenticated = ref(readAuthenticated(browserStorage))
-const loginError = ref('')
-const loginForm = reactive({
-  username: '',
-  password: '',
-})
-const activeSection = ref(readActiveSection(browserStorage, 'diagnostics', navigationItems))
+const activeSection = ref(readActiveSection('diagnostics', navigationItems))
 const overview = ref(null)
 const overviewLoading = ref(false)
 const overviewError = ref('')
@@ -285,35 +276,15 @@ const generatedAtText = computed(() => {
 })
 
 onMounted(() => {
-  if (isAuthenticated.value) {
-    loadAll()
-  }
-})
-
-function submitLogin() {
-  loginError.value = ''
-  if (!isValidConsoleLogin(loginForm.username, loginForm.password)) {
-    loginError.value = '账号或密码不正确'
-    return
-  }
-  writeAuthenticated(browserStorage, true)
-  isAuthenticated.value = true
-  loginForm.password = ''
   loadAll()
-}
-
-function logout() {
-  writeAuthenticated(browserStorage, false)
-  isAuthenticated.value = false
-  loginForm.password = ''
-}
+})
 
 function selectSection(section) {
   if (!isKnownSection(section, navigationItems)) {
     return
   }
   activeSection.value = section
-  writeActiveSection(browserStorage, section, navigationItems)
+  writeActiveSection(section, navigationItems)
 }
 
 function loadAll() {
@@ -569,32 +540,7 @@ function toneForStatus(status) {
 </script>
 
 <template>
-  <main v-if="!isAuthenticated" class="login-shell">
-    <section class="login-panel" aria-label="推荐控制台登录">
-      <div class="brand-block login-brand">
-        <span class="brand-mark">RC</span>
-        <div>
-          <strong>Recommendation Console</strong>
-          <small>Hengshui Tablet Video</small>
-        </div>
-      </div>
-
-      <form class="login-form" @submit.prevent="submitLogin">
-        <label>
-          <span>账号</span>
-          <input v-model="loginForm.username" autocomplete="username" autofocus />
-        </label>
-        <label>
-          <span>密码</span>
-          <input v-model="loginForm.password" type="password" autocomplete="current-password" />
-        </label>
-        <p v-if="loginError" class="inline-error" role="alert">{{ loginError }}</p>
-        <button class="control-button" type="submit">登录</button>
-      </form>
-    </section>
-  </main>
-
-  <main v-else class="console-shell">
+  <main class="console-shell recommendation-workspace">
     <aside class="console-sidebar" aria-label="推荐控制台导航">
       <div class="brand-block">
         <span class="brand-mark">RC</span>
@@ -629,9 +575,6 @@ function toneForStatus(status) {
           <span class="environment-pill">local / api proxy</span>
           <button class="control-button" type="button" :disabled="diagnosticsLoading || overviewLoading || datasourcesLoading || effectsLoading" @click="loadAll">
             {{ diagnosticsLoading || overviewLoading || datasourcesLoading || effectsLoading ? '刷新中' : '刷新' }}
-          </button>
-          <button class="control-button secondary-button" type="button" @click="logout">
-            退出
           </button>
         </div>
       </header>
@@ -844,6 +787,8 @@ function toneForStatus(status) {
           </form>
         </header>
         <p v-if="effectsError" class="inline-error" role="alert">{{ effectsError }}</p>
+
+        <GorsePerformanceChart />
 
         <section class="metric-grid" aria-label="命中效果状态">
           <article v-for="card in effectStatusCards" :key="card.label" class="metric-card compact" :data-tone="card.tone">
@@ -1211,3 +1156,5 @@ function toneForStatus(status) {
     </section>
   </main>
 </template>
+
+<style scoped src="../recommendation/recommendation.css"></style>

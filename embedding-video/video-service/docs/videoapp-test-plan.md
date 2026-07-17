@@ -1,5 +1,7 @@
 # `internal/application/videoapp` 测试文档
 
+> 文档性质：测试缺口盘点与建议，不代表未列出的测试不存在，也不是 CI 覆盖率报告。测试文件会持续变化；执行 `go test ./...` 前请先以当前目录结构为准。本次按 2026-07-15 的代码状态复核。
+
 ## 1. 范围
 
 本文档用于梳理 `video-service/internal/application/videoapp/` 目录下各文件的测试现状，并为当前尚未覆盖的文件提供测试设计建议。

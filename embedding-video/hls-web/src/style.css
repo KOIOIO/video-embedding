@@ -92,14 +92,14 @@ button {
   color: #f6faf9;
 }
 
-.brand-block {
+.video-workspace .brand-block {
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 48px;
 }
 
-.brand-mark {
+.video-workspace .brand-mark {
   width: 44px;
   height: 44px;
   border-radius: 8px;
@@ -111,17 +111,17 @@ button {
   font-size: 15px;
 }
 
-.brand-block strong,
-.brand-block span {
+.video-workspace .brand-block strong,
+.video-workspace .brand-block span {
   display: block;
 }
 
-.brand-block strong {
+.video-workspace .brand-block strong {
   font-size: 17px;
   line-height: 1.25;
 }
 
-.brand-block span {
+.video-workspace .brand-block span {
   margin-top: 2px;
   color: var(--sidebar-muted);
   font-size: 13px;
@@ -196,9 +196,9 @@ button {
   min-width: 0;
 }
 
-.eyebrow,
-.panel-tag,
-.detail-label {
+.video-workspace .eyebrow,
+.video-workspace .panel-tag,
+.video-workspace .detail-label {
   margin: 0;
   color: var(--primary);
   font-size: 12px;
@@ -771,7 +771,7 @@ button:disabled {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
-.metric-card {
+.video-workspace .metric-card {
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1331,7 +1331,7 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.empty-state {
+.video-workspace .empty-state {
   border: 1px dashed var(--border-strong);
   border-radius: 8px;
   padding: 22px;
@@ -1340,7 +1340,7 @@ button:disabled {
   background: var(--surface-soft);
 }
 
-.empty-state.small {
+.video-workspace .empty-state.small {
   padding: 12px;
 }
 

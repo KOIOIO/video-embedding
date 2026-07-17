@@ -1,5 +1,7 @@
 # Vector Worker 内容切分优化执行文档
 
+> 文档性质：优化提案与执行建议，不是当前流水线的逐项事实清单。当前向量化行为、配置和测试以 `internal/worker/vectorworker/` 为准；本次按 2026-07-15 的代码状态复核。
+
 ## 1. 背景
 
 当前 `video-service` 下的 `vector_worker` 在 `hierarchical` 模式中，已经具备以下能力：
