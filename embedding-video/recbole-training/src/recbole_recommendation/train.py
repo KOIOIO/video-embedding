@@ -12,7 +12,7 @@ from . import metrics as metrics_io
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a RecBole model and export embeddings.")
     parser.add_argument("--dataset-dir", required=True)
-    parser.add_argument("--dataset", default="video_dataset")
+    parser.add_argument("--dataset", default="video_app")
     parser.add_argument("--output", required=True)
     parser.add_argument("--model-version", required=True)
     parser.add_argument("--model", default="BPR")

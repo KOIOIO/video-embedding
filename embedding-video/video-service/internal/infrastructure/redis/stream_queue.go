@@ -66,28 +66,36 @@ func (q *StreamQueue[T]) Dequeue(ctx context.Context, block time.Duration) (Stre
 	if err := q.ensureGroup(ctx); err != nil {
 		return StreamMessage[T]{}, err
 	}
-	if err := promoteDueDelayed(ctx, q.rdb, q.key); err != nil {
-		return StreamMessage[T]{}, err
+	for {
+		if err := ctx.Err(); err != nil {
+			return StreamMessage[T]{}, err
+		}
+		if err := promoteDueDelayed(ctx, q.rdb, q.key); err != nil {
+			return StreamMessage[T]{}, err
+		}
+		if raw, ok, err := claimPendingStreamMessage(ctx, q.rdb, q.key, q.group, q.consumer, q.pendingMinIdle); err != nil {
+			return StreamMessage[T]{}, err
+		} else if ok {
+			return q.decodeMessage(ctx, raw)
+		}
+		streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
+			Group:    q.group,
+			Consumer: q.consumer,
+			Streams:  []string{q.key, ">"},
+			Count:    1,
+			Block:    block,
+		}).Result()
+		if err != nil {
+			if err == goredis.Nil {
+				continue
+			}
+			return StreamMessage[T]{}, err
+		}
+		if len(streams) == 0 || len(streams[0].Messages) == 0 {
+			continue
+		}
+		return q.decodeMessage(ctx, streams[0].Messages[0])
 	}
-	if raw, ok, err := claimPendingStreamMessage(ctx, q.rdb, q.key, q.group, q.consumer, q.pendingMinIdle); err != nil {
-		return StreamMessage[T]{}, err
-	} else if ok {
-		return q.decodeMessage(ctx, raw)
-	}
-	streams, err := q.rdb.XReadGroup(ctx, &goredis.XReadGroupArgs{
-		Group:    q.group,
-		Consumer: q.consumer,
-		Streams:  []string{q.key, ">"},
-		Count:    1,
-		Block:    block,
-	}).Result()
-	if err != nil {
-		return StreamMessage[T]{}, err
-	}
-	if len(streams) == 0 || len(streams[0].Messages) == 0 {
-		return StreamMessage[T]{}, errors.New("empty stream message")
-	}
-	return q.decodeMessage(ctx, streams[0].Messages[0])
 }
 
 func (q *StreamQueue[T]) decodeMessage(ctx context.Context, raw goredis.XMessage) (StreamMessage[T], error) {

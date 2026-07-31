@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"nlp-video-analysis/internal/worker/vectorworker/tasks"
+	"video-service/internal/worker/vectorworker/tasks"
 )
 
 func rewriteSegmentTitle(ctx context.Context, chat vectorChatClient, model string, timeoutMinutes int, text string) (string, error) {

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 // FFmpegHLSImpl 负责构造不同模式下的 HLS ffmpeg 参数。

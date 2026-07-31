@@ -94,7 +94,7 @@ func TestServiceLoginRejectsInvalidLegacyPasswordAndUnknownHash(t *testing.T) {
 func TestServiceAuthenticateRejectsExpiredAndDisabledAdmin(t *testing.T) {
 	now := time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC)
 	repo := &authTestRepository{admin: Admin{ID: 7, Username: "admin", PasswordHash: "$2a$04$invalid"}, active: true}
-	service := NewService(repo, "01234567890123456789012345678901", time.Hour)
+	service := NewService(repo, testJWTSecret(), time.Hour)
 	service.now = func() time.Time { return now }
 	token, _, err := service.issueToken(7)
 	if err != nil {

@@ -3,7 +3,7 @@ package persistence
 import (
 	"context"
 
-	"nlp-video-analysis/internal/model"
+	"video-service/internal/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

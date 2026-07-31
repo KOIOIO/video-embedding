@@ -1,6 +1,6 @@
 package vectorworker
 
-import "nlp-video-analysis/internal/config"
+import "video-service/internal/config"
 
 var vectorStageOrder = []string{
 	VectorStagePrepare,

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
 )
 
 func TestSyncerDryRunCollectsCountsWithoutWriting(t *testing.T) {

@@ -12,6 +12,9 @@ HTTP:
     AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Requested-With"
     ExposeHeaders: "Content-Length, Content-Type"
     MaxAge: "86400"
+Auth:
+  JWTSecret: ""
+  JWTExpireHour: 8
 GRPC:
   MaxMsgSize: 104857600
   KeepaliveTime: 30
@@ -62,6 +65,7 @@ Redis:
   DB: 0
 RedisKeys:
   TranscodeQueue: "video:transcode:queue"
+  KnowledgeVideoTranscodeQueue: "knowledge_video:transcode:stream"
   VectorizeQueue: "video:vectorize:queue"
   VectorPrepareQueue: "video:vector:prepare"
   VectorCoarseQueue: "video:vector:coarse"
@@ -89,9 +93,28 @@ RustFS:
   Endpoint: "localhost:9000"
   AccessKey: ""
   SecretKey: ""
-  Bucket: "video-embedding-storage"
+  Bucket: "video-object-storage"
   UseSSL: false
 
+KnowledgeVideoStorage:
+  Endpoint: "localhost:9000"
+  AccessKey: ""
+  SecretKey: ""
+  Bucket: "knowledge-point-videos"
+  UseSSL: false
+  Region: ""
+  BucketLookup: "auto"
+  MediaRoutePrefix: "/knowledge-video-media"
+  TempPath: "./storage/tmp/knowledge_video"
+  MaxArchiveBytes: 1073741824
+  MaxExpandedBytes: 4294967296
+  MaxEntryBytes: 536870912
+  MaxEntries: 1000
+
+KnowledgeVideoWorker:
+  WorkerCount: 2
+  TaskTimeoutMinutes: 30
+  ShutdownTimeoutSec: 120
 
 Transcode:
   WorkerCount: 2
@@ -144,8 +167,6 @@ Recommendation:
 Gorse:
   Endpoint: "http://localhost:8087"
   APIKey: ""
-  DashboardUsername: ""
-  DashboardPassword: ""
   TimeoutSeconds: 2
   ShadowMode: false
   SyncEnabled: true

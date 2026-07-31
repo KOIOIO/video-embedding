@@ -17,7 +17,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 const (

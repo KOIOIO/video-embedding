@@ -12,7 +12,7 @@ import {
   traceRandomPlay,
 } from '../recommendation/api/recommendationConsole.js'
 import PreviewTable from '../recommendation/components/PreviewTable.vue'
-import GorsePerformanceChart from '../recommendation/components/GorsePerformanceChart.vue'
+import RecBolePerformanceChart from '../recommendation/components/RecBolePerformanceChart.vue'
 import {
   isKnownSection,
   readActiveSection,
@@ -546,7 +546,7 @@ function toneForStatus(status) {
         <span class="brand-mark">RC</span>
         <div>
           <strong>Recommendation Console</strong>
-          <small>Hengshui Tablet Video</small>
+          <small>video Tablet Video</small>
         </div>
       </div>
 
@@ -788,7 +788,7 @@ function toneForStatus(status) {
         </header>
         <p v-if="effectsError" class="inline-error" role="alert">{{ effectsError }}</p>
 
-        <GorsePerformanceChart />
+        <RecBolePerformanceChart />
 
         <section class="metric-grid" aria-label="命中效果状态">
           <article v-for="card in effectStatusCards" :key="card.label" class="metric-card compact" :data-tone="card.tone">

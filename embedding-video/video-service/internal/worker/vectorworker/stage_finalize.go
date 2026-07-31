@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"nlp-video-analysis/internal/infrastructure/persistence"
+	"video-service/internal/infrastructure/persistence"
 )
 
 type finalizeStageRepository interface {

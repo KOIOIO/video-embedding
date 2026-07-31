@@ -3,6 +3,7 @@ package objectstorage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"os"
@@ -62,9 +63,13 @@ func NewRustFS(cfg Config) (*RustFS, error) {
 }
 
 func normalizedConfig(cfg Config) Config {
-	cfg.Endpoint = normalizeEndpoint(cfg.Endpoint)
-	cfg.Endpoint = serviceEndpoint(cfg.Endpoint, cfg.Bucket)
+	cfg.Endpoint = NormalizeEndpoint(cfg.Endpoint, cfg.Bucket)
 	return cfg
+}
+
+// NormalizeEndpoint returns the service endpoint for a bucket-aware object storage configuration.
+func NormalizeEndpoint(endpoint string, bucket string) string {
+	return serviceEndpoint(normalizeEndpoint(endpoint), bucket)
 }
 
 func minioOptions(cfg Config) (*minio.Options, error) {
@@ -148,6 +153,50 @@ func (s *RustFS) Put(ctx context.Context, objectKey string, r io.Reader, size in
 // Delete 删除对象存储中的指定对象。
 func (s *RustFS) Delete(ctx context.Context, objectKey string) error {
 	return s.client.RemoveObject(ctx, s.bucket, cleanKey(objectKey), minio.RemoveObjectOptions{})
+}
+
+// DeletePrefix deletes every object below a non-empty directory-like prefix.
+func (s *RustFS) DeletePrefix(ctx context.Context, prefix string) error {
+	return deletePrefix(ctx, s.client, s.bucket, prefix)
+}
+
+type prefixObjectClient interface {
+	ListObjects(ctx context.Context, bucket string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+	RemoveObjects(ctx context.Context, bucket string, objectsCh <-chan minio.ObjectInfo, opts minio.RemoveObjectsOptions) <-chan minio.RemoveObjectError
+}
+
+func deletePrefix(ctx context.Context, client prefixObjectClient, bucket string, prefix string) error {
+	prefix = strings.Trim(cleanKey(prefix), "/")
+	if prefix == "" {
+		return errors.New("object prefix is required")
+	}
+	prefix += "/"
+
+	objects := make(chan minio.ObjectInfo)
+	listErrors := make(chan error, 1)
+	go func() {
+		defer close(objects)
+		var errs []error
+		for object := range client.ListObjects(ctx, bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+			if object.Err != nil {
+				errs = append(errs, object.Err)
+				continue
+			}
+			objects <- object
+		}
+		listErrors <- errors.Join(errs...)
+	}()
+
+	var errs []error
+	for removeErr := range client.RemoveObjects(ctx, bucket, objects, minio.RemoveObjectsOptions{}) {
+		if removeErr.Err != nil {
+			errs = append(errs, fmt.Errorf("delete object %q: %w", removeErr.ObjectName, removeErr.Err))
+		}
+	}
+	if err := <-listErrors; err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // DownloadToFile 把对象存储中的文件下载到本地路径。

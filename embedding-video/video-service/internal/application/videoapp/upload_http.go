@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	uploadapp "nlp-video-analysis/internal/application/videoapp/upload"
+	uploadapp "video-service/internal/application/videoapp/upload"
 )
 
 // UploadVideo 复用既有上传三段式流程，把协议层 reader 桥接到当前应用服务能力。

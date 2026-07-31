@@ -15,10 +15,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/infrastructure/persistence/sqlqueries"
-	"nlp-video-analysis/internal/model"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/infrastructure/persistence/sqlqueries"
+	"video-service/internal/model"
 )
 
 type GormVideoRepository struct {
@@ -59,7 +59,7 @@ func (r *GormVideoRepository) CanUploadVideo(ctx context.Context, userID uint64)
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Table("sys_user").
-		Where("id = ? AND user_type IN ?", userID, []int{2, 3}).
+		Where("id = ? AND user_type = ? AND status = ? AND deleted = ?", userID, 3, 1, 0).
 		Count(&count).Error; err != nil {
 		return false, err
 	}
@@ -1267,6 +1267,40 @@ func (r *GormVideoRepository) GetActiveRecBoleModelVersion(ctx context.Context) 
 		return "", false, nil
 	}
 	return version, true, nil
+}
+
+type recBolePerformanceRow struct {
+	ModelVersion string    `gorm:"column:model_version"`
+	MetricTime   time.Time `gorm:"column:metric_time"`
+	Value        float64   `gorm:"column:value"`
+}
+
+func (r *GormVideoRepository) ListRecommendationRecBolePerformance(ctx context.Context, metric string, begin, end time.Time) ([]videoapp.RecommendationRecBolePerformancePoint, error) {
+	var rows []recBolePerformanceRow
+	if err := r.db.WithContext(ctx).Raw(
+		sqlqueries.ListRecBolePerformanceQuery,
+		metric,
+		"recbole",
+		"recbole",
+		begin,
+		end,
+		metric,
+	).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return mapRecBolePerformanceRows(rows), nil
+}
+
+func mapRecBolePerformanceRows(rows []recBolePerformanceRow) []videoapp.RecommendationRecBolePerformancePoint {
+	points := make([]videoapp.RecommendationRecBolePerformancePoint, 0, len(rows))
+	for _, row := range rows {
+		points = append(points, videoapp.RecommendationRecBolePerformancePoint{
+			Timestamp:    row.MetricTime,
+			Value:        row.Value,
+			ModelVersion: row.ModelVersion,
+		})
+	}
+	return points
 }
 
 // FindRandomPlayableSegment 随机返回一个未删除、已发布且已转码完成的视频片段。

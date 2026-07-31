@@ -23,6 +23,8 @@
   - [3.16 EmbeddingConfig](#316-embeddingconfig)
   - [3.17 ASRConfig](#317-asrconfig)
   - [3.18 AIConfig](#318-aiconfig)
+  - [3.19 RecommendationConfig](#319-recommendationconfig)
+  - [3.20 GorseConfig](#320-gorseconfig)
 - [4. 环境变量参数](#4-环境变量参数)
 - [5. HTTP API 参数](#5-http-api-参数)
   - [5.1 通用返回结构](#51-通用返回结构)
@@ -39,6 +41,8 @@
   - [6.4 hierarchical 内容分段相关内部参数](#64-hierarchical-内容分段相关内部参数)
   - [6.5 tail alignment 相关内部参数](#65-tail-alignment-相关内部参数)
 - [7. 使用建议](#7-使用建议)
+  - [7.4 DLQ 查看与重放工具](#74-dlq-查看与重放工具)
+  - [7.5 下游服务化治理](#75-如果你要做下游服务化治理)
 
 ## 1. 文档说明
 
@@ -82,6 +86,13 @@
 3. `CONFIG_FILE` 和 `VIDEO_CONFIG_FILE` 都可覆盖默认配置路径。
 4. 两者同时设置时，`CONFIG_FILE` 优先生效。
 5. `cmd/httpapi` 和 `cmd/worker` 会先调用 `config.EnsureProjectRoot()`，因此相对配置路径会锚定到 `video-service/`。
+
+对象存储当前环境约定：
+
+1. `configs/video.yml` 用于本地测试，`RustFS.Endpoint = localhost:9000`。
+2. `configs/video_prod.yml` 用于服务器/生产部署，当前使用 COS endpoint。
+3. 对象存储账号不写入 YAML，通过 `.env.local` / `.env.deploy` 中的 `COS_SECRET_ID` / `COS_SECRET_KEY` 或 `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` 注入。
+4. 两个环境默认使用同一个 Bucket：`video-object-storage` 或生产 COS bucket。
 
 ### 3.1 顶层配置 Config
 
@@ -143,8 +154,8 @@
 
 | 参数名 | 类型 | 示例 | 默认值 | 作用 |
 |---|---|---|---|---|
-| `RawPath` | `string` | `./storage/videos/raw` | 系统临时目录下的 `nlp-video-project/tmp/raw` | 原始视频本地目录配置 |
-| `HlsPath` | `string` | `./storage/videos/hls` | 系统临时目录下的 `nlp-video-project/tmp/hls` | HLS 文件本地目录配置 |
+| `RawPath` | `string` | `./storage/videos/raw` | 系统临时目录下的 `video-embedding/tmp/raw` | 原始视频本地目录配置 |
+| `HlsPath` | `string` | `./storage/videos/hls` | 系统临时目录下的 `video-embedding/tmp/hls` | HLS 文件本地目录配置 |
 
 ### 3.6 StorageConfig
 
@@ -156,7 +167,7 @@
 | `RawURLPrefix` | `string` | `/videos/raw` | `/videos/raw` | 返回给调用方的原视频 URL 前缀 |
 | `HLSURLPrefix` | `string` | `/videos/hls` | `/videos/hls` | 返回给调用方的 HLS URL 前缀 |
 | `CoverURLPrefix` | `string` | `/videos` | `/videos` | 返回给调用方的封面 URL 前缀 |
-| `VectorTempPath` | `string` | `./storage/tmp/video_vectorize` | 系统临时目录下的 `nlp-video-project/tmp/video_vectorize` | 向量化 worker 临时文件目录 |
+| `VectorTempPath` | `string` | `./storage/tmp/video_vectorize` | 系统临时目录下的 `video-embedding/tmp/video_vectorize` | 向量化 worker 临时文件目录 |
 
 ### 3.7 FFmpegConfig
 
@@ -229,8 +240,13 @@
 | `VideoReactionQueue` | `string` | `video:reaction:queue` | `video:reaction:queue` | 视频反馈异步队列 key |
 | `VideoReactionCounts` | `string` | `video:reaction:counts:` | `video:reaction:counts:` | 视频反馈计数 key 前缀 |
 | `VideoReactionUser` | `string` | `video:reaction:user:` | `video:reaction:user:` | 用户视频反馈状态 key 前缀 |
+| `SegmentReactionQueue` | `string` | `segment:reaction:queue` | `segment:reaction:queue` | 视频片段反馈异步队列 key |
+| `SegmentReactionCounts` | `string` | `segment:reaction:counts:` | `segment:reaction:counts:` | 视频片段反馈计数 key 前缀 |
+| `SegmentReactionUser` | `string` | `segment:reaction:user:` | `segment:reaction:user:` | 用户视频片段反馈状态 key 前缀 |
 | `TranscodeStatus` | `string` | `video:transcode:status:` | `video:transcode:status:` | 转码任务状态 key 前缀 |
 | `RuntimeActiveCounter` | `string` | `video:runtime:active:` | `video:runtime:active:` | 运行中任务计数 key 前缀 |
+
+说明：任务队列的死信流不是独立配置项，而是按 `<queue-key>:dlq` 派生。例如 `TranscodeQueue=video:transcode:queue` 时，死信流为 `video:transcode:queue:dlq`。`cmd/dlqctl` 会复用这些配置值来定位对应 DLQ。
 
 ### 3.10 PostgresConfig
 
@@ -246,10 +262,10 @@
 
 | 参数名 | 类型 | 示例 | 作用 |
 |---|---|---|---|
-| `Endpoint` | `string` | `localhost:9000` | 对象存储地址 |
-| `AccessKey` | `string` | `minioadmin` | AccessKey |
-| `SecretKey` | `string` | `minioadmin` | SecretKey |
-| `Bucket` | `string` | `video-embedding-storage` | 存储桶名称 |
+| `Endpoint` | `string` | 本地 `localhost:9000`；生产 `10.200.10.201:9001` | 对象存储地址 |
+| `AccessKey` | `string` | `""` | AccessKey，生产/本地通过环境变量注入 |
+| `SecretKey` | `string` | `""` | SecretKey，生产/本地通过环境变量注入 |
+| `Bucket` | `string` | `video-object-storage` | 存储桶名称 |
 | `UseSSL` | `bool` | `false` | 是否走 HTTPS |
 
 ### 3.12 TransConfig
@@ -356,6 +372,30 @@
 |---|---|---|---|---|
 | `EmbeddingDim` | `int` | `1536` | `1536` | 向量维度；用于本地 fallback embedding 和 vector worker 写入 embedding 前的维度标准化 |
 
+### 3.19 RecommendationConfig
+
+| 参数名 | 类型 | 默认值 | 作用 |
+|---|---|---|---|
+| `Engine` | `string` | `knowledge_match` | 随机播放的主推荐链路：`knowledge_match`、`gorse` 或 `recbole`；当前两份示例配置均设置为 `recbole` |
+| `RandomPlayDedupeWindowSec` | `int` | `1800` | 同一用户近期播放去重窗口（秒） |
+| `RandomPlayRecentMaxSize` | `int` | `200` | 每位用户保存的近期播放去重记录上限 |
+
+### 3.20 GorseConfig
+
+Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时才作为主推荐链路使用；当前两份示例配置会启用 `SyncEnabled`，统一 worker 会立即执行并周期执行 Gorse 同步。同步失败只会记录警告，不会退出 worker；不部署 Gorse 时应关闭 `SyncEnabled`。`WriteBackEnabled` 只在 Gorse 主链路返回候选时才会写回反馈。
+
+| 参数名 | 类型 | 默认值 | 作用 |
+|---|---|---|---|
+| `Endpoint` | `string` | `http://localhost:8087` | Gorse server 地址 |
+| `APIKey` | `string` | 空 | Gorse API key，可由 `GORSE_API_KEY` 覆盖 |
+| `TimeoutSeconds` | `int` | `2` | 调用 Gorse 的超时秒数 |
+| `ShadowMode` | `bool` | `false` | 仅观测候选结果，不切换主链路 |
+| `SyncEnabled` / `SyncIntervalMins` | `bool` / `int` | 当前示例为 `true` / `60` | 是否启动周期数据同步及其间隔 |
+| `WriteBackEnabled` | `bool` | 当前示例为 `true` | 是否将在线反馈写回 Gorse |
+| `CandidateLimit` | `int` | `100` | 一次向 Gorse 请求的候选数 |
+| `EnableGate` / `MinFeedbackCount` / `MinRecommendItems` | `bool` / `int` / `int` | 当前示例为 `true` / `20` / `1` | 切换前的数据量与候选数保护条件 |
+| `CleanupEnabled` / `DataRetentionDays` | `bool` / `int` | 当前示例为 `true` / `30` | 为未来同步数据清理预留；当前生产代码未消费这两个字段，不会自动删除数据 |
+
 ## 4. 环境变量参数
 
 项目中当前明确使用到的环境变量包括：
@@ -365,11 +405,16 @@
 | `HTTP_ADDR` | `internal/http/app/app.go` | 覆盖 HTTP 服务监听地址，默认 `:8081` |
 | `CONFIG_FILE` | `internal/config/loader.go` | 覆盖默认配置文件路径，优先级高于 `VIDEO_CONFIG_FILE` |
 | `VIDEO_CONFIG_FILE` | `internal/config/loader.go` | 覆盖默认配置文件路径 |
-| `RUSTFS_ACCESS_KEY` | `internal/http/app/app.go`、worker 初始化 | 当配置文件未提供时兜底 AccessKey |
-| `RUSTFS_SECRET_KEY` | `internal/http/app/app.go`、worker 初始化 | 当配置文件未提供时兜底 SecretKey |
-| `DASHSCOPE_API_KEY` | embedding 客户端、vector worker AI client | DashScope / 百炼兼容接口 API Key |
-| `OPENAI_API_KEY` | embedding 客户端、vector worker AI client | OpenAI 兼容接口 API Key 兜底 |
-| `EMBEDDING_API_KEY` | embedding 客户端 | 推荐链路 embedding API Key 兜底 |
+| `POSTGRES_DSN` | `internal/config/loader.go` | 覆盖 `Postgres.DSN` |
+| `REDIS_PASSWORD` | `internal/config/loader.go` | 覆盖 `Redis.Password` |
+| `COS_SECRET_ID` | `internal/config/loader.go` | 覆盖 `RustFS.AccessKey` |
+| `COS_SECRET_KEY` | `internal/config/loader.go` | 覆盖 `RustFS.SecretKey` |
+| `RUSTFS_ACCESS_KEY` | `internal/config/loader.go` | 当 COS 变量未设置时覆盖 AccessKey |
+| `RUSTFS_SECRET_KEY` | `internal/config/loader.go` | 当 COS 变量未设置时覆盖 SecretKey |
+| `GORSE_API_KEY` | `internal/config/loader.go` | 覆盖 `Gorse.APIKey` |
+| `DASHSCOPE_API_KEY` | `internal/config/loader.go`、embedding 客户端、vector worker AI client | DashScope / 百炼兼容接口 API Key |
+| `OPENAI_API_KEY` | `internal/config/loader.go`、embedding 客户端、vector worker AI client | OpenAI 兼容接口 API Key 兜底 |
+| `EMBEDDING_API_KEY` | `internal/config/loader.go`、embedding 客户端 | 推荐链路 embedding API Key 兜底 |
 | `DASHSCOPE_BASE_URL` | vector worker AI client | 向量化 worker 的 OpenAI 兼容接口地址 |
 | `OPENAI_BASE_URL` | vector worker AI client | OpenAI 兼容接口地址兜底 |
 | `ASR_API_KEY` | vector worker AI client | ASR API Key 兜底 |
@@ -397,8 +442,8 @@
 ### 4.3 `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`
 
 - 类型：`string`
-- 作用：作为对象存储访问凭证的兜底来源
-- 使用场景：配置文件未填时，由环境变量注入敏感信息
+- 作用：作为对象存储访问凭证来源
+- 使用场景：`COS_SECRET_ID` / `COS_SECRET_KEY` 未设置时，由环境变量注入敏感信息
 
 ### 4.4 AI 服务相关环境变量
 
@@ -414,6 +459,38 @@
 
 - `UPLOAD_BENCH_BASE_URL`：上传压测工具目标服务地址；未设置时会结合 `HTTP_ADDR` 生成默认地址。
 - `SOURCE_DSN`、`TARGET_DSN`：数据库迁移工具的源库和目标库 DSN，也可以通过 `-source-dsn`、`-target-dsn` 显式传入。
+- `MODEL_VERSION`、`MODEL_NAME`、`RECBOLE_MODEL`：本次模型版本、线上模型名和 RecBole 算法；默认分别为时间戳版本、`recbole`、`BPR`。
+- `DATASET`、`SAMPLE_LIMIT`、`DAYS_BACK`：导出数据集名称、交互样本上限和回看天数；默认 `video_app`、`10000`、`30`。
+- `DIM`、`EPOCHS`、`PYTHON_BIN`：embedding 维度、训练轮数和 Python 解释器；默认 `64`、`20`，解释器优先使用 `.venv/bin/python`。
+- `DATA_ROOT`、`DATA_DIR`、`ARTIFACT_DIR`、`BASELINE_METRICS`：RecBole atomic 文件、训练产物和上一版指标文件的位置。
+- `PUBLISH_GATE_ENABLED`：是否执行 RecBole 发布门禁，默认 `true`。门禁的默认阈值为 `Recall@20 >= 0.01`、`NDCG@20 >= 0.005`，且相对上一版 `NDCG@20` 的降幅不超过 `20%`；如需调整，直接向 `recbole_recommendation.publish_gate` 传入对应命令行参数。
+
+### 4.6 对象存储迁移工具参数
+
+`tools/migrate_rustfs_bucket` 用于把旧 MinIO 桶数据迁移到 RustFS。默认值：
+
+| 参数 | 默认值 | 作用 |
+|---|---|---|
+| `--source-endpoint` | `10.200.10.12:9000` | 旧 MinIO S3 API 地址 |
+| `--source-access-key` | 从 `MIGRATE_SOURCE_ACCESS_KEY` 读取 | 源端 AccessKey |
+| `--source-secret-key` | 从 `MIGRATE_SOURCE_SECRET_KEY` 读取 | 源端 SecretKey |
+| `--source-bucket` | `video-object-storage` | 源端 Bucket |
+| `--target-endpoint` | `10.200.10.201:9001` | RustFS S3 API 地址 |
+| `--target-access-key` | 从 `MIGRATE_TARGET_ACCESS_KEY` 读取 | 目标端 AccessKey |
+| `--target-secret-key` | 从 `MIGRATE_TARGET_SECRET_KEY` 读取 | 目标端 SecretKey |
+| `--target-bucket` | `video-object-storage` | 目标端 Bucket |
+| `--prefix` | 空 | 只迁移指定对象 key 前缀 |
+| `--workers` | `4` | 并发复制 worker 数 |
+| `--overwrite` | `false` | 目标对象已存在时是否覆盖 |
+| `--dry-run` | `true` | 是否只预演不复制 |
+
+常用命令：
+
+```bash
+cd video-service
+go run ./tools/migrate_rustfs_bucket
+go run ./tools/migrate_rustfs_bucket --dry-run=false
+```
 
 ## 5. HTTP API 参数
 
@@ -774,6 +851,71 @@ JSON Body：
 | `like_count` | `int64` | 点赞数 |
 | `double_like_count` | `int64` | 双赞数 |
 
+#### `GET /api/video-segments/random-play`
+
+Query 参数：
+
+| 参数名 | 类型 | 必填 | 作用 |
+|---|---|---|---|
+| `user_id` | `uint64` | 否 | 传入时按 `Recommendation.Engine` 使用 RecBole、Gorse 或知识点召回；未传时 handler 使用默认用户 `6` 后走同一链路 |
+
+作用：刷新返回一个可播放的视频片段。当前示例配置使用 `recbole`；未传 `user_id` 时会按默认用户 `6` 尝试个性化召回，缺少 active 模型、用户 embedding 或候选为空时才回退到随机可播放片段。`user_id` 非正整数或非法字符串会返回参数错误。
+
+响应字段：
+
+| 字段 | 类型 | 作用 |
+|---|---|---|
+| `video_id` | `uint64` | 所属视频 ID |
+| `segment_id` | `uint64` | 片段 ID |
+| `start_time` | `float64` | 片段起始时间（秒） |
+| `end_time` | `float64` | 片段结束时间（秒） |
+| `text` | `string` | 片段文本内容 |
+| `play_url` | `string` | 播放地址 |
+| `video` | `VideoItem` | 所属视频信息 |
+
+#### `POST /api/video-segments/:id/reactions`
+
+路径参数：
+
+| 参数名 | 类型 | 必填 | 作用 |
+|---|---|---|---|
+| `id` | `uint64` | 是 | 视频片段 ID |
+
+JSON Body：
+
+| 参数名 | 类型 | 必填 | 约束 | 作用 |
+|---|---|---|---|---|
+| `user_id` | `uint64` | 是 | `> 0` | 用户 ID |
+| `reaction_type` | `string` | 是 | `like`、`double_like`、`dislike` | 反馈类型；重复提交同一反馈会取消 |
+
+响应字段：
+
+| 字段 | 类型 | 作用 |
+|---|---|---|
+| `segment_id` | `uint64` | 片段 ID |
+| `user_id` | `uint64` | 用户 ID |
+| `reaction_type` | `string` | 本次反馈类型 |
+| `active` | `bool` | 当前反馈是否处于激活状态 |
+| `like_count` | `int64` | 点赞数 |
+| `double_like_count` | `int64` | 双赞数 |
+| `updated` | `bool` | 是否完成更新 |
+
+#### `GET /api/video-segments/:id/reaction-counts`
+
+路径参数：
+
+| 参数名 | 类型 | 必填 | 作用 |
+|---|---|---|---|
+| `id` | `uint64` | 是 | 视频片段 ID |
+
+响应字段：
+
+| 字段 | 类型 | 作用 |
+|---|---|---|
+| `segment_id` | `uint64` | 片段 ID |
+| `like_count` | `int64` | 点赞数 |
+| `double_like_count` | `int64` | 双赞数 |
+
 ### 5.5 播放与状态接口参数
 
 #### `GET /api/videos/:id/play`
@@ -904,9 +1046,9 @@ Query 参数：
 | `CORSAllowHeaders()` | `Origin, Content-Type, Accept, Authorization, X-Requested-With` | 默认允许请求头 |
 | `CORSExposeHeaders()` | `Content-Length, Content-Type` | 默认暴露响应头 |
 | `CORSMaxAge()` | `86400` | 默认预检缓存时间 |
-| `RawPath()` | `os.TempDir()/nlp-video-project/tmp/raw` | 原视频本地目录兜底值 |
-| `HLSPath()` | `os.TempDir()/nlp-video-project/tmp/hls` | HLS 本地目录兜底值 |
-| `VectorTempPath()` | `os.TempDir()/nlp-video-project/tmp/video_vectorize` | 向量化临时目录兜底值 |
+| `RawPath()` | `os.TempDir()/video-embedding/tmp/raw` | 原视频本地目录兜底值 |
+| `HLSPath()` | `os.TempDir()/video-embedding/tmp/hls` | HLS 本地目录兜底值 |
+| `VectorTempPath()` | `os.TempDir()/video-embedding/tmp/video_vectorize` | 向量化临时目录兜底值 |
 | `MediaRoutePrefix()` | `/videos` | 媒体代理路由兜底值 |
 | `RawURLPrefix()` | `/videos/raw` | 原视频 URL 前缀兜底值 |
 | `HLSURLPrefix()` | `/videos/hls` | HLS URL 前缀兜底值 |
@@ -927,6 +1069,11 @@ Query 参数：
 | `VideoReactionUserPrefix()` | `video:reaction:user:` | 用户反馈状态前缀 |
 | `TranscodeStatusPrefix()` | `video:transcode:status:` | 转码状态前缀 |
 | `RuntimeActiveCounterPrefix()` | `video:runtime:active:` | 运行中任务计数前缀 |
+| `SegmentReactionQueueKey()` | `segment:reaction:queue` | 视频片段反馈队列 |
+| `SegmentReactionCountsPrefix()` | `segment:reaction:counts:` | 视频片段反馈计数前缀 |
+| `SegmentReactionUserPrefix()` | `segment:reaction:user:` | 用户片段反馈状态前缀 |
+
+所有 Redis Stream 队列的死信流均为 `<队列 key>:dlq`。例如 `VectorCoarseQueueKey()` 对应的死信流是 `video:vector:coarse:dlq`。
 
 ### 6.2 转码 worker 默认参数
 
@@ -1058,7 +1205,50 @@ Query 参数：
 5. `VectorWorker.LLMTimeoutMinutes`
 6. `TailAlignment*` 系列参数
 
-### 7.4 如果你要做下游服务化治理
+### 7.4 DLQ 查看与重放工具
+
+文件：
+
+- `cmd/dlqctl/main.go`
+- `internal/infrastructure/redis/dead_letter.go`
+
+`cmd/dlqctl` 用于查看和显式重放 Redis Stream 死信队列。它复用 `CONFIG_FILE` / `VIDEO_CONFIG_FILE` 的配置加载规则，并从 `Redis`、`RedisKeys` 配置中确定 Redis 连接和主队列 key。
+
+支持的队列名：
+
+| 队列名 | 对应配置 |
+|---|---|
+| `transcode` | `RedisKeys.TranscodeQueue` |
+| `vectorize` | `RedisKeys.VectorizeQueue` |
+| `vector-prepare` | `RedisKeys.VectorPrepareQueue` |
+| `vector-coarse` | `RedisKeys.VectorCoarseQueue` |
+| `vector-refine` | `RedisKeys.VectorRefineQueue` |
+| `vector-finalize` | `RedisKeys.VectorFinalizeQueue` |
+| `video-reaction` | `RedisKeys.VideoReactionQueue` |
+| `segment-reaction` | `RedisKeys.SegmentReactionQueue` |
+
+常用命令：
+
+```bash
+cd video-service
+
+go run ./cmd/dlqctl list --queue all --limit 20
+go run ./cmd/dlqctl list --queue transcode --limit 20
+go run ./cmd/dlqctl replay --queue vector-coarse --limit 10 --dry-run
+go run ./cmd/dlqctl replay --queue transcode --id <dlq-message-id>
+go run ./cmd/dlqctl replay --queue vector-coarse --limit 10 --keep-dlq
+```
+
+默认情况下，`replay` 会把 DLQ 消息中的 `payload` 写回原主队列，并删除原 DLQ 消息。加 `--keep-dlq` 可保留原死信消息；加 `--dry-run` 只展示将要重放的消息，不写回主队列。
+
+使用建议：
+
+1. 先执行 `list` 或 `replay --dry-run` 看失败原因和 payload 摘要。
+2. 确认节点、对象存储、AI 服务或数据库等依赖已经恢复。
+3. 对明确可恢复的任务按 id 重放，谨慎使用 `--queue all --limit` 批量重放。
+4. 视频损坏、对象 key 不存在、参数非法等永久失败任务不应直接重放。
+
+### 7.5 如果你要做下游服务化治理
 
 建议补充关注：
 

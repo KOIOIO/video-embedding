@@ -10,8 +10,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	goredis "github.com/go-redis/redis/v8"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
 )
 
 func TestRandomPlayBucketStoreFillsDedupesTrimsPopsAndExpiresByUser(t *testing.T) {

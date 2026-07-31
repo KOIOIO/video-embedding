@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/http/dto"
+	"video-service/internal/http/dto"
 )
 
 type APIError struct {

@@ -8,51 +8,110 @@ import (
 )
 
 const (
-	defaultHTTPAddr                    = ":8081"
-	defaultHTTPShutdownTimeoutSec      = 30
-	defaultHTTPLogDir                  = "logs"
-	defaultHTTPSlowRequestMs           = 1000
-	defaultCORSAllowOrigin             = "*"
-	defaultCORSAllowMethods            = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-	defaultCORSAllowHeaders            = "Origin, Content-Type, Accept, Authorization, X-Requested-With"
-	defaultCORSExposeHeaders           = "Content-Length, Content-Type"
-	defaultCORSMaxAge                  = "86400"
-	defaultRawObjectPrefix             = "raw"
-	defaultHLSObjectPrefix             = "hls"
-	defaultMediaRoutePrefix            = "/videos"
-	defaultRawURLPrefix                = "/videos/raw"
-	defaultHLSURLPrefix                = "/videos/hls"
-	defaultCoverURLPrefix              = "/videos"
-	defaultHLSMasterName               = "master.m3u8"
-	defaultTranscodeQueueKey           = "video:transcode:queue"
-	defaultVectorizeQueueKey           = "video:vectorize:queue"
-	defaultVectorPrepareQueueKey       = "video:vector:prepare"
-	defaultVectorCoarseQueueKey        = "video:vector:coarse"
-	defaultVectorRefineQueueKey        = "video:vector:refine"
-	defaultVectorFinalizeQueueKey      = "video:vector:finalize"
-	defaultVideoReactionQueueKey       = "video:reaction:queue"
-	defaultVideoReactionCountsPrefix   = "video:reaction:counts:"
-	defaultVideoReactionUserPrefix     = "video:reaction:user:"
-	defaultSegmentReactionQueueKey     = "segment:reaction:queue"
-	defaultSegmentReactionCountsPrefix = "segment:reaction:counts:"
-	defaultSegmentReactionUserPrefix   = "segment:reaction:user:"
-	defaultTranscodeStatusPrefix       = "video:transcode:status:"
-	defaultRuntimeActiveCounterPrefix  = "video:runtime:active:"
-	defaultRandomPlayRecentPrefix      = "video:random_play:recent:"
-	defaultRandomPlayBucketPrefix      = "video:random_play:bucket:"
-	defaultEmbeddingDim                = 1536
-	defaultAIProvider                  = "legacy"
-	defaultDashscopeCompatBaseURL      = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-	defaultDashscopeWSURL              = "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
-	defaultRecommendationEngine        = "knowledge_match"
-	defaultRandomPlayDedupeWindowSec   = 1800
-	defaultRandomPlayRecentMaxSize     = 200
-	defaultGorseEndpoint               = "http://localhost:8087"
-	defaultGorseTimeoutSeconds         = 2
-	defaultGorseCandidateLimit         = 100
-	defaultGorseSyncIntervalMins       = 60
-	defaultGorseDataRetentionDays      = 30
+	defaultHTTPAddr                         = ":8081"
+	defaultHTTPShutdownTimeoutSec           = 30
+	defaultHTTPLogDir                       = "logs"
+	defaultHTTPSlowRequestMs                = 1000
+	defaultCORSAllowOrigin                  = "*"
+	defaultCORSAllowMethods                 = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+	defaultCORSAllowHeaders                 = "Origin, Content-Type, Accept, Authorization, X-Requested-With"
+	defaultCORSExposeHeaders                = "Content-Length, Content-Type"
+	defaultCORSMaxAge                       = "86400"
+	defaultRawObjectPrefix                  = "raw"
+	defaultHLSObjectPrefix                  = "hls"
+	defaultMediaRoutePrefix                 = "/videos"
+	defaultRawURLPrefix                     = "/videos/raw"
+	defaultHLSURLPrefix                     = "/videos/hls"
+	defaultCoverURLPrefix                   = "/videos"
+	defaultHLSMasterName                    = "master.m3u8"
+	defaultTranscodeQueueKey                = "video:transcode:queue"
+	defaultKnowledgeVideoBucket             = "knowledge-point-videos"
+	defaultKnowledgeVideoMediaRoutePrefix   = "/knowledge-video-media"
+	defaultKnowledgeVideoTranscodeQueueKey  = "knowledge_video:transcode:stream"
+	defaultKnowledgeVideoMaxArchiveBytes    = int64(1 << 30)
+	defaultKnowledgeVideoMaxExpandedBytes   = int64(4 << 30)
+	defaultKnowledgeVideoMaxEntryBytes      = int64(512 << 20)
+	defaultKnowledgeVideoMaxEntries         = 1000
+	defaultKnowledgeVideoWorkerCount        = 2
+	defaultKnowledgeVideoTaskTimeoutMinutes = 30
+	defaultKnowledgeVideoShutdownTimeoutSec = 120
+	defaultVectorizeQueueKey                = "video:vectorize:queue"
+	defaultVectorPrepareQueueKey            = "video:vector:prepare"
+	defaultVectorCoarseQueueKey             = "video:vector:coarse"
+	defaultVectorRefineQueueKey             = "video:vector:refine"
+	defaultVectorFinalizeQueueKey           = "video:vector:finalize"
+	defaultVideoReactionQueueKey            = "video:reaction:queue"
+	defaultVideoReactionCountsPrefix        = "video:reaction:counts:"
+	defaultVideoReactionUserPrefix          = "video:reaction:user:"
+	defaultSegmentReactionQueueKey          = "segment:reaction:queue"
+	defaultSegmentReactionCountsPrefix      = "segment:reaction:counts:"
+	defaultSegmentReactionUserPrefix        = "segment:reaction:user:"
+	defaultTranscodeStatusPrefix            = "video:transcode:status:"
+	defaultRuntimeActiveCounterPrefix       = "video:runtime:active:"
+	defaultRandomPlayRecentPrefix           = "video:random_play:recent:"
+	defaultRandomPlayBucketPrefix           = "video:random_play:bucket:"
+	defaultEmbeddingDim                     = 1536
+	defaultAIProvider                       = "legacy"
+	defaultDashscopeCompatBaseURL           = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	defaultDashscopeWSURL                   = "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
+	defaultRecommendationEngine             = "knowledge_match"
+	defaultRandomPlayDedupeWindowSec        = 1800
+	defaultRandomPlayRecentMaxSize          = 200
+	defaultGorseEndpoint                    = "http://localhost:8087"
+	defaultGorseTimeoutSeconds              = 2
+	defaultGorseCandidateLimit              = 100
+	defaultGorseSyncIntervalMins            = 60
+	defaultGorseDataRetentionDays           = 30
 )
+
+func JWTSecret(cfg Config) string {
+	if value := strings.TrimSpace(os.Getenv("JWT_SECRET")); value != "" {
+		return value
+	}
+	return strings.TrimSpace(cfg.Auth.JWTSecret)
+}
+
+func JWTExpiry(cfg Config) time.Duration {
+	hours := cfg.Auth.JWTExpireHour
+	if hours <= 0 {
+		hours = 8
+	}
+	return time.Duration(hours) * time.Hour
+}
+
+func applyDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+
+	storage := &cfg.KnowledgeVideoStorage
+	storage.Bucket = firstConfigValue(storage.Bucket, defaultKnowledgeVideoBucket)
+	storage.MediaRoutePrefix = cleanURLPrefix(firstConfigValue(storage.MediaRoutePrefix, defaultKnowledgeVideoMediaRoutePrefix))
+	storage.TempPath = firstConfigValue(storage.TempPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "knowledge_video"))
+	if storage.MaxArchiveBytes <= 0 {
+		storage.MaxArchiveBytes = defaultKnowledgeVideoMaxArchiveBytes
+	}
+	if storage.MaxExpandedBytes <= 0 {
+		storage.MaxExpandedBytes = defaultKnowledgeVideoMaxExpandedBytes
+	}
+	if storage.MaxEntryBytes <= 0 {
+		storage.MaxEntryBytes = defaultKnowledgeVideoMaxEntryBytes
+	}
+	if storage.MaxEntries <= 0 {
+		storage.MaxEntries = defaultKnowledgeVideoMaxEntries
+	}
+
+	cfg.RedisKeys.KnowledgeVideoTranscodeQueue = firstConfigValue(cfg.RedisKeys.KnowledgeVideoTranscodeQueue, defaultKnowledgeVideoTranscodeQueueKey)
+	if cfg.KnowledgeVideoWorker.WorkerCount < 1 {
+		cfg.KnowledgeVideoWorker.WorkerCount = defaultKnowledgeVideoWorkerCount
+	}
+	if cfg.KnowledgeVideoWorker.TaskTimeoutMinutes <= 0 {
+		cfg.KnowledgeVideoWorker.TaskTimeoutMinutes = defaultKnowledgeVideoTaskTimeoutMinutes
+	}
+	if cfg.KnowledgeVideoWorker.ShutdownTimeoutSec <= 0 {
+		cfg.KnowledgeVideoWorker.ShutdownTimeoutSec = defaultKnowledgeVideoShutdownTimeoutSec
+	}
+}
 
 func HTTPAddr(cfg Config) string {
 	if v := strings.TrimSpace(cfg.HTTP.Addr); v != "" {
@@ -106,15 +165,15 @@ func CORSMaxAge(cfg Config) string {
 }
 
 func RawPath(cfg Config) string {
-	return firstConfigValue(cfg.Video.RawPath, filepath.Join(os.TempDir(), "embedding-video", "tmp", "raw"))
+	return firstConfigValue(cfg.Video.RawPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "raw"))
 }
 
 func HLSPath(cfg Config) string {
-	return firstConfigValue(cfg.Video.HlsPath, filepath.Join(os.TempDir(), "embedding-video", "tmp", "hls"))
+	return firstConfigValue(cfg.Video.HlsPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "hls"))
 }
 
 func VectorTempPath(cfg Config) string {
-	return firstConfigValue(cfg.Storage.VectorTempPath, filepath.Join(os.TempDir(), "embedding-video", "tmp", "video_vectorize"))
+	return firstConfigValue(cfg.Storage.VectorTempPath, filepath.Join(os.TempDir(), "video-embedding", "tmp", "video_vectorize"))
 }
 
 func RawObjectPrefix(cfg Config) string {

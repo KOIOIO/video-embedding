@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	workerapp "nlp-video-analysis/internal/application/videoapp/worker"
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	workerapp "video-service/internal/application/videoapp/worker"
+	domainvideo "video-service/internal/domain/video"
 )
 
 // Transcoder 抽象 HLS 转码与封面截图能力。

@@ -113,3 +113,19 @@ func TestRecBoleQueriesUseVersionedActiveEmbeddings(t *testing.T) {
 		}
 	}
 }
+
+func TestListRecBolePerformanceQueryUsesPublishedTimeAndNumericJSONMetric(t *testing.T) {
+	for _, fragment := range []string{
+		"FROM recsys.recommend_model_version",
+		"model_name = ?",
+		"framework = ?",
+		"COALESCE(published_at, create_time)",
+		"metrics_json ->> ?",
+		"jsonb_typeof(metrics_json -> ?) = 'number'",
+		"ORDER BY metric_time ASC, id ASC",
+	} {
+		if !strings.Contains(ListRecBolePerformanceQuery, fragment) {
+			t.Fatalf("ListRecBolePerformanceQuery missing %q", fragment)
+		}
+	}
+}

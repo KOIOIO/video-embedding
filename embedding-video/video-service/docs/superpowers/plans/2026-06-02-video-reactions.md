@@ -335,8 +335,8 @@ import (
 	"context"
 	"testing"
 
-	"embedding-video/http/internal/application/videoapp"
-	"embedding-video/http/internal/model"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/model"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

@@ -12,14 +12,22 @@ class RecBoleConfigTest(unittest.TestCase):
 
         self.assertEqual(cfg["model"], "BPR")
         self.assertEqual(cfg["embedding_size"], 64)
-        self.assertEqual(cfg["dataset"], "video_dataset")
+        self.assertEqual(cfg["dataset"], "video_app")
         self.assertIn("Recall", cfg["metrics"])
         self.assertIn("NDCG", cfg["metrics"])
         self.assertIn("Hit", cfg["metrics"])
         self.assertIn("Precision", cfg["metrics"])
 
+    def test_evaluation_is_deterministic_and_time_ordered(self) -> None:
+        cfg = config.build_config("/tmp/recbole/data/recbole_v1")
+        self.assertEqual(cfg["seed"], 20260730)
+        self.assertTrue(cfg["reproducibility"])
+        self.assertEqual(cfg["eval_args"]["order"], "TO")
+        self.assertEqual(cfg["eval_args"]["group_by"], "user")
+        self.assertEqual(cfg["train_neg_sample_args"]["distribution"], "uniform")
+
     def test_dataset_path_points_at_atomic_parent(self) -> None:
-        cfg = config.build_config("/tmp/recbole/data/recbole_v1", dataset="video_dataset")
+        cfg = config.build_config("/tmp/recbole/data/recbole_v1", dataset="video_app")
         self.assertEqual(cfg["data_path"], "/tmp/recbole/data")
 
 

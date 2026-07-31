@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"nlp-video-analysis/internal/config"
-	appbuilder "nlp-video-analysis/internal/http/app"
+	"video-service/internal/config"
+	appbuilder "video-service/internal/http/app"
 )
 
 func TestPrepareServerSucceedsWithoutRPCAddr(t *testing.T) {

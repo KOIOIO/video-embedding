@@ -3,6 +3,7 @@ package handler_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,9 +12,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/http/handler"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/http/handler"
 )
 
 type stubRecommendationAdminApp struct {
@@ -21,7 +22,7 @@ type stubRecommendationAdminApp struct {
 	diagnosticsFunc        func(context.Context, videoapp.RecommendationDiagnosticsInput) (videoapp.RecommendationDiagnostics, error)
 	datasourceStatsFunc    func(context.Context) (videoapp.RecommendationDatasourceStats, error)
 	effectMetricsFunc      func(context.Context, videoapp.RecommendationEffectMetricsInput) (videoapp.RecommendationEffectMetrics, error)
-	gorsePerformanceFunc   func(context.Context, videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error)
+	recBolePerformanceFunc func(context.Context, videoapp.RecommendationRecBolePerformanceInput) (videoapp.RecommendationRecBolePerformance, error)
 	traceRandomPlayFunc    func(context.Context, videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendationTrace, error)
 	traceQuestionFunc      func(context.Context, videoapp.RecommendByQuestionInput) (videoapp.RecommendationTrace, error)
 	redisStateFunc         func(context.Context, videoapp.RecommendationRedisStateInput) (videoapp.RecommendationRedisState, error)
@@ -29,12 +30,12 @@ type stubRecommendationAdminApp struct {
 	previewQuestionFunc    func(context.Context, videoapp.RecommendByQuestionInput) ([]videoapp.RecommendResultItem, error)
 	resolvePlaybackURLFunc func(context.Context, domainvideo.Video) string
 
-	previewRandomPlayInput videoapp.RandomPlayVideoSegmentInput
-	previewQuestionInput   videoapp.RecommendByQuestionInput
-	effectMetricsInput     videoapp.RecommendationEffectMetricsInput
-	gorsePerformanceInput  videoapp.RecommendationGorsePerformanceInput
-	diagnosticsInput       videoapp.RecommendationDiagnosticsInput
-	redisStateInput        videoapp.RecommendationRedisStateInput
+	previewRandomPlayInput  videoapp.RandomPlayVideoSegmentInput
+	previewQuestionInput    videoapp.RecommendByQuestionInput
+	effectMetricsInput      videoapp.RecommendationEffectMetricsInput
+	recBolePerformanceInput videoapp.RecommendationRecBolePerformanceInput
+	diagnosticsInput        videoapp.RecommendationDiagnosticsInput
+	redisStateInput         videoapp.RecommendationRedisStateInput
 }
 
 func (s *stubRecommendationAdminApp) RecommendationAdminOverview(ctx context.Context) (videoapp.RecommendationAdminOverview, error) {
@@ -67,71 +68,99 @@ func (s *stubRecommendationAdminApp) RecommendationEffectMetrics(ctx context.Con
 	return videoapp.RecommendationEffectMetrics{}, nil
 }
 
-func (s *stubRecommendationAdminApp) RecommendationGorsePerformance(ctx context.Context, input videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error) {
-	s.gorsePerformanceInput = input
-	if s.gorsePerformanceFunc != nil {
-		return s.gorsePerformanceFunc(ctx, input)
+func (s *stubRecommendationAdminApp) RecommendationRecBolePerformance(ctx context.Context, input videoapp.RecommendationRecBolePerformanceInput) (videoapp.RecommendationRecBolePerformance, error) {
+	s.recBolePerformanceInput = input
+	if s.recBolePerformanceFunc != nil {
+		return s.recBolePerformanceFunc(ctx, input)
 	}
-	return videoapp.RecommendationGorsePerformance{}, nil
+	return videoapp.RecommendationRecBolePerformance{}, nil
 }
 
-func TestRecommendationAdminGorsePerformanceReturnsNormalizedTimeseries(t *testing.T) {
+func TestRecommendationAdminRecBolePerformanceReturnsModelTimeseries(t *testing.T) {
 	begin := time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 7, 16, 23, 59, 59, 0, time.UTC)
 	stub := &stubRecommendationAdminApp{
-		gorsePerformanceFunc: func(_ context.Context, input videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error) {
-			return videoapp.RecommendationGorsePerformance{
-				Metric: "positive_feedback_ratio",
-				Label:  "正向反馈率（全部）",
-				AvailableMetrics: []videoapp.RecommendationGorseMetric{{
-					Value: "positive_feedback_ratio",
-					Label: "正向反馈率（全部）",
+		recBolePerformanceFunc: func(_ context.Context, input videoapp.RecommendationRecBolePerformanceInput) (videoapp.RecommendationRecBolePerformance, error) {
+			return videoapp.RecommendationRecBolePerformance{
+				Metric: "NDCG@20",
+				Label:  "NDCG@20",
+				AvailableMetrics: []videoapp.RecommendationRecBoleMetric{{
+					Value: "NDCG@20",
+					Label: "NDCG@20",
 				}},
-				Points: []videoapp.RecommendationGorsePerformancePoint{{
-					Timestamp: time.Date(2026, 7, 14, 0, 0, 0, 0, time.UTC),
-					Value:     0.375,
+				Points: []videoapp.RecommendationRecBolePerformancePoint{{
+					Timestamp:    time.Date(2026, 7, 14, 0, 0, 0, 0, time.UTC),
+					Value:        0.35,
+					ModelVersion: "recbole_v2",
 				}},
 			}, nil
 		},
 	}
 	h := handler.NewRecommendationAdminHandler(stub)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/gorse/performance?metric=positive_feedback_ratio&begin=2026-07-09T00:00:00Z&end=2026-07-16T23:59:59Z", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/recbole/performance?metric=NDCG%4020&begin=2026-07-09T00:00:00Z&end=2026-07-16T23:59:59Z", nil)
 	router := gin.New()
-	router.GET("/api/admin/recommendation/gorse/performance", h.GorsePerformance)
+	router.GET("/api/admin/recommendation/recbole/performance", h.RecBolePerformance)
 
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if stub.gorsePerformanceInput.Metric != "positive_feedback_ratio" || !stub.gorsePerformanceInput.Begin.Equal(begin) || !stub.gorsePerformanceInput.End.Equal(end) {
-		t.Fatalf("input = %+v", stub.gorsePerformanceInput)
+	if stub.recBolePerformanceInput.Metric != "NDCG@20" || !stub.recBolePerformanceInput.Begin.Equal(begin) || !stub.recBolePerformanceInput.End.Equal(end) {
+		t.Fatalf("input = %+v", stub.recBolePerformanceInput)
 	}
-	assertBodyContains(t, w.Body.Bytes(), `"metric":"positive_feedback_ratio"`)
-	assertBodyContains(t, w.Body.Bytes(), `"label":"正向反馈率（全部）"`)
+	assertBodyContains(t, w.Body.Bytes(), `"metric":"NDCG@20"`)
+	assertBodyContains(t, w.Body.Bytes(), `"label":"NDCG@20"`)
 	assertBodyContains(t, w.Body.Bytes(), `"available_metrics"`)
 	assertBodyContains(t, w.Body.Bytes(), `"timestamp":"2026-07-14T00:00:00Z"`)
-	assertBodyContains(t, w.Body.Bytes(), `"value":0.375`)
+	assertBodyContains(t, w.Body.Bytes(), `"value":0.35`)
+	assertBodyContains(t, w.Body.Bytes(), `"model_version":"recbole_v2"`)
 }
 
-func TestRecommendationAdminGorsePerformanceRejectsInvalidQueries(t *testing.T) {
+func TestRecommendationAdminRecBolePerformanceRejectsInvalidQueries(t *testing.T) {
 	h := handler.NewRecommendationAdminHandler(&stubRecommendationAdminApp{})
 	router := gin.New()
-	router.GET("/api/admin/recommendation/gorse/performance", h.GorsePerformance)
+	router.GET("/api/admin/recommendation/recbole/performance", h.RecBolePerformance)
 
 	tests := []string{
-		"metric=..%2F..%2Fconfig&begin=2026-07-09T00:00:00Z&end=2026-07-16T23:59:59Z",
-		"metric=cf_ndcg&begin=bad&end=2026-07-16T23:59:59Z",
-		"metric=cf_ndcg&begin=2026-07-17T00:00:00Z&end=2026-07-16T00:00:00Z",
+		"metric=NDCG%4020&begin=bad&end=2026-07-16T23:59:59Z",
+		"metric=NDCG%4020&begin=2026-07-17T00:00:00Z&end=2026-07-16T00:00:00Z",
 	}
 	for _, query := range tests {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/gorse/performance?"+query, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/recbole/performance?"+query, nil)
 		router.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("query %q: expected 400, got %d: %s", query, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestRecommendationAdminRecBolePerformanceMapsServiceErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "invalid metric", err: videoapp.ErrInvalidRecBolePerformanceMetric, want: http.StatusBadRequest},
+		{name: "repository failure", err: errors.New("database unavailable"), want: http.StatusInternalServerError},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &stubRecommendationAdminApp{recBolePerformanceFunc: func(context.Context, videoapp.RecommendationRecBolePerformanceInput) (videoapp.RecommendationRecBolePerformance, error) {
+				return videoapp.RecommendationRecBolePerformance{}, tc.err
+			}}
+			h := handler.NewRecommendationAdminHandler(stub)
+			router := gin.New()
+			router.GET("/api/admin/recommendation/recbole/performance", h.RecBolePerformance)
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/admin/recommendation/recbole/performance?metric=AUC&begin=2026-07-09T00:00:00Z&end=2026-07-16T23:59:59Z", nil)
+			router.ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
 	}
 }
 

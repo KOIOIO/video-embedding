@@ -106,21 +106,22 @@ type RecommendationEffectMetricsData struct {
 	Strategies []RecommendationStrategyEffectMetricData `json:"strategies"`
 }
 
-type RecommendationGorsePerformanceData struct {
-	Metric           string                                    `json:"metric"`
-	Label            string                                    `json:"label"`
-	AvailableMetrics []RecommendationGorseMetricData           `json:"available_metrics"`
-	Points           []RecommendationGorsePerformancePointData `json:"points"`
+type RecommendationRecBolePerformanceData struct {
+	Metric           string                                      `json:"metric"`
+	Label            string                                      `json:"label"`
+	AvailableMetrics []RecommendationRecBoleMetricData           `json:"available_metrics"`
+	Points           []RecommendationRecBolePerformancePointData `json:"points"`
 }
 
-type RecommendationGorseMetricData struct {
+type RecommendationRecBoleMetricData struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
 }
 
-type RecommendationGorsePerformancePointData struct {
-	Timestamp time.Time `json:"timestamp"`
-	Value     float64   `json:"value"`
+type RecommendationRecBolePerformancePointData struct {
+	Timestamp    time.Time `json:"timestamp"`
+	Value        float64   `json:"value"`
+	ModelVersion string    `json:"model_version"`
 }
 
 type RecommendationDailyEffectMetricData struct {
@@ -235,4 +236,44 @@ type RecommendationAdminPreviewItem struct {
 	PlayURL          string  `json:"play_url"`
 	UserReacted      bool    `json:"user_reacted"`
 	UserReactionType string  `json:"user_reaction_type"`
+}
+
+type RecommendationAdminOverviewResponse struct {
+	Success bool                            `json:"success"`
+	Data    RecommendationAdminOverviewData `json:"data"`
+}
+
+type RecommendationDiagnosticsResponse struct {
+	Success bool                          `json:"success"`
+	Data    RecommendationDiagnosticsData `json:"data"`
+}
+
+type RecommendationDatasourceStatsResponse struct {
+	Success bool                              `json:"success"`
+	Data    RecommendationDatasourceStatsData `json:"data"`
+}
+
+type RecommendationEffectMetricsResponse struct {
+	Success bool                            `json:"success"`
+	Data    RecommendationEffectMetricsData `json:"data"`
+}
+
+type RecommendationRecBolePerformanceResponse struct {
+	Success bool                                 `json:"success"`
+	Data    RecommendationRecBolePerformanceData `json:"data"`
+}
+
+type RecommendationTraceResponse struct {
+	Success bool                    `json:"success"`
+	Data    RecommendationTraceData `json:"data"`
+}
+
+type RecommendationRedisStateResponse struct {
+	Success bool                         `json:"success"`
+	Data    RecommendationRedisStateData `json:"data"`
+}
+
+type RecommendationAdminPreviewListResponse struct {
+	Success bool                               `json:"success"`
+	Data    RecommendationAdminPreviewListData `json:"data"`
 }

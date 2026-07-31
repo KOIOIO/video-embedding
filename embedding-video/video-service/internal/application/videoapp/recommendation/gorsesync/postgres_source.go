@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
 )
 
 type PostgresSource struct {

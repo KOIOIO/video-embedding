@@ -1,6 +1,6 @@
 package videoapp
 
-import runtimeapp "nlp-video-analysis/internal/application/videoapp/runtime"
+import runtimeapp "video-service/internal/application/videoapp/runtime"
 
 type ActiveCounterStore = runtimeapp.ActiveCounterStore
 

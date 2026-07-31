@@ -1,6 +1,6 @@
 # Gorse 推荐引擎运行手册
 
-> 适用范围：仅当 `Recommendation.Engine=gorse` 时启用本手册中的主链路切换步骤。当前 `configs/video.yml` 和 `configs/video_prod.yml` 均使用 `recbole` 作为主推荐链路，但启用了 Gorse 同步和 Dashboard 性能趋势；worker 会立即执行并周期执行同步，失败仅记录警告而不会退出 worker。若不部署 Gorse，先将 `Gorse.SyncEnabled` 设为 `false`。`Gorse.WriteBackEnabled` 只在 Gorse 主链路返回候选时生效。本次按 2026-07-16 的配置与代码状态复核。
+> 适用范围：仅当 `Recommendation.Engine=gorse` 时启用本手册中的主链路切换步骤。当前 `configs/video.yml` 和 `configs/video_prod.yml` 均使用 `recbole` 作为主推荐链路，但启用了 Gorse 同步；worker 会立即执行并周期执行同步，失败仅记录警告而不会退出 worker。若不部署 Gorse，先将 `Gorse.SyncEnabled` 设为 `false`。`Gorse.WriteBackEnabled` 只在 Gorse 主链路返回候选时生效。本次按 2026-07-21 的配置与代码状态复核。
 
 ## 部署边界
 
@@ -13,7 +13,7 @@ Gorse 和业务 HTTP/worker 解耦部署。根目录 `docker-compose.yml` 使用
 当前本机预期已有：
 
 1. Redis，默认 `127.0.0.1:6379`。
-2. PostgreSQL，默认复用主服务的 `video-embedding` 数据库。
+2. PostgreSQL，默认复用主服务的 `video-app` 数据库。
 3. MinIO，可选。当前默认使用 Docker volume 保存 Gorse blob/model 文件；需要对象存储时再切到 MinIO/S3。
 
 Gorse 容器通过 `host.docker.internal` 访问宿主机 Redis/PostgreSQL。
@@ -37,20 +37,20 @@ psql "$POSTGRES_DSN" \
 Gorse 连接串通过私有 `.env.local` / `.env.deploy` 注入：
 
 ```bash
-GORSE_DATA_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-embedding?sslmode=disable&search_path=gorse,public
-GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-embedding?sslmode=disable&search_path=gorse,public
+GORSE_DATA_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-app?sslmode=disable&search_path=gorse,public
+GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-app?sslmode=disable&search_path=gorse,public
 ```
 
 隔离方式有两层：
 
 1. `search_path=gorse,public`：Gorse 建表优先进入 `gorse` schema。
-2. `table_prefix = "video_gorse_"`：即使误进同 schema，也能从表名前缀识别。
+2. `table_prefix = "video_app_gorse_"`：即使误进同 schema，也能从表名前缀识别。
 
 如需修改 PostgreSQL 地址、账号、密码、库名或 schema，同步修改：
 
 1. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_DATA_STORE` 和 `GORSE_CACHE_STORE`。
 2. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` / `GORSE_SERVER_API_KEY`，如果 API key 也改了。
-3. `GORSE_DASHBOARD_USERNAME` / `GORSE_DASHBOARD_PASSWORD`。Gorse 容器和 Go API 必须读取同一组值，生产环境不得保留示例密码。
+3. `GORSE_DASHBOARD_USERNAME` / `GORSE_DASHBOARD_PASSWORD`，仅用于访问 Gorse 诊断 Dashboard，Go API 不读取这两个变量。
 
 ## 启动和停止
 
@@ -97,11 +97,9 @@ GORSE_MASTER_GRPC_PORT=18086 GORSE_DASHBOARD_PORT=18088 \
 Gorse:
   Endpoint: "http://localhost:8088"
   APIKey: ""
-  DashboardUsername: ""
-  DashboardPassword: ""
 ```
 
-`APIKey`、`DashboardUsername` 和 `DashboardPassword` 分别由私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY`、`GORSE_DASHBOARD_USERNAME` 和 `GORSE_DASHBOARD_PASSWORD` 注入。
+`APIKey` 由私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` 注入。
 
 生产容器如果和 `docker-compose.gorse.yml` 使用同一个 Docker Compose project/network，可使用：
 
@@ -155,13 +153,7 @@ curl -f -H "X-API-Key: ${GORSE_API_KEY}" 'http://localhost:8088/api/recommend/1?
 docker compose logs --tail=100 gorse
 ```
 
-推荐控制台的“命中效果”页通过以下受保护的管理接口读取 Dashboard 时间序列：
-
-```text
-GET /api/admin/recommendation/gorse/performance?metric=<metric>&begin=<RFC3339>&end=<RFC3339>
-```
-
-支持正向反馈率（全部及 Gorse 配置的各正向反馈类型）、协同过滤 NDCG / Precision / Recall、点击率模型 AUC / Precision / Recall。Go 服务负责 Dashboard 登录、Cookie 会话和指标白名单，浏览器无需访问 `8088`。
+推荐控制台的性能趋势已迁移到 RecBole 离线评估数据，不再读取 Gorse Dashboard 时间序列。Gorse `8088` 仅用于管理界面和既有推荐 API。
 
 ## MinIO/S3 blob 存储
 

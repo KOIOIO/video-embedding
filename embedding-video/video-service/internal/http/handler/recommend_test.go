@@ -11,9 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/http/handler"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/http/handler"
 )
 
 type stubRecommendApp struct {
@@ -22,9 +22,9 @@ type stubRecommendApp struct {
 	reportWatchFunc         func(context.Context, videoapp.ReportWatchInput) error
 	resolvePlaybackURLFunc  func(context.Context, domainvideo.Video) string
 
-	recommendInput         videoapp.RecommendByQuestionInput
-	listRecommendationsIn  videoapp.ListRecommendationsInput
-	reportWatchInput       videoapp.ReportWatchInput
+	recommendInput          videoapp.RecommendByQuestionInput
+	listRecommendationsIn   videoapp.ListRecommendationsInput
+	reportWatchInput        videoapp.ReportWatchInput
 	resolvePlaybackURLCalls int
 	resolvedVideo           domainvideo.Video
 }
@@ -219,7 +219,7 @@ func TestListRecommendations_Success(t *testing.T) {
 				WatchDuration:  45,
 				StartTimeSec:   120,
 				EndTimeSec:     165,
-				Video: domainvideo.Video{ID: 17, Title: "History"},
+				Video:          domainvideo.Video{ID: 17, Title: "History"},
 			}}, nil
 		},
 	}

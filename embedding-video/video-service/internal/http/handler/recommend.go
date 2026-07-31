@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	recommendhandler "nlp-video-analysis/internal/http/handler/recommendations"
+	recommendhandler "video-service/internal/http/handler/recommendations"
 )
 
 type RecommendHandler struct {
@@ -16,7 +16,7 @@ func NewRecommendHandler(app any) *RecommendHandler {
 
 // RecommendByQuestion godoc
 // @Summary 根据题目推荐视频
-// @Tags 视频服务
+// @Tags 推荐
 // @Accept json
 // @Produce json
 // @Param request body dto.RecommendByQuestionRequest true "推荐请求参数"
@@ -31,7 +31,7 @@ func (h *RecommendHandler) RecommendByQuestion(c *gin.Context) {
 
 // ListRecommendations godoc
 // @Summary 查询推荐列表
-// @Tags 视频服务
+// @Tags 推荐
 // @Produce json
 // @Param question_id query int true "题目ID"
 // @Param user_id query int false "用户ID"
@@ -46,7 +46,7 @@ func (h *RecommendHandler) ListRecommendations(c *gin.Context) {
 
 // ReportWatch godoc
 // @Summary 上报视频观看进度
-// @Tags 视频服务
+// @Tags 视频互动
 // @Accept json
 // @Produce json
 // @Param request body dto.ReportWatchRequest true "观看进度参数"

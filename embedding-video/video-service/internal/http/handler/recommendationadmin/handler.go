@@ -10,10 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/http/dto"
-	httperrors "nlp-video-analysis/internal/http/errors"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/http/dto"
+	httperrors "video-service/internal/http/errors"
 )
 
 type Handler struct {
@@ -25,7 +25,7 @@ type recommendationAdminApp interface {
 	RecommendationDiagnostics(ctx context.Context, input videoapp.RecommendationDiagnosticsInput) (videoapp.RecommendationDiagnostics, error)
 	RecommendationDatasourceStats(ctx context.Context) (videoapp.RecommendationDatasourceStats, error)
 	RecommendationEffectMetrics(ctx context.Context, input videoapp.RecommendationEffectMetricsInput) (videoapp.RecommendationEffectMetrics, error)
-	RecommendationGorsePerformance(ctx context.Context, input videoapp.RecommendationGorsePerformanceInput) (videoapp.RecommendationGorsePerformance, error)
+	RecommendationRecBolePerformance(ctx context.Context, input videoapp.RecommendationRecBolePerformanceInput) (videoapp.RecommendationRecBolePerformance, error)
 	RecommendationTraceRandomPlay(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendationTrace, error)
 	RecommendationTraceByQuestion(ctx context.Context, input videoapp.RecommendByQuestionInput) (videoapp.RecommendationTrace, error)
 	RecommendationRedisState(ctx context.Context, input videoapp.RecommendationRedisStateInput) (videoapp.RecommendationRedisState, error)
@@ -97,12 +97,8 @@ func (h *Handler) Effects(c *gin.Context) {
 	writeSuccess(c, mapEffectMetrics(days, metrics))
 }
 
-func (h *Handler) GorsePerformance(c *gin.Context) {
+func (h *Handler) RecBolePerformance(c *gin.Context) {
 	metric := strings.TrimSpace(c.Query("metric"))
-	if !validGorseMetricQuery(metric) {
-		httperrors.Write(c, httperrors.InvalidArgument("metric is invalid"))
-		return
-	}
 	begin, err := time.Parse(time.RFC3339, strings.TrimSpace(c.Query("begin")))
 	if err != nil {
 		httperrors.Write(c, httperrors.InvalidArgument("begin must be RFC3339"))
@@ -117,20 +113,20 @@ func (h *Handler) GorsePerformance(c *gin.Context) {
 		httperrors.Write(c, httperrors.InvalidArgument("begin must not be after end"))
 		return
 	}
-	performance, err := h.app.RecommendationGorsePerformance(c.Request.Context(), videoapp.RecommendationGorsePerformanceInput{
+	performance, err := h.app.RecommendationRecBolePerformance(c.Request.Context(), videoapp.RecommendationRecBolePerformanceInput{
 		Metric: metric,
 		Begin:  begin,
 		End:    end,
 	})
-	if errors.Is(err, videoapp.ErrInvalidGorsePerformanceMetric) {
+	if errors.Is(err, videoapp.ErrInvalidRecBolePerformanceMetric) {
 		httperrors.Write(c, httperrors.InvalidArgument("metric is not available"))
 		return
 	}
 	if err != nil {
-		httperrors.Write(c, httperrors.Internal("gorse performance query failed"))
+		httperrors.Write(c, httperrors.Internal("recbole performance query failed"))
 		return
 	}
-	writeSuccess(c, mapGorsePerformance(performance))
+	writeSuccess(c, mapRecBolePerformance(performance))
 }
 
 func (h *Handler) PreviewRandomPlay(c *gin.Context) {
@@ -427,16 +423,16 @@ func mapEffectMetrics(days int, metrics videoapp.RecommendationEffectMetrics) dt
 	}
 }
 
-func mapGorsePerformance(performance videoapp.RecommendationGorsePerformance) dto.RecommendationGorsePerformanceData {
-	metrics := make([]dto.RecommendationGorseMetricData, 0, len(performance.AvailableMetrics))
+func mapRecBolePerformance(performance videoapp.RecommendationRecBolePerformance) dto.RecommendationRecBolePerformanceData {
+	metrics := make([]dto.RecommendationRecBoleMetricData, 0, len(performance.AvailableMetrics))
 	for _, metric := range performance.AvailableMetrics {
-		metrics = append(metrics, dto.RecommendationGorseMetricData{Value: metric.Value, Label: metric.Label})
+		metrics = append(metrics, dto.RecommendationRecBoleMetricData{Value: metric.Value, Label: metric.Label})
 	}
-	points := make([]dto.RecommendationGorsePerformancePointData, 0, len(performance.Points))
+	points := make([]dto.RecommendationRecBolePerformancePointData, 0, len(performance.Points))
 	for _, point := range performance.Points {
-		points = append(points, dto.RecommendationGorsePerformancePointData{Timestamp: point.Timestamp, Value: point.Value})
+		points = append(points, dto.RecommendationRecBolePerformancePointData{Timestamp: point.Timestamp, Value: point.Value, ModelVersion: point.ModelVersion})
 	}
-	return dto.RecommendationGorsePerformanceData{
+	return dto.RecommendationRecBolePerformanceData{
 		Metric:           performance.Metric,
 		Label:            performance.Label,
 		AvailableMetrics: metrics,
@@ -533,18 +529,6 @@ func parseOptionalDaysQuery(c *gin.Context) (int, error) {
 		return 90, nil
 	}
 	return value, nil
-}
-
-func validGorseMetricQuery(metric string) bool {
-	if metric == "" || strings.ContainsAny(metric, "/\\") {
-		return false
-	}
-	for _, r := range metric {
-		if r < 0x20 || r == 0x7f {
-			return false
-		}
-	}
-	return true
 }
 
 func parseRequiredUintQuery(c *gin.Context, name string) (uint64, error) {

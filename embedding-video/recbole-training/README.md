@@ -14,9 +14,9 @@ When the publish gate is enabled, the default thresholds are `Recall@20 >= 0.01`
 
 Important outputs:
 
-- `data/<model_version>/video_dataset/video_dataset.inter`
-- `data/<model_version>/video_dataset/video_dataset.item`
-- `data/<model_version>/video_dataset/video_dataset.user`
+- `data/<model_version>/video_app/video_app.inter`
+- `data/<model_version>/video_app/video_app.item`
+- `data/<model_version>/video_app/video_app.user`
 - `artifacts/<model_version>/item_embeddings.csv`
 - `artifacts/<model_version>/user_embeddings.csv`
 - `artifacts/<model_version>/metrics.json`
@@ -35,3 +35,16 @@ go run ./tools/drop_legacy_recommendation_tables --execute --confirm drop-legacy
 ```
 
 The Python dependencies are pinned in `requirements.txt`; use a virtual environment compatible with its PyTorch constraint before starting a local training run.
+
+Local setup and verification:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
+Production scheduling is handled by `video-service/cmd/recboletrainer`, which invokes `scripts/run_recbole_pipeline.sh`. The root Compose runs it in a separate `recbole_trainer` container; server delivery topologies and environment setup are documented in `../deployment/DEPLOYMENT.md`.
+
+Generated training data and model artifacts live under `data/<model_version>/` and `artifacts/<model_version>/`. They are runtime outputs, not API contracts; serving behavior is defined by the active version stored in PostgreSQL.

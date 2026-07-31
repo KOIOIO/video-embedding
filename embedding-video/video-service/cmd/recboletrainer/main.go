@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"nlp-video-analysis/internal/config"
-	"nlp-video-analysis/internal/lifecycle"
-	"nlp-video-analysis/internal/worker/recboletrainer"
-	"nlp-video-analysis/middleware"
+	"video-service/internal/config"
+	"video-service/internal/lifecycle"
+	"video-service/internal/worker/recboletrainer"
+	"video-service/middleware"
 
 	"go.uber.org/zap"
 )

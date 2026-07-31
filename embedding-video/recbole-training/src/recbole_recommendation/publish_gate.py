@@ -12,6 +12,8 @@ class GateConfig:
     min_recall_at_20: float = 0.01
     min_ndcg_at_20: float = 0.005
     max_relative_ndcg_drop: float = 0.2
+    min_positive_rows: int = 1
+    min_positive_users: int = 1
 
 
 def metric_value(data: dict, name: str) -> float:
@@ -27,6 +29,12 @@ def evaluate(metrics: dict, baseline: dict | None = None, config: GateConfig = G
     reasons: list[str] = []
     recall = metric_value(metrics, "Recall@20")
     ndcg = metric_value(metrics, "NDCG@20")
+    positive_rows = metric_value(metrics, "positive_rows")
+    positive_users = metric_value(metrics, "positive_users")
+    if "positive_rows" in metrics and positive_rows < config.min_positive_rows:
+        reasons.append(f"positive_rows {positive_rows:.0f} below {config.min_positive_rows}")
+    if "positive_users" in metrics and positive_users < config.min_positive_users:
+        reasons.append(f"positive_users {positive_users:.0f} below {config.min_positive_users}")
     if recall < config.min_recall_at_20:
         reasons.append(f"Recall@20 {recall:.6f} below {config.min_recall_at_20:.6f}")
     if ndcg < config.min_ndcg_at_20:
@@ -44,6 +52,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-recall-at-20", type=float, default=GateConfig.min_recall_at_20)
     parser.add_argument("--min-ndcg-at-20", type=float, default=GateConfig.min_ndcg_at_20)
     parser.add_argument("--max-relative-ndcg-drop", type=float, default=GateConfig.max_relative_ndcg_drop)
+    parser.add_argument("--min-positive-rows", type=int, default=GateConfig.min_positive_rows)
+    parser.add_argument("--min-positive-users", type=int, default=GateConfig.min_positive_users)
     return parser.parse_args()
 
 
@@ -58,6 +68,8 @@ def main() -> None:
             min_recall_at_20=args.min_recall_at_20,
             min_ndcg_at_20=args.min_ndcg_at_20,
             max_relative_ndcg_drop=args.max_relative_ndcg_drop,
+            min_positive_rows=args.min_positive_rows,
+            min_positive_users=args.min_positive_users,
         ),
     )
     if not ok:

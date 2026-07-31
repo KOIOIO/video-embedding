@@ -10,10 +10,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
-	appsync "nlp-video-analysis/internal/application/videoapp/recommendation/gorsesync"
-	"nlp-video-analysis/internal/config"
-	"nlp-video-analysis/internal/lifecycle"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
+	appsync "video-service/internal/application/videoapp/recommendation/gorsesync"
+	"video-service/internal/config"
+	"video-service/internal/lifecycle"
 )
 
 type Scheduler struct {
@@ -52,7 +52,7 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	}
 	scheduler := &Scheduler{
 		Interval: config.GorseSyncInterval(cfg),
-		Sync:    syncer.Run,
+		Sync:     syncer.Run,
 	}
 	app.Go(scheduler.Run)
 }

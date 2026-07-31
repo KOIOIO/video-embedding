@@ -23,6 +23,8 @@
   - [3.16 EmbeddingConfig](#316-embeddingconfig)
   - [3.17 ASRConfig](#317-asrconfig)
   - [3.18 AIConfig](#318-aiconfig)
+  - [3.19 RecommendationConfig](#319-recommendationconfig)
+  - [3.20 GorseConfig](#320-gorseconfig)
 - [4. Environment Variables](#4-environment-variables)
 - [5. HTTP API Parameters](#5-http-api-parameters)
   - [5.1 Common Response Shape](#51-common-response-shape)
@@ -39,6 +41,8 @@
   - [6.4 Hierarchical Segmentation Internal Parameters](#64-hierarchical-segmentation-internal-parameters)
   - [6.5 Tail Alignment Internal Parameters](#65-tail-alignment-internal-parameters)
 - [7. Usage Notes](#7-usage-notes)
+  - [7.4 DLQ Inspection and Replay](#74-dlq-inspection-and-replay)
+  - [7.5 Downstream Service Governance](#75-if-you-are-productizing-the-service-as-a-downstream-capability)
 
 ## 1. Document Scope
 
@@ -82,6 +86,13 @@ Default loading rules:
 3. `CONFIG_FILE` and `VIDEO_CONFIG_FILE` can both override the default config path.
 4. When both are set, `CONFIG_FILE` wins.
 5. `cmd/httpapi` and `cmd/worker` call `config.EnsureProjectRoot()` first, so relative config paths are anchored to `video-service/`.
+
+Current object storage environment convention:
+
+1. `configs/video.yml` is for local testing. `RustFS.Endpoint = localhost:9000`.
+2. `configs/video_prod.yml` is for server/production deployment and currently uses the COS endpoint.
+3. Object storage credentials are not stored in YAML. Inject them from private `.env.local` / `.env.deploy` files through `COS_SECRET_ID` / `COS_SECRET_KEY` or `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`.
+4. Both environments keep the bucket name in configuration.
 
 ### 3.1 Top-Level Config
 
@@ -143,8 +154,8 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 
 | Parameter | Type | Example | Default | Purpose |
 |---|---|---|---|---|
-| `RawPath` | `string` | `./storage/videos/raw` | `os.TempDir()/nlp-video-project/tmp/raw` | Local raw video path configuration |
-| `HlsPath` | `string` | `./storage/videos/hls` | `os.TempDir()/nlp-video-project/tmp/hls` | Local HLS output path configuration |
+| `RawPath` | `string` | `./storage/videos/raw` | `os.TempDir()/video-embedding/tmp/raw` | Local raw video path configuration |
+| `HlsPath` | `string` | `./storage/videos/hls` | `os.TempDir()/video-embedding/tmp/hls` | Local HLS output path configuration |
 
 ### 3.6 StorageConfig
 
@@ -156,7 +167,7 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 | `RawURLPrefix` | `string` | `/videos/raw` | `/videos/raw` | Raw video URL prefix returned to callers |
 | `HLSURLPrefix` | `string` | `/videos/hls` | `/videos/hls` | HLS URL prefix returned to callers |
 | `CoverURLPrefix` | `string` | `/videos` | `/videos` | Cover URL prefix returned to callers |
-| `VectorTempPath` | `string` | `./storage/tmp/video_vectorize` | `os.TempDir()/nlp-video-project/tmp/video_vectorize` | Temporary file path for the vector worker |
+| `VectorTempPath` | `string` | `./storage/tmp/video_vectorize` | `os.TempDir()/video-embedding/tmp/video_vectorize` | Temporary file path for the vector worker |
 
 ### 3.7 FFmpegConfig
 
@@ -229,6 +240,9 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 | `VideoReactionQueue` | `string` | `video:reaction:queue` | `video:reaction:queue` | Redis key for the video reaction async queue |
 | `VideoReactionCounts` | `string` | `video:reaction:counts:` | `video:reaction:counts:` | Prefix for video reaction count keys |
 | `VideoReactionUser` | `string` | `video:reaction:user:` | `video:reaction:user:` | Prefix for per-user video reaction state keys |
+| `SegmentReactionQueue` | `string` | `segment:reaction:queue` | `segment:reaction:queue` | Redis key for the segment reaction async queue |
+| `SegmentReactionCounts` | `string` | `segment:reaction:counts:` | `segment:reaction:counts:` | Prefix for segment reaction count keys |
+| `SegmentReactionUser` | `string` | `segment:reaction:user:` | `segment:reaction:user:` | Prefix for per-user segment reaction state keys |
 | `TranscodeStatus` | `string` | `video:transcode:status:` | `video:transcode:status:` | Prefix for transcode task status keys |
 | `RuntimeActiveCounter` | `string` | `video:runtime:active:` | `video:runtime:active:` | Prefix for runtime active counter keys |
 
@@ -246,10 +260,10 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 
 | Parameter | Type | Example | Purpose |
 |---|---|---|---|
-| `Endpoint` | `string` | `localhost:9000` | Object storage endpoint |
-| `AccessKey` | `string` | `minioadmin` | Access key |
-| `SecretKey` | `string` | `minioadmin` | Secret key |
-| `Bucket` | `string` | `video-embedding-storage` | Bucket name |
+| `Endpoint` | `string` | local `localhost:9000`; production `10.200.10.201:9001` | Object storage endpoint |
+| `AccessKey` | `string` | `""` | Access key, injected through environment variables |
+| `SecretKey` | `string` | `""` | Secret key, injected through environment variables |
+| `Bucket` | `string` | `video-object-storage` | Bucket name |
 | `UseSSL` | `bool` | `false` | Whether HTTPS is used |
 
 ### 3.12 TransConfig
@@ -356,6 +370,30 @@ The vector worker AI client resolves the API key in this order: `DASHSCOPE_API_K
 |---|---|---|---|---|
 | `EmbeddingDim` | `int` | `1536` | `1536` | Embedding vector dimension; used by local fallback embeddings and by the vector worker before persisted embeddings are written |
 
+### 3.19 RecommendationConfig
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Engine` | `string` | `knowledge_match` | Primary random-play chain: `knowledge_match`, `gorse`, or `recbole`; both checked-in example configs use `recbole` |
+| `RandomPlayDedupeWindowSec` | `int` | `1800` | Recent-play de-duplication window per user, in seconds |
+| `RandomPlayRecentMaxSize` | `int` | `200` | Maximum recent-play records kept per user |
+
+### 3.20 GorseConfig
+
+Gorse is an optional external candidate service. It is used as the primary recommendation chain only when `Recommendation.Engine=gorse`; the checked-in configs enable `SyncEnabled`, so the combined worker runs an immediate and periodic Gorse sync. Sync failure is logged without stopping the worker; disable `SyncEnabled` when Gorse is not deployed. `WriteBackEnabled` writes feedback only when the Gorse primary chain returns candidates.
+
+| Parameter | Type | Default | Purpose |
+|---|---|---|---|
+| `Endpoint` | `string` | `http://localhost:8087` | Gorse server endpoint |
+| `APIKey` | `string` | empty | Gorse API key; `GORSE_API_KEY` overrides it |
+| `TimeoutSeconds` | `int` | `2` | Gorse request timeout in seconds |
+| `ShadowMode` | `bool` | `false` | Observe Gorse candidates without switching the primary chain |
+| `SyncEnabled` / `SyncIntervalMins` | `bool` / `int` | current examples: `true` / `60` | Enable periodic data synchronization and set its interval |
+| `WriteBackEnabled` | `bool` | current examples: `true` | Write online feedback back to Gorse |
+| `CandidateLimit` | `int` | `100` | Candidate count requested from Gorse |
+| `EnableGate` / `MinFeedbackCount` / `MinRecommendItems` | `bool` / `int` / `int` | current examples: `true` / `20` / `1` | Data-volume and candidate guards before switching |
+| `CleanupEnabled` / `DataRetentionDays` | `bool` / `int` | current examples: `true` / `30` | Reserved for synchronized-data cleanup; current production code does not consume these fields and does not delete data automatically |
+
 ## 4. Environment Variables
 
 The project currently uses the following environment variables explicitly:
@@ -365,11 +403,16 @@ The project currently uses the following environment variables explicitly:
 | `HTTP_ADDR` | `internal/http/app/app.go` | Overrides the HTTP listening address; default is `:8081` |
 | `CONFIG_FILE` | `internal/config/loader.go` | Overrides the default config file path; has higher priority than `VIDEO_CONFIG_FILE` |
 | `VIDEO_CONFIG_FILE` | `internal/config/loader.go` | Overrides the default config file path |
-| `RUSTFS_ACCESS_KEY` | `internal/http/app/app.go`, worker initialization | Fallback access key when config file does not provide one |
-| `RUSTFS_SECRET_KEY` | `internal/http/app/app.go`, worker initialization | Fallback secret key when config file does not provide one |
-| `DASHSCOPE_API_KEY` | embedding client, vector worker AI client | DashScope / Bailian-compatible API key |
-| `OPENAI_API_KEY` | embedding client, vector worker AI client | Fallback OpenAI-compatible API key |
-| `EMBEDDING_API_KEY` | embedding client | Fallback API key for recommendation embedding |
+| `POSTGRES_DSN` | `internal/config/loader.go` | Overrides `Postgres.DSN` |
+| `REDIS_PASSWORD` | `internal/config/loader.go` | Overrides `Redis.Password` |
+| `COS_SECRET_ID` | `internal/config/loader.go` | Overrides `RustFS.AccessKey` |
+| `COS_SECRET_KEY` | `internal/config/loader.go` | Overrides `RustFS.SecretKey` |
+| `RUSTFS_ACCESS_KEY` | `internal/config/loader.go` | Overrides object storage access key when COS variables are not set |
+| `RUSTFS_SECRET_KEY` | `internal/config/loader.go` | Overrides object storage secret key when COS variables are not set |
+| `GORSE_API_KEY` | `internal/config/loader.go` | Overrides `Gorse.APIKey` |
+| `DASHSCOPE_API_KEY` | `internal/config/loader.go`, embedding client, vector worker AI client | DashScope / Bailian-compatible API key |
+| `OPENAI_API_KEY` | `internal/config/loader.go`, embedding client, vector worker AI client | Fallback OpenAI-compatible API key |
+| `EMBEDDING_API_KEY` | `internal/config/loader.go`, embedding client | Fallback API key for recommendation embedding |
 | `DASHSCOPE_BASE_URL` | vector worker AI client | OpenAI-compatible base URL used by the vector worker |
 | `OPENAI_BASE_URL` | vector worker AI client | Fallback OpenAI-compatible base URL |
 | `ASR_API_KEY` | vector worker AI client | Fallback ASR API key |
@@ -397,7 +440,7 @@ The project currently uses the following environment variables explicitly:
 ### 4.3 `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`
 
 - Type: `string`
-- Purpose: Fallback source of object storage credentials
+- Purpose: Object storage credential source when COS variables are not set
 - Use case: Inject sensitive values from environment variables instead of config files
 
 ### 4.4 AI Service Environment Variables
@@ -414,6 +457,38 @@ Production deployments should inject API keys through environment variables or a
 
 - `UPLOAD_BENCH_BASE_URL`: target service URL for the upload benchmark tool; if missing, the tool derives a default from `HTTP_ADDR`.
 - `SOURCE_DSN`, `TARGET_DSN`: source and target PostgreSQL DSNs for the database migration tool. They can also be provided explicitly with `-source-dsn` and `-target-dsn`.
+- `MODEL_VERSION`, `MODEL_NAME`, `RECBOLE_MODEL`: model version, online model name, and RecBole algorithm; defaults are a timestamped version, `recbole`, and `BPR`.
+- `DATASET`, `SAMPLE_LIMIT`, `DAYS_BACK`: exported dataset name, interaction limit, and lookback days; defaults are `video_app`, `10000`, and `30`.
+- `DIM`, `EPOCHS`, `PYTHON_BIN`: embedding dimension, epochs, and Python executable; defaults are `64`, `20`, and `.venv/bin/python` when available.
+- `DATA_ROOT`, `DATA_DIR`, `ARTIFACT_DIR`, `BASELINE_METRICS`: locations for atomic files, artifacts, and active-model metrics.
+- `PUBLISH_GATE_ENABLED`: runs the RecBole publish gate, default `true`. Its defaults are `Recall@20 >= 0.01`, `NDCG@20 >= 0.005`, and no more than `20%` relative `NDCG@20` decline from the active model; adjust them with the `recbole_recommendation.publish_gate` command-line flags.
+
+### 4.6 Object Storage Migration Tool Parameters
+
+`tools/migrate_rustfs_bucket` migrates objects from the old MinIO bucket to RustFS. Defaults:
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `--source-endpoint` | `10.200.10.12:9000` | Old MinIO S3 API endpoint |
+| `--source-access-key` | From `MIGRATE_SOURCE_ACCESS_KEY` | Source access key |
+| `--source-secret-key` | From `MIGRATE_SOURCE_SECRET_KEY` | Source secret key |
+| `--source-bucket` | `video-object-storage` | Source bucket |
+| `--target-endpoint` | `10.200.10.201:9001` | RustFS S3 API endpoint |
+| `--target-access-key` | From `MIGRATE_TARGET_ACCESS_KEY` | Target access key |
+| `--target-secret-key` | From `MIGRATE_TARGET_SECRET_KEY` | Target secret key |
+| `--target-bucket` | `video-object-storage` | Target bucket |
+| `--prefix` | empty | Migrate only objects under this key prefix |
+| `--workers` | `4` | Parallel copy workers |
+| `--overwrite` | `false` | Overwrite existing target objects |
+| `--dry-run` | `true` | Preview actions without copying |
+
+Common commands:
+
+```bash
+cd video-service
+go run ./tools/migrate_rustfs_bucket
+go run ./tools/migrate_rustfs_bucket --dry-run=false
+```
 
 ## 5. HTTP API Parameters
 
@@ -774,6 +849,71 @@ Response fields:
 | `like_count` | `int64` | Like count |
 | `double_like_count` | `int64` | Double-like count |
 
+#### `GET /api/video-segments/random-play`
+
+Query parameters:
+
+| Parameter | Type | Required | Purpose |
+|---|---|---|---|
+| `user_id` | `uint64` | No | When provided, the API uses RecBole, Gorse, or knowledge-match recall according to `Recommendation.Engine`; when omitted, the handler uses default user `6` and follows the same chain |
+
+Purpose: returns one playable segment for refresh/play scenarios. The checked-in configs use `recbole`; an omitted `user_id` first attempts personalized recall for default user `6`, then falls back to random playback when active-model data, user embeddings, or candidates are unavailable. Non-positive or invalid `user_id` values return an argument error.
+
+Response fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `video_id` | `uint64` | Parent video ID |
+| `segment_id` | `uint64` | Segment ID |
+| `start_time` | `float64` | Segment start time (seconds) |
+| `end_time` | `float64` | Segment end time (seconds) |
+| `text` | `string` | Segment text content |
+| `play_url` | `string` | Playback URL |
+| `video` | `VideoItem` | Parent video information |
+
+#### `POST /api/video-segments/:id/reactions`
+
+Path parameters:
+
+| Parameter | Type | Required | Purpose |
+|---|---|---|---|
+| `id` | `uint64` | Yes | Video segment ID |
+
+JSON body:
+
+| Parameter | Type | Required | Constraint | Purpose |
+|---|---|---|---|---|
+| `user_id` | `uint64` | Yes | `> 0` | User ID |
+| `reaction_type` | `string` | Yes | `like`, `double_like`, `dislike` | Reaction type; submitting the same reaction again cancels it |
+
+Response fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `segment_id` | `uint64` | Segment ID |
+| `user_id` | `uint64` | User ID |
+| `reaction_type` | `string` | Submitted reaction type |
+| `active` | `bool` | Whether the reaction is currently active |
+| `like_count` | `int64` | Like count |
+| `double_like_count` | `int64` | Double-like count |
+| `updated` | `bool` | Whether the update was applied |
+
+#### `GET /api/video-segments/:id/reaction-counts`
+
+Path parameters:
+
+| Parameter | Type | Required | Purpose |
+|---|---|---|---|
+| `id` | `uint64` | Yes | Video segment ID |
+
+Response fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `segment_id` | `uint64` | Segment ID |
+| `like_count` | `int64` | Like count |
+| `double_like_count` | `int64` | Double-like count |
+
 ### 5.5 Playback and Task Status API Parameters
 
 #### `GET /api/videos/:id/play`
@@ -904,9 +1044,9 @@ File: `internal/config/defaults.go`
 | `CORSAllowHeaders()` | `Origin, Content-Type, Accept, Authorization, X-Requested-With` | Default allowed request headers |
 | `CORSExposeHeaders()` | `Content-Length, Content-Type` | Default exposed response headers |
 | `CORSMaxAge()` | `86400` | Default preflight cache duration |
-| `RawPath()` | `os.TempDir()/nlp-video-project/tmp/raw` | Fallback local raw video path |
-| `HLSPath()` | `os.TempDir()/nlp-video-project/tmp/hls` | Fallback local HLS path |
-| `VectorTempPath()` | `os.TempDir()/nlp-video-project/tmp/video_vectorize` | Fallback vector worker temp path |
+| `RawPath()` | `os.TempDir()/video-embedding/tmp/raw` | Fallback local raw video path |
+| `HLSPath()` | `os.TempDir()/video-embedding/tmp/hls` | Fallback local HLS path |
+| `VectorTempPath()` | `os.TempDir()/video-embedding/tmp/video_vectorize` | Fallback vector worker temp path |
 | `MediaRoutePrefix()` | `/videos` | Fallback media proxy route |
 | `RawURLPrefix()` | `/videos/raw` | Fallback raw video URL prefix |
 | `HLSURLPrefix()` | `/videos/hls` | Fallback HLS URL prefix |
@@ -927,6 +1067,9 @@ File: `internal/config/defaults.go`
 | `VideoReactionUserPrefix()` | `video:reaction:user:` | User reaction state prefix |
 | `TranscodeStatusPrefix()` | `video:transcode:status:` | Transcode status prefix |
 | `RuntimeActiveCounterPrefix()` | `video:runtime:active:` | Runtime active counter prefix |
+| `SegmentReactionQueueKey()` | `segment:reaction:queue` | Segment reaction async queue |
+| `SegmentReactionCountsPrefix()` | `segment:reaction:counts:` | Segment reaction count prefix |
+| `SegmentReactionUserPrefix()` | `segment:reaction:user:` | User segment reaction state prefix |
 
 ### 6.2 Transcode Worker Defaults
 
@@ -1058,7 +1201,23 @@ Focus first on:
 5. `VectorWorker.LLMTimeoutMinutes`
 6. `TailAlignment*` related parameters
 
-### 7.4 If You Are Productizing the Service as a Downstream Capability
+### 7.4 DLQ Inspection and Replay
+
+`cmd/dlqctl` inspects and explicitly replays Redis Stream dead-letter messages. It follows the same `CONFIG_FILE` / `VIDEO_CONFIG_FILE` loading rules as the service and derives queue keys from `RedisKeys`.
+
+Supported queue names are `transcode`, `vectorize`, `vector-prepare`, `vector-coarse`, `vector-refine`, `vector-finalize`, `video-reaction`, and `segment-reaction`.
+
+```bash
+cd video-service
+
+go run ./cmd/dlqctl list --queue all --limit 20
+go run ./cmd/dlqctl replay --queue vector-coarse --limit 10 --dry-run
+go run ./cmd/dlqctl replay --queue transcode --id <dlq-message-id>
+```
+
+By default, a replay writes the stored payload back to its primary queue and removes the original DLQ message. Use `--keep-dlq` to retain the record. Inspect the failure and recover its dependency before replaying; corrupted media, missing object keys, and invalid payloads are permanent failures and should not be batch-replayed.
+
+### 7.5 If You Are Productizing the Service as a Downstream Capability
 
 You should additionally pay attention to:
 

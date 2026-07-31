@@ -14,7 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 func normalizeDashscopeWSModel(model string) string {

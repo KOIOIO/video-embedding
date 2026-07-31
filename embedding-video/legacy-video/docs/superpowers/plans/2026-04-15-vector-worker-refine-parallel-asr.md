@@ -26,7 +26,7 @@
 ## 文件结构
 
 **修改文件：**
-- Modify: `c:\Users\xiaoy\Desktop\nlp-video-project\nlp-video-project\cmd\vector_worker\task.go`
+- Modify: `c:\Users\xiaoy\Desktop\legacy-video\legacy-video\cmd\vector_worker\task.go`
 
 不新增文件（保持改动集中且易回滚）。
 

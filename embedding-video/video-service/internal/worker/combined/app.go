@@ -4,13 +4,14 @@ import (
 	"context"
 	"time"
 
-	"nlp-video-analysis/internal/config"
-	"nlp-video-analysis/internal/lifecycle"
-	gorsesyncworker "nlp-video-analysis/internal/worker/gorsesync"
-	"nlp-video-analysis/internal/worker/recboletrainer"
-	transcodeworker "nlp-video-analysis/internal/worker/transcodeworker"
-	vectorworker "nlp-video-analysis/internal/worker/vectorworker"
-	"nlp-video-analysis/middleware"
+	"video-service/internal/config"
+	"video-service/internal/lifecycle"
+	gorsesyncworker "video-service/internal/worker/gorsesync"
+	knowledgevideoworker "video-service/internal/worker/knowledgevideoworker"
+	"video-service/internal/worker/recboletrainer"
+	transcodeworker "video-service/internal/worker/transcodeworker"
+	vectorworker "video-service/internal/worker/vectorworker"
+	"video-service/middleware"
 
 	"go.uber.org/zap"
 )
@@ -28,6 +29,7 @@ func Run() {
 	app.AddCloser(func(ctx context.Context) error { return f.Close() })
 
 	transcodeworker.Register(app, cfg)
+	knowledgevideoworker.Register(app, cfg)
 	vectorworker.Register(app, cfg)
 	gorsesyncworker.Register(app, cfg)
 	recboletrainer.Register(app, cfg)
@@ -36,6 +38,7 @@ func Run() {
 		zap.String("mode", "combined"),
 		zap.Int("transcode_workers", normalizedTranscodeWorkerCount(cfg)),
 		zap.Int("vector_workers", normalizedVectorWorkerCount(cfg)),
+		zap.Int("knowledge_video_workers", knowledgevideoworker.WorkerCountFromConfig(cfg)),
 		zap.Bool("gorse_sync_enabled", cfg.Gorse.SyncEnabled),
 		zap.Bool("recbole_trainer_enabled", recboletrainer.EnabledFromEnv()),
 	)
@@ -49,11 +52,18 @@ func Run() {
 func maxShutdownTimeout(cfg config.Config) time.Duration {
 	transcodeTimeout := time.Duration(cfg.Transcode.ShutdownTimeoutSec) * time.Second
 	vectorTimeout := time.Duration(cfg.VectorWorker.ShutdownTimeoutSec) * time.Second
+	knowledgeVideoTimeout := time.Duration(cfg.KnowledgeVideoWorker.ShutdownTimeoutSec) * time.Second
 	if transcodeTimeout <= 0 {
 		transcodeTimeout = 10 * time.Minute
 	}
 	if vectorTimeout <= 0 {
 		vectorTimeout = 10 * time.Minute
+	}
+	if knowledgeVideoTimeout <= 0 {
+		knowledgeVideoTimeout = 2 * time.Minute
+	}
+	if knowledgeVideoTimeout > transcodeTimeout && knowledgeVideoTimeout > vectorTimeout {
+		return knowledgeVideoTimeout
 	}
 	if vectorTimeout > transcodeTimeout {
 		return vectorTimeout

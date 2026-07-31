@@ -27,9 +27,9 @@
 
 当前 `hierarchical` 模式的主流程位于：
 
-- `nlp-video-project/internal/worker/vectorworker/task.go`
-- `nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go`
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
+- `legacy-video/internal/worker/vectorworker/task.go`
+- `legacy-video/internal/worker/vectorworker/tasks/hierarchical.go`
+- `legacy-video/internal/worker/vectorworker/tasks/asr.go`
 
 真实链路是：
 
@@ -54,7 +54,7 @@
 
 ## 已有机制与不足
 
-`nlp-video-project/internal/worker/vectorworker/tasks/hierarchical.go` 里已经做过一轮优化：
+`legacy-video/internal/worker/vectorworker/tasks/hierarchical.go` 里已经做过一轮优化：
 
 - prompt 明确要求优先在完整句结束处切分。
 - 允许相邻分段保留少量 overlap。
@@ -136,22 +136,22 @@
 
 ### 需要修改的现有文件
 
-- `nlp-video-project/internal/config/types.go`
+- `legacy-video/internal/config/types.go`
   - 给 `VectorWorkerConfig` 增加尾部对齐配置项。
-- `nlp-video-project/internal/worker/vectorworker/app.go`
+- `legacy-video/internal/worker/vectorworker/app.go`
   - 读取新配置、填默认值、记录启动日志，并将参数传给任务处理逻辑。
-- `nlp-video-project/internal/worker/vectorworker/task.go`
+- `legacy-video/internal/worker/vectorworker/task.go`
   - 扩展 `handleVectorizeTask` 和 `refineSegmentsASRAndEmbed` 调用参数，把尾部对齐配置传入细分段补处理链路。
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
+- `legacy-video/internal/worker/vectorworker/tasks/asr.go`
   - 增加尾部保守校准主逻辑，并在二次 ASR 前应用校准结果。
 
 ### 建议新增的文件
 
-- `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go`
+- `legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go`
   - 负责尾部对齐的纯逻辑：配置结构、句尾判断、延长决策、下一个候选结束时间计算。
-- `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go`
+- `legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go`
   - 负责句尾判定与时间延长决策的单元测试。
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
+- `legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
   - 负责带 fake ffmpeg / fake transcribe 的集成式单测，验证细分段尾部会按规则被延长或停止延长。
 
 如果实际代码组织上更适合把测试合并进已有测试文件，也可以保持最小文件数，但逻辑职责需要不变。
@@ -317,7 +317,7 @@
 
 执行：
 
-- `go test ./nlp-video-project/...`
+- `go test ./legacy-video/...`
 
 本次只要求后端测试通过，不需要前端构建。
 
@@ -358,7 +358,7 @@
 2. 单个 segment 的尾部额外保留时长默认不超过 3 秒。
 3. 对已经自然收尾的 segment，不产生不必要延长。
 4. 不修改前端、接口协议、数据库表结构。
-5. 后端测试通过：`go test ./nlp-video-project/...`
+5. 后端测试通过：`go test ./legacy-video/...`
 
 ## 实施建议
 

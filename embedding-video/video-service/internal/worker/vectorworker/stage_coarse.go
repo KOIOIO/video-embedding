@@ -11,9 +11,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"nlp-video-analysis/internal/infrastructure/objectstorage"
-	"nlp-video-analysis/internal/infrastructure/persistence"
-	"nlp-video-analysis/internal/infrastructure/transcode"
+	"video-service/internal/infrastructure/objectstorage"
+	"video-service/internal/infrastructure/persistence"
+	"video-service/internal/infrastructure/transcode"
 )
 
 type coarseStageRepository interface {

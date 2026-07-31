@@ -6,8 +6,8 @@ runtime=/tmp/gorse-config.toml
 
 dashboard_username=${GORSE_DASHBOARD_USERNAME:-admin}
 dashboard_password=${GORSE_DASHBOARD_PASSWORD:-admin123}
-cache_store=${GORSE_CACHE_STORE:-postgres://postgres:postgres@host.docker.internal:5432/hengshui-tablet?sslmode=disable&search_path=gorse,public}
-data_store=${GORSE_DATA_STORE:-postgres://postgres:postgres@host.docker.internal:5432/hengshui-tablet?sslmode=disable&search_path=gorse,public}
+cache_store=${GORSE_CACHE_STORE:-postgres://postgres:postgres@host.docker.internal:5432/video-app?sslmode=disable&search_path=gorse,public}
+data_store=${GORSE_DATA_STORE:-postgres://postgres:postgres@host.docker.internal:5432/video-app?sslmode=disable&search_path=gorse,public}
 server_api_key=${GORSE_SERVER_API_KEY:-}
 
 escape_sed_replacement() {
