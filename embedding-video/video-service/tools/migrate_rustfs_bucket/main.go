@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	defaultBucket         = "video-embedding-storage"
-	defaultSourceEndpoint = "127.0.0.1:9000"
+	defaultBucket         = "video-object-storage"
+	defaultSourceEndpoint = "10.200.10.12:9000"
 	defaultTargetEndpoint = "10.200.10.201:9001"
 )
 

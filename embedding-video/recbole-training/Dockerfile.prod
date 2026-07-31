@@ -1,30 +1,36 @@
 FROM golang:1.26.1-bookworm AS go-build
 
-WORKDIR /src/hengshui-tablet-video-http
+WORKDIR /src/video-service
 
-COPY hengshui-tablet-video-http/go.mod hengshui-tablet-video-http/go.sum ./
+COPY video-service/go.mod video-service/go.sum ./
 RUN go mod download
 
-COPY hengshui-tablet-video-http/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/recboletrainer ./cmd/recboletrainer
+COPY video-service/ ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/recboletrainer ./cmd/recboletrainer \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/export_recbole_dataset ./tools/export_recbole_dataset \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/export_active_recsys_model_metrics ./tools/export_active_recsys_model_metrics \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/import_recsys_embeddings ./tools/import_recsys_embeddings
 
 FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-COPY --from=go-build /usr/local/go /usr/local/go
 COPY --from=go-build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=go-build /out/recboletrainer /usr/local/bin/recboletrainer
+COPY --from=go-build /out/export_recbole_dataset /usr/local/bin/export_recbole_dataset
+COPY --from=go-build /out/export_active_recsys_model_metrics /usr/local/bin/export_active_recsys_model_metrics
+COPY --from=go-build /out/import_recsys_embeddings /usr/local/bin/import_recsys_embeddings
 
 COPY recbole-training/requirements.txt /tmp/requirements.txt
 RUN python3 -m venv /opt/recbole-venv \
     && /opt/recbole-venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/recbole-venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1+cpu \
     && /opt/recbole-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY hengshui-tablet-video-http/ ./hengshui-tablet-video-http/
+COPY video-service/ ./video-service/
 COPY recbole-training/ ./recbole-training/
 
-WORKDIR /app/hengshui-tablet-video-http
+WORKDIR /app/video-service
 
-ENV PATH="/opt/recbole-venv/bin:/usr/local/go/bin:${PATH}" \
+ENV PATH="/opt/recbole-venv/bin:${PATH}" \
     TZ=Asia/Shanghai

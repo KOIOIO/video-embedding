@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	questionapp "nlp-video-analysis/internal/application/videoapp/question"
+	questionapp "video-service/internal/application/videoapp/question"
 )
 
 type QuestionItem struct {

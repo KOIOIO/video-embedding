@@ -7,7 +7,7 @@ export const recommendationConsoleEndpoints = {
   diagnostics: `${ADMIN_RECOMMENDATION_BASE}/diagnostics`,
   datasources: `${ADMIN_RECOMMENDATION_BASE}/datasources`,
   effects: `${ADMIN_RECOMMENDATION_BASE}/effects`,
-  gorsePerformance: `${ADMIN_RECOMMENDATION_BASE}/gorse/performance`,
+  recbolePerformance: `${ADMIN_RECOMMENDATION_BASE}/recbole/performance`,
   traceRandomPlay: `${ADMIN_RECOMMENDATION_BASE}/trace/random-play`,
   traceQuestion: `${ADMIN_RECOMMENDATION_BASE}/trace/by-question`,
   redisState: `${ADMIN_RECOMMENDATION_BASE}/redis-state`,
@@ -67,8 +67,8 @@ export function fetchRecommendationEffects({ days } = {}, request = requestJson)
   return request(`${url.pathname}${url.search}`)
 }
 
-export function fetchGorsePerformance({ metric, begin, end } = {}, request = requestJson) {
-  const url = new URL(recommendationConsoleEndpoints.gorsePerformance, 'http://console.local')
+export function fetchRecBolePerformance({ metric, begin, end } = {}, request = requestJson) {
+  const url = new URL(recommendationConsoleEndpoints.recbolePerformance, 'http://console.local')
   url.searchParams.set('metric', String(metric || '').trim())
   url.searchParams.set('begin', String(begin || '').trim())
   url.searchParams.set('end', String(end || '').trim())

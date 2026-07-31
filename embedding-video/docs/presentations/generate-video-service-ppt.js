@@ -10,8 +10,8 @@ const pptx = new pptxgen();
 pptx.layout = "LAYOUT_16x9";
 pptx.author = "OpenCode";
 pptx.company = "OpenCode";
-pptx.subject = "智能教学视频分析与推荐系统系统讲解";
-pptx.title = "智能教学视频分析与推荐系统系统架构与工程设计";
+pptx.subject = "衡桃学堂视频服务系统讲解";
+pptx.title = "衡桃学堂视频服务系统架构与工程设计";
 pptx.lang = "zh-CN";
 
 const C = {
@@ -51,7 +51,7 @@ function baseSlide(title, opts = {}) {
     color: opts.titleColor || C.ink,
     margin: 0,
   });
-  slide.addText(opts.section || "Hengtao Video Service", {
+  slide.addText(opts.section || "video Video Service", {
     x: 7.45, y: 0.6, w: 1.95, h: 0.28,
     fontFace: "Calibri",
     fontSize: 10,
@@ -66,7 +66,7 @@ function baseSlide(title, opts = {}) {
   return slide;
 }
 
-function addFooter(slide, text = "智能教学视频分析与推荐系统 | 架构讲解") {
+function addFooter(slide, text = "衡桃学堂视频服务 | 架构讲解") {
   slide.addText(text, {
     x: 0.55, y: 5.18, w: 4.6, h: 0.18,
     fontFace: "Calibri",
@@ -234,7 +234,7 @@ async function main() {
     x: 4.9, y: 1.55, w: 3.6, h: 0,
     line: { color: C.mint, width: 2 },
   });
-  slide.addText("智能教学视频分析与推荐系统\n系统架构与工程设计", {
+  slide.addText("衡桃学堂视频服务\n系统架构与工程设计", {
     x: 0.78, y: 1.16, w: 5.7, h: 1.5,
     fontFace: "Microsoft YaHei",
     fontSize: 25,
@@ -594,7 +594,7 @@ async function main() {
   addFooter(slide, "结论：适合当前目标，但后续成长依赖治理能力");
 }
 
-await pptx.writeFile({ fileName: "docs/presentations/hengtao-video-service-architecture-review.pptx" });
+await pptx.writeFile({ fileName: "docs/presentations/video-video-service-architecture-review.pptx" });
 }
 
 main().catch((err) => {

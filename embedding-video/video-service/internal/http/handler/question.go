@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	questionhandler "nlp-video-analysis/internal/http/handler/questions"
+	questionhandler "video-service/internal/http/handler/questions"
 )
 
 type QuestionHandler struct {
@@ -16,7 +16,7 @@ func NewQuestionHandler(app any) *QuestionHandler {
 
 // ListQuestions godoc
 // @Summary 查询题目列表
-// @Tags 视频服务
+// @Tags 题目
 // @Produce json
 // @Param page query int false "页码" default(1)
 // @Param page_size query int false "每页数量" default(20)
@@ -30,7 +30,7 @@ func (h *QuestionHandler) ListQuestions(c *gin.Context) {
 
 // GetQuestion godoc
 // @Summary 查询题目详情
-// @Tags 视频服务
+// @Tags 题目
 // @Produce json
 // @Param id path int true "题目ID"
 // @Success 200 {object} dto.QuestionDetailResponse

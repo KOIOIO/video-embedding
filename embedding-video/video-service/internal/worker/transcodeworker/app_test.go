@@ -3,7 +3,7 @@ package transcodeworker
 import (
 	"testing"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 func TestWorkerCountFromConfigNormalizesNonPositiveValues(t *testing.T) {

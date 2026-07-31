@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	appsync "nlp-video-analysis/internal/application/videoapp/recommendation/gorsesync"
+	appsync "video-service/internal/application/videoapp/recommendation/gorsesync"
 )
 
 func TestSchedulerRunOnceSkipsOverlappingRun(t *testing.T) {

@@ -96,12 +96,12 @@ services:
 
   gorse:
     image: zhenghaoz/gorse-in-one:${GORSE_VERSION:-latest}
-    entrypoint: ["/bin/sh", "/opt/hstv/gorse-entrypoint.sh"]
+    entrypoint: ["/bin/sh", "/opt/video_app/gorse-entrypoint.sh"]
     env_file:
       - ${VIDEO_ENV_FILE:-.env.deploy}
     volumes:
       - ./gorse/config.toml:/etc/gorse/config.template.toml:ro
-      - ./gorse/entrypoint.sh:/opt/hstv/gorse-entrypoint.sh:ro
+      - ./gorse/entrypoint.sh:/opt/video_app/gorse-entrypoint.sh:ro
       - video_gorse_data:/var/lib/gorse
       - video_gorse_log:/var/log/gorse
     extra_hosts:

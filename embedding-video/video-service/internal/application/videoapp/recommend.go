@@ -9,7 +9,7 @@ import (
 
 	"github.com/pgvector/pgvector-go"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
 )
 
 var ErrVideoSegmentNotFound = errors.New("video_segment not found")

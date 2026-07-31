@@ -41,7 +41,6 @@ type InitiateChunkedUploadRequest struct {
 	ContentType string `json:"content_type"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	UserID      uint64 `json:"user_id"`
 	FileSize    int64  `json:"file_size"`
 	ChunkSize   int64  `json:"chunk_size"`
 	TotalChunks int    `json:"total_chunks"`

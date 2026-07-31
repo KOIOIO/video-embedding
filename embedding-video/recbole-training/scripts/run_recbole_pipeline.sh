@@ -9,7 +9,7 @@ SERVICE_DIR="${SERVICE_DIR:-${REPO_ROOT}/video-service}"
 MODEL_VERSION="${MODEL_VERSION:-recbole_$(date +%Y%m%d_%H%M%S)}"
 MODEL_NAME="${MODEL_NAME:-recbole}"
 RECBOLE_MODEL="${RECBOLE_MODEL:-BPR}"
-DATASET="${DATASET:-video_dataset}"
+DATASET="${DATASET:-video_app}"
 DIM="${DIM:-64}"
 EPOCHS="${EPOCHS:-20}"
 SAMPLE_LIMIT="${SAMPLE_LIMIT:-10000}"
@@ -23,6 +23,22 @@ if [[ -z "${PYTHON_BIN}" && -x "${VENV_PYTHON}" ]]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
+if command -v export_recbole_dataset >/dev/null 2>&1; then
+  EXPORT_DATASET_COMMAND=(export_recbole_dataset)
+else
+  EXPORT_DATASET_COMMAND=(go run ./tools/export_recbole_dataset)
+fi
+if command -v export_active_recsys_model_metrics >/dev/null 2>&1; then
+  EXPORT_METRICS_COMMAND=(export_active_recsys_model_metrics)
+else
+  EXPORT_METRICS_COMMAND=(go run ./tools/export_active_recsys_model_metrics)
+fi
+if command -v import_recsys_embeddings >/dev/null 2>&1; then
+  IMPORT_EMBEDDINGS_COMMAND=(import_recsys_embeddings)
+else
+  IMPORT_EMBEDDINGS_COMMAND=(go run ./tools/import_recsys_embeddings)
+fi
+
 DATA_ROOT="${DATA_ROOT:-${TRAINING_DIR}/data/${MODEL_VERSION}}"
 DATA_DIR="${DATA_DIR:-${DATA_ROOT}/${DATASET}}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-${TRAINING_DIR}/artifacts/${MODEL_VERSION}}"
@@ -32,7 +48,7 @@ mkdir -p "${DATA_DIR}" "${ARTIFACT_DIR}"
 
 (
   cd "${SERVICE_DIR}"
-  go run ./tools/export_recbole_dataset \
+  "${EXPORT_DATASET_COMMAND[@]}" \
     --config "${CONFIG_FILE}" \
     --output-dir "${DATA_DIR}" \
     --dataset "${DATASET}" \
@@ -42,7 +58,7 @@ mkdir -p "${DATA_DIR}" "${ARTIFACT_DIR}"
 
 (
   cd "${SERVICE_DIR}"
-  go run ./tools/export_active_recsys_model_metrics \
+  "${EXPORT_METRICS_COMMAND[@]}" \
     --config "${CONFIG_FILE}" \
     --model "${MODEL_NAME}" \
     --output "${BASELINE_METRICS}"
@@ -71,7 +87,7 @@ fi
 
 (
   cd "${SERVICE_DIR}"
-  go run ./tools/import_recsys_embeddings \
+  "${IMPORT_EMBEDDINGS_COMMAND[@]}" \
     --config "${CONFIG_FILE}" \
     --artifact-dir "${ARTIFACT_DIR}" \
     --model "${MODEL_NAME}" \

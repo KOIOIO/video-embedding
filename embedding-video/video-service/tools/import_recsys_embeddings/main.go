@@ -18,8 +18,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pgvector/pgvector-go"
 
-	"nlp-video-analysis/internal/config"
-	"nlp-video-analysis/internal/infrastructure/persistence"
+	"video-service/internal/config"
+	"video-service/internal/infrastructure/persistence"
 )
 
 const (

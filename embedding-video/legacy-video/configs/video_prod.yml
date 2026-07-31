@@ -1,6 +1,6 @@
 
 Name: video-rpc
-Host: 127.0.0.1
+Host: 10.200.10.12
 Port: 9090
 GRPC:
   MaxMsgSize: 104857600
@@ -39,22 +39,22 @@ FFmpeg:
     Channels: 1
 
 Redis:
-  Addr: "127.0.0.1:16379"
+  Addr: "10.200.10.12:16379"
   Password: ""
   DB: 0
 
 Postgres:
-  DSN: "host=127.0.0.1 user=postgres password=postgres dbname=video-embedding port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+  DSN: ""
   MaxOpenConns: 20
   MaxIdleConns: 10
   ConnMaxLifetime: 300
   ConnMaxIdleTime: 60
 
 RustFS:
-  Endpoint: "127.0.0.1:9000"
-  AccessKey: "minioadmin"
-  SecretKey: "minioadmin"
-  Bucket: "video-embedding-storage"
+  Endpoint: "10.200.10.12:9000"
+  AccessKey: ""
+  SecretKey: ""
+  Bucket: "video-app-cloud-drive"
   UseSSL: false
 
 
@@ -100,10 +100,10 @@ asr:
     model: paraformer-v2
     ws-model: fun-asr-realtime
   base-url: "https://dashscope.aliyuncs.com/compatible-mode"
-  api-key: "sk-3eb4190dab584fed99bee42ca2e5f8b1"
+  api-key: ""
 
 embedding:
   options:
     model: text-embedding-v4
   base-url: "https://dashscope.aliyuncs.com/compatible-mode"
-  api-key: "sk-85c3ccc7c63747c485f9699c90f1972f"
+  api-key: ""

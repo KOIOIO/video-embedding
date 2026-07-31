@@ -3,7 +3,7 @@ package vectorworker
 import (
 	"testing"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 func TestCoarseStageQueueKeyFromConfigUsesDefaults(t *testing.T) {

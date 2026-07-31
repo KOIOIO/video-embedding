@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	infraredis "nlp-video-analysis/internal/infrastructure/redis"
+	infraredis "video-service/internal/infrastructure/redis"
 
 	goredis "github.com/go-redis/redis/v8"
 	"go.uber.org/zap"

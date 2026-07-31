@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/infrastructure/persistence"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/infrastructure/persistence"
 )
 
 type recordingStageQueue struct {

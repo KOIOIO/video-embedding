@@ -35,6 +35,13 @@ class RecBolePublishGateTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("drops" in reason for reason in reasons))
 
+    def test_gate_rejects_insufficient_positive_data_when_reported(self) -> None:
+        ok, reasons = publish_gate.evaluate(
+            {"Recall@20": 0.2, "NDCG@20": 0.1, "positive_rows": 0, "positive_users": 0}
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("positive_rows" in reason for reason in reasons))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,9 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/http/handler"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/http/handler"
 )
 
 func init() {
@@ -39,7 +39,7 @@ type stubVideoApp struct {
 	submitSegmentReactionFunc    func(context.Context, uint64, uint64, videoapp.VideoReactionType) (videoapp.VideoReactionResult, bool, error)
 	getSegmentReactionCountsFunc func(context.Context, uint64) (videoapp.VideoReactionCounts, bool, error)
 	randomPlaySegmentFunc        func(context.Context, videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error)
-	externalRecBoleFunc         func(context.Context, videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
+	externalRecBoleFunc          func(context.Context, videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
 
 	listVideosCalls            int
 	listVideosFilter           videoapp.ListFilter
@@ -64,8 +64,8 @@ type stubVideoApp struct {
 	getSegmentReactionCountsID uint64
 	randomPlaySegmentCalls     int
 	randomPlaySegmentInput     videoapp.RandomPlayVideoSegmentInput
-	externalRecBoleCalls      int
-	externalRecBoleInput      videoapp.RandomPlayVideoSegmentInput
+	externalRecBoleCalls       int
+	externalRecBoleInput       videoapp.RandomPlayVideoSegmentInput
 }
 
 func (s *stubVideoApp) ListVideos(ctx context.Context, filter videoapp.ListFilter) ([]domainvideo.Video, error) {

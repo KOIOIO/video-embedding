@@ -9,7 +9,7 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 
-	"nlp-video-analysis/internal/http/dto"
+	"video-service/internal/http/dto"
 )
 
 var counterNames = []string{

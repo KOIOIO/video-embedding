@@ -11,13 +11,13 @@
 ## 背景与现状对齐
 
 - `vector_worker` 当前实现：按滑窗抽音频 → ASR → embedding → 写入 `edu_video_segment`  
-  代码入口：[task.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/cmd/vector_worker/task.go#L85-L220)
+  代码入口：[task.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/cmd/vector_worker/task.go#L85-L220)
 - ASR/embedding 客户端现有实现：仅支持 `/audio/transcriptions` 与 `/embeddings`  
-  代码：[client_openai.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/cmd/vector_worker/client_openai.go)
+  代码：[client_openai.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/cmd/vector_worker/client_openai.go)
 - FFmpeg 能力现有实现：`ExtractAudioSegment`、`ProbeDurationSeconds`、HLS 转码等  
-  代码：[ffmpeg_transcoder.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/internal/infrastructure/transcode/ffmpeg_transcoder.go)
+  代码：[ffmpeg_transcoder.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/internal/infrastructure/transcode/ffmpeg_transcoder.go)
 - 表结构（当前模型）：`EduVideoSegment` 已包含 `start_time/end_time/content_summary/embedding/knowledge_tags/status/deleted`  
-  代码：[video.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/internal/model/video.go#L31-L49)
+  代码：[video.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/internal/model/video.go#L31-L49)
 
 ---
 
@@ -43,9 +43,9 @@
 ## Task 1：把“粗分段秒数/LLM 参数”写入配置
 
 **Files:**
-- Modify: [config.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/internal/config/config.go)
-- Modify: [video.yml](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/configs/video.yml)
-- Modify: [app.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/cmd/vector_worker/app.go)
+- Modify: [config.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/internal/config/config.go)
+- Modify: [video.yml](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/configs/video.yml)
+- Modify: [app.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/cmd/vector_worker/app.go)
 
 - [ ] Step 1：在 `internal/config/config.go` 的 `VectorWorker` 配置结构体增加字段
   - `CoarseSegmentSec int`
@@ -81,7 +81,7 @@ Expected: build success
 ## Task 2：FFmpeg 增加“按时间切 mp4 段”能力
 
 **Files:**
-- Modify: [ffmpeg_transcoder.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/internal/infrastructure/transcode/ffmpeg_transcoder.go)
+- Modify: [ffmpeg_transcoder.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/internal/infrastructure/transcode/ffmpeg_transcoder.go)
 
 - [ ] Step 1：新增方法 `ClipVideoSegment(ctx, inputPath, outputPath, startSec, durationSec)`  
 要求：
@@ -99,7 +99,7 @@ Expected:
 ## Task 3：OpenAI Compatible Client 增加 LLM（Chat）调用
 
 **Files:**
-- Modify: [client_openai.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/cmd/vector_worker/client_openai.go)
+- Modify: [client_openai.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/cmd/vector_worker/client_openai.go)
 
 - [ ] Step 1：在 `openAICompatClient` 增加 chat 调用方法（建议名）
   - `ChatCompletions(ctx, model, prompt) (string, error)` 或 `ChatJSON(ctx, model, prompt) ([]byte, error)`
@@ -131,8 +131,8 @@ Response 解析：读取 `choices[0].message.content`。
 ## Task 4：在 vector_worker 增加 `mode=hierarchical` 处理分支
 
 **Files:**
-- Modify: [task.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/cmd/vector_worker/task.go)
-- Modify: [app.go](file:///c:/Users/xiaoy/Desktop/nlp-video-project/nlp-video-project/cmd/vector_worker/app.go)
+- Modify: [task.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/cmd/vector_worker/task.go)
+- Modify: [app.go](file:///c:/Users/xiaoy/Desktop/legacy-video/legacy-video/cmd/vector_worker/app.go)
 
 ### 4.1 粗分段（固定秒数、不跳）
 

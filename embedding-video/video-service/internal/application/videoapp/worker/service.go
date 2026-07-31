@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 
 	"go.uber.org/zap"
 )

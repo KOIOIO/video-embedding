@@ -198,6 +198,21 @@ ORDER BY published_at DESC, id DESC
 LIMIT 1;
 `
 
+const ListRecBolePerformanceQuery = `
+SELECT
+  model_version,
+  COALESCE(published_at, create_time) AS metric_time,
+  (metrics_json ->> ?)::double precision AS value
+FROM recsys.recommend_model_version
+WHERE model_name = ?
+  AND framework = ?
+  AND status = 1
+  AND deleted = 0
+  AND COALESCE(published_at, create_time) BETWEEN ? AND ?
+  AND jsonb_typeof(metrics_json -> ?) = 'number'
+ORDER BY metric_time ASC, id ASC;
+`
+
 const RecommendByRecBoleQuery = `
 SELECT
   s.id AS video_segment_id,

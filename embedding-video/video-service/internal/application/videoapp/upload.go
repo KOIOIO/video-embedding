@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 const DefaultUploadUserID uint64 = 1

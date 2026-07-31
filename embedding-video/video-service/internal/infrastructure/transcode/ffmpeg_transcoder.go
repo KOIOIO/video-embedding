@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"nlp-video-analysis/internal/config"
-	"nlp-video-analysis/internal/infrastructure/transcode/impl"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"video-service/internal/config"
+	"video-service/internal/infrastructure/transcode/impl"
 )
 
 // FFmpegTranscoder 统一封装本机 ffmpeg 与 Docker ffmpeg 的调用细节。
@@ -509,5 +509,3 @@ func (t *FFmpegTranscoder) ProbeDurationSeconds(ctx context.Context, inputPath s
 	}
 	return int(math.Ceil(v)), nil
 }
-
-

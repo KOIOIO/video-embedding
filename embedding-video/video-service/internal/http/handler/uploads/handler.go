@@ -10,9 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/http/dto"
-	httperrors "nlp-video-analysis/internal/http/errors"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/http/dto"
+	httperrors "video-service/internal/http/errors"
+	"video-service/middleware"
 )
 
 type Handler struct {
@@ -49,7 +50,7 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	userID, ok := parseOptionalPositiveUintForm(c, "user_id")
+	userID, ok := authenticatedAdminID(c)
 	if !ok {
 		return
 	}
@@ -84,7 +85,7 @@ func (h *Handler) UploadVideoArchive(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	userID, ok := parseOptionalPositiveUintForm(c, "user_id")
+	userID, ok := authenticatedAdminID(c)
 	if !ok {
 		return
 	}
@@ -142,13 +143,17 @@ func (h *Handler) InitiateChunkedUpload(c *gin.Context) {
 		httperrors.Write(c, httperrors.InvalidArgument("invalid request body"))
 		return
 	}
+	userID, ok := authenticatedAdminID(c)
+	if !ok {
+		return
+	}
 
 	status, err := h.app.InitiateChunkedUpload(c.Request.Context(), videoapp.InitiateChunkedUploadInput{
 		FileName:    req.FileName,
 		ContentType: req.ContentType,
 		Title:       strings.TrimSpace(req.Title),
 		Description: req.Description,
-		UserID:      req.UserID,
+		UserID:      userID,
 		FileSize:    req.FileSize,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: req.TotalChunks,
@@ -228,12 +233,16 @@ func (h *Handler) InitiateChunkedArchiveUpload(c *gin.Context) {
 		httperrors.Write(c, httperrors.InvalidArgument("invalid request body"))
 		return
 	}
+	userID, ok := authenticatedAdminID(c)
+	if !ok {
+		return
+	}
 
 	status, err := h.app.InitiateChunkedArchiveUpload(c.Request.Context(), videoapp.InitiateChunkedUploadInput{
 		FileName:    req.FileName,
 		ContentType: req.ContentType,
 		Description: req.Description,
-		UserID:      req.UserID,
+		UserID:      userID,
 		FileSize:    req.FileSize,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: req.TotalChunks,
@@ -244,6 +253,15 @@ func (h *Handler) InitiateChunkedArchiveUpload(c *gin.Context) {
 	}
 
 	writeSuccess(c, mapChunkedUploadStatus(status))
+}
+
+func authenticatedAdminID(c *gin.Context) (uint64, bool) {
+	userID, ok := middleware.AdminID(c)
+	if !ok {
+		httperrors.Write(c, &httperrors.APIError{Status: http.StatusUnauthorized, Code: "unauthorized", Message: "administrator authentication required"})
+		return 0, false
+	}
+	return userID, true
 }
 
 func (h *Handler) CompleteChunkedArchiveUpload(c *gin.Context) {

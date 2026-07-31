@@ -13,9 +13,9 @@
 ## Files & Responsibilities
 
 **Modify**
-- `nlp-video-project/middleware/rpc_log.go`：新增 `UnaryIdempotencyInterceptor(rdb)`（放在现有 middleware 包，避免新增文件）。
-- `nlp-video-project/cmd/rpc/main.go`：将 gRPC server interceptor 从单个改为 chain，挂载幂等拦截器。
-- `nlp-video-project/internal/api/handler/handler.go`：对写接口 gRPC 调用注入 metadata（API 生成 key）。
+- `legacy-video/middleware/rpc_log.go`：新增 `UnaryIdempotencyInterceptor(rdb)`（放在现有 middleware 包，避免新增文件）。
+- `legacy-video/cmd/rpc/main.go`：将 gRPC server interceptor 从单个改为 chain，挂载幂等拦截器。
+- `legacy-video/internal/api/handler/handler.go`：对写接口 gRPC 调用注入 metadata（API 生成 key）。
 
 ---
 
@@ -34,7 +34,7 @@
 ### Task 1: API 侧生成并透传 idempotency metadata（先覆盖核心写接口）
 
 **Files:**
-- Modify: `nlp-video-project/internal/api/handler/handler.go`
+- Modify: `legacy-video/internal/api/handler/handler.go`
 
 - [ ] **Step 1: 增加 helper：为 gRPC ctx 注入幂等 metadata**
 
@@ -75,7 +75,7 @@ func withIdempotency(c *gin.Context, method string, body []byte) context.Context
 ### Task 2: RPC Unary 幂等拦截器（Redis + response cache）
 
 **Files:**
-- Modify: `nlp-video-project/middleware/rpc_log.go`
+- Modify: `legacy-video/middleware/rpc_log.go`
 
 - [ ] **Step 1: 新增 interceptor 定义**
 
@@ -133,7 +133,7 @@ value（JSON）字段：
 ### Task 3: 将幂等拦截器挂到 rpc server
 
 **Files:**
-- Modify: `nlp-video-project/cmd/rpc/main.go`
+- Modify: `legacy-video/cmd/rpc/main.go`
 
 - [ ] **Step 1: 改用 ChainUnaryInterceptor**
 

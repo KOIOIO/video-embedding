@@ -3,11 +3,10 @@ package redis
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
-	"nlp-video-analysis/internal/application/videoapp"
+	"video-service/internal/application/videoapp"
 
 	"github.com/alicebob/miniredis/v2"
 	goredis "github.com/go-redis/redis/v8"
@@ -141,8 +140,10 @@ func TestStreamQueueRequeueDelayHidesMessageUntilDue(t *testing.T) {
 	if got := rdb.XLen(ctx, "test:stream").Val(); got != 0 {
 		t.Fatalf("stream len before delay = %d, want 0", got)
 	}
-	if _, err := q.Dequeue(ctx, 5*time.Millisecond); !errors.Is(err, goredis.Nil) {
-		t.Fatalf("immediate dequeue err = %v, want redis nil", err)
+	waitCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	if _, err := q.Dequeue(waitCtx, 5*time.Millisecond); err != context.DeadlineExceeded {
+		t.Fatalf("immediate dequeue err = %v, want context deadline exceeded", err)
 	}
 
 	time.Sleep(70 * time.Millisecond)

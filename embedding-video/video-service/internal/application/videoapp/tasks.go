@@ -1,6 +1,6 @@
 package videoapp
 
-import domainvideo "nlp-video-analysis/internal/domain/video"
+import domainvideo "video-service/internal/domain/video"
 
 // TranscodeTask 是发往转码队列的任务载荷。
 type TranscodeTask struct {

@@ -13,8 +13,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/http/handler"
+	"video-service/internal/application/adminauth"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/http/handler"
+	"video-service/middleware"
 )
 
 type stubUploadApp struct {
@@ -50,6 +52,13 @@ type stubUploadApp struct {
 	archiveDoneCalls int
 	progressCalls    int
 	progressBatchID  string
+}
+
+func testAdmin(id uint64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set(middleware.AdminContextKey, adminauth.Admin{ID: id, Username: "admin"})
+		c.Next()
+	}
 }
 
 func (s *stubUploadApp) UploadVideo(ctx context.Context, input videoapp.UploadVideoInput) (videoapp.UploadResult, error) {
@@ -182,7 +191,7 @@ func TestUploadVideo_Success(t *testing.T) {
 			if input.Title != "Sample" || input.Description != "Desc" {
 				t.Fatalf("unexpected metadata: title=%q description=%q", input.Title, input.Description)
 			}
-			if input.UserID != 42 {
+			if input.UserID != 7 {
 				t.Fatalf("unexpected user id: %d", input.UserID)
 			}
 			payload, err := io.ReadAll(input.Reader)
@@ -205,7 +214,7 @@ func TestUploadVideo_Success(t *testing.T) {
 	if err := writer.WriteField("description", "Desc"); err != nil {
 		t.Fatalf("write description: %v", err)
 	}
-	if err := writer.WriteField("user_id", "42"); err != nil {
+	if err := writer.WriteField("user_id", "999"); err != nil {
 		t.Fatalf("write user_id: %v", err)
 	}
 	partHeader := textproto.MIMEHeader{}
@@ -226,7 +235,7 @@ func TestUploadVideo_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/videos", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	router := gin.New()
-	router.POST("/api/videos", h.UploadVideo)
+	router.POST("/api/videos", testAdmin(7), h.UploadVideo)
 
 	router.ServeHTTP(w, req)
 
@@ -255,7 +264,7 @@ func TestUploadVideoArchive_Success(t *testing.T) {
 			if input.Description != "Batch" {
 				t.Fatalf("unexpected description: %q", input.Description)
 			}
-			if input.UserID != 42 {
+			if input.UserID != 7 {
 				t.Fatalf("unexpected user id: %d", input.UserID)
 			}
 			payload, err := io.ReadAll(input.Reader)
@@ -305,7 +314,7 @@ func TestUploadVideoArchive_Success(t *testing.T) {
 	if err := writer.WriteField("description", "Batch"); err != nil {
 		t.Fatalf("write description: %v", err)
 	}
-	if err := writer.WriteField("user_id", "42"); err != nil {
+	if err := writer.WriteField("user_id", "999"); err != nil {
 		t.Fatalf("write user_id: %v", err)
 	}
 	partHeader := textproto.MIMEHeader{}
@@ -326,7 +335,7 @@ func TestUploadVideoArchive_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/videos/archive", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	router := gin.New()
-	router.POST("/api/videos/archive", h.UploadVideoArchive)
+	router.POST("/api/videos/archive", testAdmin(7), h.UploadVideoArchive)
 
 	router.ServeHTTP(w, req)
 
@@ -451,7 +460,7 @@ func TestInitiateChunkedUpload_Success(t *testing.T) {
 			if input.Title != "Big Lesson" || input.Description != "Desc" {
 				t.Fatalf("unexpected metadata: %+v", input)
 			}
-			if input.UserID != 42 {
+			if input.UserID != 7 {
 				t.Fatalf("unexpected user id: %d", input.UserID)
 			}
 			if input.FileSize != 10 || input.ChunkSize != 5 || input.TotalChunks != 2 {
@@ -470,12 +479,12 @@ func TestInitiateChunkedUpload_Success(t *testing.T) {
 	}
 	h := handler.NewUploadHandler(stub)
 
-	body := bytes.NewBufferString(`{"file_name":"big.mp4","content_type":"video/mp4","title":"Big Lesson","description":"Desc","user_id":42,"file_size":10,"chunk_size":5,"total_chunks":2}`)
+	body := bytes.NewBufferString(`{"file_name":"big.mp4","content_type":"video/mp4","title":"Big Lesson","description":"Desc","user_id":999,"file_size":10,"chunk_size":5,"total_chunks":2}`)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/videos/uploads", body)
 	req.Header.Set("Content-Type", "application/json")
 	router := gin.New()
-	router.POST("/api/videos/uploads", h.InitiateChunkedUpload)
+	router.POST("/api/videos/uploads", testAdmin(7), h.InitiateChunkedUpload)
 
 	router.ServeHTTP(w, req)
 
@@ -611,7 +620,7 @@ func TestInitiateChunkedArchiveUpload_Success(t *testing.T) {
 			if input.Description != "Batch" {
 				t.Fatalf("unexpected description: %q", input.Description)
 			}
-			if input.UserID != 42 {
+			if input.UserID != 7 {
 				t.Fatalf("unexpected user id: %d", input.UserID)
 			}
 			if input.FileSize != 20 || input.ChunkSize != 5 || input.TotalChunks != 4 {
@@ -630,12 +639,12 @@ func TestInitiateChunkedArchiveUpload_Success(t *testing.T) {
 	}
 	h := handler.NewUploadHandler(stub)
 
-	body := bytes.NewBufferString(`{"file_name":"lessons.zip","content_type":"application/zip","description":"Batch","user_id":42,"file_size":20,"chunk_size":5,"total_chunks":4}`)
+	body := bytes.NewBufferString(`{"file_name":"lessons.zip","content_type":"application/zip","description":"Batch","user_id":999,"file_size":20,"chunk_size":5,"total_chunks":4}`)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/videos/archive/uploads", body)
 	req.Header.Set("Content-Type", "application/json")
 	router := gin.New()
-	router.POST("/api/videos/archive/uploads", h.InitiateChunkedArchiveUpload)
+	router.POST("/api/videos/archive/uploads", testAdmin(7), h.InitiateChunkedArchiveUpload)
 
 	router.ServeHTTP(w, req)
 

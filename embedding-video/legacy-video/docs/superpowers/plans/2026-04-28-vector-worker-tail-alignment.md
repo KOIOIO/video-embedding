@@ -12,46 +12,46 @@
 
 ## Context
 
-- 实际代码入口在 `nlp-video-project/internal/worker/vectorworker/app.go`。
-- `hierarchical` 模式主流程在 `nlp-video-project/internal/worker/vectorworker/task.go`。
-- 细分段二次 ASR 和 embedding 在 `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`。
+- 实际代码入口在 `legacy-video/internal/worker/vectorworker/app.go`。
+- `hierarchical` 模式主流程在 `legacy-video/internal/worker/vectorworker/task.go`。
+- 细分段二次 ASR 和 embedding 在 `legacy-video/internal/worker/vectorworker/tasks/asr.go`。
 - 当前 `EduVideoSegment` 已经有 `start_time` / `end_time` 字段，不需要改表。
 - 这次只改 worker 内部算法和配置，不改前端、接口协议、数据库表结构。
 
 ## File Structure
 
 **Create:**
-- `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go`
+- `legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go`
   - 纯逻辑模块：配置标准化、句尾判断、下一次试探结束时间计算。
-- `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go`
+- `legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go`
   - 纯逻辑单元测试。
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
+- `legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
   - 细分段尾部试探 helper 测试。
 
 **Modify:**
-- `nlp-video-project/internal/config/types.go`
+- `legacy-video/internal/config/types.go`
   - 增加 `VectorWorker` 尾部对齐配置项。
-- `nlp-video-project/internal/worker/vectorworker/app.go`
+- `legacy-video/internal/worker/vectorworker/app.go`
   - 读取新配置、填默认值、记录日志、向任务链路透传。
-- `nlp-video-project/internal/worker/vectorworker/task.go`
+- `legacy-video/internal/worker/vectorworker/task.go`
   - 把尾部对齐配置和视频总时长传入 `RefineSegmentsASRAndEmbed`。
-- `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
+- `legacy-video/internal/worker/vectorworker/tasks/asr.go`
   - 在二次 ASR 前增加尾部试探逻辑，并把校准后的 `end_time` 一起写库。
-- `nlp-video-project/configs/video.yml`
+- `legacy-video/configs/video.yml`
   - 增加显式配置键，便于本地调参。
-- `nlp-video-project/configs/video_prod.yml`
+- `legacy-video/configs/video_prod.yml`
   - 增加显式配置键，便于生产调参。
 
 **Docs to consult while implementing:**
-- `nlp-video-project/docs/superpowers/specs/2026-04-28-vector-worker-tail-alignment-design.md`
+- `legacy-video/docs/superpowers/specs/2026-04-28-vector-worker-tail-alignment-design.md`
 
 ---
 
 ### Task 1: Add Tail Alignment Pure Logic
 
 **Files:**
-- Create: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go`
-- Test: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go`
+- Create: `legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go`
+- Test: `legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go`
 
 - [ ] **Step 1: Write the failing test for config normalization and sentence-end detection**
 
@@ -109,7 +109,7 @@ func TestNeedsTailExtension(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestNormalizeTailAlignmentConfigDefaults|TestLooksLikeSentenceEnd|TestNeedsTailExtension" -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run "TestNormalizeTailAlignmentConfigDefaults|TestLooksLikeSentenceEnd|TestNeedsTailExtension" -v`
 
 Expected: FAIL with undefined `TailAlignmentConfig`, `NormalizeTailAlignmentConfig`, `LooksLikeSentenceEnd`, or `NeedsTailExtension`
 
@@ -231,7 +231,7 @@ func TestNextAlignedEndSec(t *testing.T) {
 
 - [ ] **Step 5: Run test to verify it fails**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run TestNextAlignedEndSec -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run TestNextAlignedEndSec -v`
 
 Expected: FAIL with undefined `NextAlignedEndSec`
 
@@ -263,14 +263,14 @@ func NextAlignedEndSec(currentEndSec int, originalEndSec int, nextSegmentStartSe
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestNormalizeTailAlignmentConfigDefaults|TestLooksLikeSentenceEnd|TestNeedsTailExtension|TestNextAlignedEndSec" -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run "TestNormalizeTailAlignmentConfigDefaults|TestLooksLikeSentenceEnd|TestNeedsTailExtension|TestNextAlignedEndSec" -v`
 
 Expected: PASS
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go
+git add legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go
 git commit -m "test: add tail alignment heuristics"
 ```
 
@@ -279,12 +279,12 @@ git commit -m "test: add tail alignment heuristics"
 ### Task 2: Plumb Tail Alignment Config Through Worker Startup
 
 **Files:**
-- Modify: `nlp-video-project/internal/config/types.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/app.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/task.go`
-- Modify: `nlp-video-project/configs/video.yml`
-- Modify: `nlp-video-project/configs/video_prod.yml`
-- Test: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go`
+- Modify: `legacy-video/internal/config/types.go`
+- Modify: `legacy-video/internal/worker/vectorworker/app.go`
+- Modify: `legacy-video/internal/worker/vectorworker/task.go`
+- Modify: `legacy-video/configs/video.yml`
+- Modify: `legacy-video/configs/video_prod.yml`
+- Test: `legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go`
 
 - [ ] **Step 1: Extend the test to cover explicit config values and disabled mode**
 
@@ -307,14 +307,14 @@ func TestNormalizeTailAlignmentConfigKeepsExplicitValues(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run TestNormalizeTailAlignmentConfigKeepsExplicitValues -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run TestNormalizeTailAlignmentConfigKeepsExplicitValues -v`
 
 Expected: PASS if Task 1 left `Enabled` untouched; FAIL if Task 1 incorrectly forced `Enabled=true`
 
 - [ ] **Step 3: Fix config normalization so disabled mode is preserved, then add startup config fields**
 
 ```go
-// nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go
+// legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go
 func NormalizeTailAlignmentConfig(cfg TailAlignmentConfig) TailAlignmentConfig {
 	if cfg.MaxExtendSec <= 0 {
 		cfg.MaxExtendSec = 3
@@ -330,7 +330,7 @@ func NormalizeTailAlignmentConfig(cfg TailAlignmentConfig) TailAlignmentConfig {
 ```
 
 ```go
-// nlp-video-project/internal/config/types.go
+// legacy-video/internal/config/types.go
 type VectorWorkerConfig struct {
 	Mode                     string `yaml:"Mode"`
 	CoarseSegmentSec         int    `yaml:"CoarseSegmentSec"`
@@ -356,7 +356,7 @@ type VectorWorkerConfig struct {
 ```
 
 ```go
-// nlp-video-project/internal/worker/vectorworker/app.go
+// legacy-video/internal/worker/vectorworker/app.go
 tailCfg := tasks.NormalizeTailAlignmentConfig(tasks.TailAlignmentConfig{
 	Enabled:       cfg.VectorWorker.TailAlignmentEnabled,
 	MaxExtendSec:  cfg.VectorWorker.TailAlignmentMaxExtendSec,
@@ -384,7 +384,7 @@ zap.L().Info("vector_worker_start",
 - [ ] **Step 4: Thread the config and video duration into the task/refine call chain**
 
 ```go
-// nlp-video-project/internal/worker/vectorworker/task.go
+// legacy-video/internal/worker/vectorworker/task.go
 func refineSegmentsASRAndEmbed(
 	ctx context.Context,
 	db *gorm.DB,
@@ -447,7 +447,7 @@ lastErr = handleVectorizeTask(taskCtx, db, store, ff, client, tmpRoot, mode, win
 - [ ] **Step 5: Add explicit config keys to both YAML files**
 
 ```yaml
-# nlp-video-project/configs/video.yml
+# legacy-video/configs/video.yml
 VectorWorker:
   TailAlignmentEnabled: true
   TailAlignmentMaxExtendSec: 3
@@ -457,7 +457,7 @@ VectorWorker:
 ```
 
 ```yaml
-# nlp-video-project/configs/video_prod.yml
+# legacy-video/configs/video_prod.yml
 VectorWorker:
   TailAlignmentEnabled: true
   TailAlignmentMaxExtendSec: 3
@@ -468,18 +468,18 @@ VectorWorker:
 
 - [ ] **Step 6: Run tests to verify config logic and package compile still pass**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestNormalizeTailAlignmentConfigDefaults|TestNormalizeTailAlignmentConfigKeepsExplicitValues|TestLooksLikeSentenceEnd|TestNeedsTailExtension|TestNextAlignedEndSec" -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run "TestNormalizeTailAlignmentConfigDefaults|TestNormalizeTailAlignmentConfigKeepsExplicitValues|TestLooksLikeSentenceEnd|TestNeedsTailExtension|TestNextAlignedEndSec" -v`
 
 Expected: PASS
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/... -run TestDoesNotExist`
+Run: `go test ./legacy-video/internal/worker/vectorworker/... -run TestDoesNotExist`
 
 Expected: package compile succeeds with `ok` / `[no test files]`
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add nlp-video-project/internal/config/types.go nlp-video-project/internal/worker/vectorworker/app.go nlp-video-project/internal/worker/vectorworker/task.go nlp-video-project/configs/video.yml nlp-video-project/configs/video_prod.yml nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go
+git add legacy-video/internal/config/types.go legacy-video/internal/worker/vectorworker/app.go legacy-video/internal/worker/vectorworker/task.go legacy-video/configs/video.yml legacy-video/configs/video_prod.yml legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go
 git commit -m "feat: add vector worker tail alignment config"
 ```
 
@@ -488,8 +488,8 @@ git commit -m "feat: add vector worker tail alignment config"
 ### Task 3: Add a Testable Tail-Probing Helper for Refine ASR
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
-- Create: `nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
+- Modify: `legacy-video/internal/worker/vectorworker/tasks/asr.go`
+- Create: `legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
 
 - [ ] **Step 1: Write the failing test for probe-until-sentence-end behavior**
 
@@ -588,7 +588,7 @@ func TestAlignSegmentTailHonorsOverlapLimit(t *testing.T) {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestAlignSegmentTailStopsAtNaturalSentenceEnd|TestAlignSegmentTailSkipsWhenDisabled|TestAlignSegmentTailHonorsOverlapLimit" -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run "TestAlignSegmentTailStopsAtNaturalSentenceEnd|TestAlignSegmentTailSkipsWhenDisabled|TestAlignSegmentTailHonorsOverlapLimit" -v`
 
 Expected: FAIL with undefined `alignSegmentTail`
 
@@ -643,14 +643,14 @@ func alignSegmentTail(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestAlignSegmentTailStopsAtNaturalSentenceEnd|TestAlignSegmentTailSkipsWhenDisabled|TestAlignSegmentTailHonorsOverlapLimit" -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run "TestAlignSegmentTailStopsAtNaturalSentenceEnd|TestAlignSegmentTailSkipsWhenDisabled|TestAlignSegmentTailHonorsOverlapLimit" -v`
 
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/asr.go nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go
+git add legacy-video/internal/worker/vectorworker/tasks/asr.go legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go
 git commit -m "test: cover refine tail probing helper"
 ```
 
@@ -659,8 +659,8 @@ git commit -m "test: cover refine tail probing helper"
 ### Task 4: Apply Tail Alignment Inside RefineSegmentsASRAndEmbed
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
-- Test: `nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
+- Modify: `legacy-video/internal/worker/vectorworker/tasks/asr.go`
+- Test: `legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
 
 - [ ] **Step 1: Add the failing test for updating end_time with the aligned result**
 
@@ -694,7 +694,7 @@ func TestAlignSegmentTailStopsAtMaxExtendWhenNoSentenceEnd(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it fails if your helper returns too early or overshoots**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run TestAlignSegmentTailStopsAtMaxExtendWhenNoSentenceEnd -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run TestAlignSegmentTailStopsAtMaxExtendWhenNoSentenceEnd -v`
 
 Expected: FAIL if the helper does not stop exactly at the bounded max extension
 
@@ -874,20 +874,20 @@ zap.L().Info("tail_alignment_extended",
 
 - [ ] **Step 8: Run targeted tests to verify tail-probing behavior passes**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run "TestAlignSegmentTailStopsAtNaturalSentenceEnd|TestAlignSegmentTailSkipsWhenDisabled|TestAlignSegmentTailHonorsOverlapLimit|TestAlignSegmentTailStopsAtMaxExtendWhenNoSentenceEnd" -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run "TestAlignSegmentTailStopsAtNaturalSentenceEnd|TestAlignSegmentTailSkipsWhenDisabled|TestAlignSegmentTailHonorsOverlapLimit|TestAlignSegmentTailStopsAtMaxExtendWhenNoSentenceEnd" -v`
 
 Expected: PASS
 
 - [ ] **Step 9: Run package-level tests for the vector worker**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/...`
+Run: `go test ./legacy-video/internal/worker/vectorworker/...`
 
 Expected: PASS
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/asr.go nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go nlp-video-project/internal/worker/vectorworker/task.go nlp-video-project/internal/worker/vectorworker/app.go
+git add legacy-video/internal/worker/vectorworker/tasks/asr.go legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go legacy-video/internal/worker/vectorworker/task.go legacy-video/internal/worker/vectorworker/app.go
 git commit -m "feat: align hierarchical segment tails conservatively"
 ```
 
@@ -896,10 +896,10 @@ git commit -m "feat: align hierarchical segment tails conservatively"
 ### Task 5: Full Verification and Cleanup
 
 **Files:**
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/asr.go`
-- Modify: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go`
-- Test: `nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go`
-- Test: `nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
+- Modify: `legacy-video/internal/worker/vectorworker/tasks/asr.go`
+- Modify: `legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go`
+- Test: `legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go`
+- Test: `legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go`
 
 - [ ] **Step 1: Add one regression test for complete sentences staying unchanged**
 
@@ -929,19 +929,19 @@ func TestAlignSegmentTailKeepsCompleteSentenceUnchanged(t *testing.T) {
 
 - [ ] **Step 2: Run tests to verify the regression case passes**
 
-Run: `go test ./nlp-video-project/internal/worker/vectorworker/tasks -run TestAlignSegmentTailKeepsCompleteSentenceUnchanged -v`
+Run: `go test ./legacy-video/internal/worker/vectorworker/tasks -run TestAlignSegmentTailKeepsCompleteSentenceUnchanged -v`
 
 Expected: PASS
 
 - [ ] **Step 3: Run the full backend test sweep**
 
-Run: `go test ./nlp-video-project/...`
+Run: `go test ./legacy-video/...`
 
 Expected: PASS
 
 - [ ] **Step 4: Manually inspect logs during one hierarchical task run**
 
-Run: `go run ./nlp-video-project/cmd/worker`
+Run: `go run ./legacy-video/cmd/worker`
 
 Expected:
 - worker starts successfully
@@ -951,7 +951,7 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add nlp-video-project/internal/worker/vectorworker/tasks/asr.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment.go nlp-video-project/internal/worker/vectorworker/tasks/tail_alignment_test.go nlp-video-project/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go
+git add legacy-video/internal/worker/vectorworker/tasks/asr.go legacy-video/internal/worker/vectorworker/tasks/tail_alignment.go legacy-video/internal/worker/vectorworker/tasks/tail_alignment_test.go legacy-video/internal/worker/vectorworker/tasks/asr_tail_alignment_test.go
 git commit -m "test: verify vector worker tail alignment"
 ```
 
@@ -980,7 +980,7 @@ git commit -m "test: verify vector worker tail alignment"
 
 ---
 
-Plan complete and saved to `nlp-video-project/docs/superpowers/plans/2026-04-28-vector-worker-tail-alignment.md`. Two execution options:
+Plan complete and saved to `legacy-video/docs/superpowers/plans/2026-04-28-vector-worker-tail-alignment.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 

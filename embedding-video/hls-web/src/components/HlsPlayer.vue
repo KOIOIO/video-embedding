@@ -11,7 +11,7 @@ const props = defineProps({
   watchContext: { type: Object, default: null },
 })
 
-const emit = defineEmits(['watch-progress'])
+const emit = defineEmits(['watch-progress', 'play'])
 
 const videoRef = ref(null)
 const errorText = ref('')
@@ -291,6 +291,7 @@ async function setup() {
   activeWatchContext = props.watchContext
 
   video.onplay = () => {
+		emit('play')
     startWatchTimer()
     syncPlaybackUI()
   }

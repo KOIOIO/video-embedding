@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
 )
 
 type Source interface {

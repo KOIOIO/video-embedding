@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/http/dto"
-	httperrors "nlp-video-analysis/internal/http/errors"
+	"video-service/internal/http/dto"
+	httperrors "video-service/internal/http/errors"
 )
 
 type Handler struct {

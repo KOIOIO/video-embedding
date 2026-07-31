@@ -249,7 +249,8 @@
 }
 
 .workspace-mount .video-workspace,
-.workspace-mount .recommendation-workspace {
+.workspace-mount .recommendation-workspace,
+.workspace-mount .knowledge-video-workspace {
   min-height: calc(100vh - 66px);
 }
 

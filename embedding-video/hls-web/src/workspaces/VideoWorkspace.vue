@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { clearSavedArchiveUpload, loadSavedArchiveUpload, saveArchiveUpload } from '../archiveProgressStorage.js'
+import { apiFetch } from '../auth/api.js'
 import HlsPlayer from '../components/HlsPlayer.vue'
 import { uploadVideoInChunks } from '../chunkedUpload.js'
 import { fetchRandomPlayableSegment } from '../randomSegment.js'
@@ -30,7 +31,6 @@ const selectedFile = ref(null)
 const uploadMode = ref('single')
 const uploadTitle = ref('')
 const uploadDescription = ref('')
-const uploadUserId = ref(DEBUG_USER_ID)
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const uploadError = ref('')
@@ -181,7 +181,7 @@ function normalizeVideos(list) {
 }
 
 async function requestJson(url, init) {
-  const res = await fetch(url, init)
+  const res = await apiFetch(url, init)
   const payload = await res.json().catch(() => null)
   const message = payload?.error?.message || payload?.message || `HTTP ${res.status}`
   if (!res.ok || payload?.success === false) {
@@ -551,7 +551,7 @@ function setQuestionPlayer(src, title, questionId, startSec = 0, endSec = 0, wat
 async function fetchHealth() {
   serviceStatus.value = { ok: false, checked: false, error: '' }
   try {
-    const res = await fetch(`${API_BASE}/healthz`)
+    const res = await apiFetch(`${API_BASE}/healthz`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json().catch(() => null)
     serviceStatus.value = { ok: data?.status === 'ok', checked: true, error: '' }
@@ -670,7 +670,6 @@ async function uploadVideo() {
       apiBase: API_BASE,
       kind: isArchiveUpload.value ? 'archive' : 'video',
       file: selectedFile.value,
-      userId: uploadUserId.value,
       title: uploadTitle.value,
       description: uploadDescription.value,
       chunkSize: VIDEO_UPLOAD_CHUNK_SIZE,
@@ -847,7 +846,7 @@ async function uploadCover(video, event) {
   try {
     const form = new FormData()
     form.append('file', file)
-    const response = await fetch(`${API_BASE}/videos/${encodeURIComponent(String(id))}/cover`, {
+    const response = await apiFetch(`${API_BASE}/videos/${encodeURIComponent(String(id))}/cover`, {
       method: 'POST',
       body: form,
     })
@@ -1080,10 +1079,10 @@ onBeforeUnmount(() => {
     <div class="console-page admin-main">
       <header id="overview" class="admin-topbar">
         <div class="page-heading">
-          <p class="eyebrow">Hengshui Tablet Video</p>
+          <p class="eyebrow">video Tablet Video</p>
           <h1>视频运营与联调中心</h1>
           <p class="hero-text">
-            面向 <code>hengshui-tablet-video-http</code> 的管理后台，集中处理上传、转码、播放、推荐与题库联调。
+            面向 <code>video-service</code> 的管理后台，集中处理上传、转码、播放、推荐与题库联调。
           </p>
         </div>
         <div class="topbar-actions">
@@ -1220,10 +1219,6 @@ onBeforeUnmount(() => {
           <label class="field-stack">
             <span class="field-label">{{ uploadFileLabel }}</span>
             <input class="field file-field" type="file" :accept="uploadFileAccept" @change="onFileChange" />
-          </label>
-          <label class="field-stack">
-            <span class="field-label">上传用户 ID</span>
-            <input class="field" v-model.number="uploadUserId" type="number" min="1" step="1" placeholder="1" />
           </label>
           <label class="field-stack" v-if="!isArchiveUpload">
             <span class="field-label">视频标题</span>

@@ -3,8 +3,8 @@ package videoapp
 import (
 	"context"
 
-	playbackapp "nlp-video-analysis/internal/application/videoapp/playback"
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	playbackapp "video-service/internal/application/videoapp/playback"
+	domainvideo "video-service/internal/domain/video"
 )
 
 // PlayVideo 返回播放地址，并在读取前后更新视频播放次数与状态。

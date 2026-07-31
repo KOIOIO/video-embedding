@@ -9,7 +9,7 @@ import (
 
 	goredis "github.com/go-redis/redis/v8"
 
-	"nlp-video-analysis/internal/application/videoapp"
+	"video-service/internal/application/videoapp"
 )
 
 type RandomPlayBucketStore struct {

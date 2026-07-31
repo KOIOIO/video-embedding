@@ -8,6 +8,8 @@ RUN npm run build
 
 FROM nginx:1.27-alpine
 
-COPY hls-web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+ENV API_UPSTREAM=http://api:8081
+ENV NGINX_ENVSUBST_FILTER=^API_UPSTREAM$
 
+COPY hls-web/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /app/dist /usr/share/nginx/html

@@ -1,0 +1,59 @@
+name: video-video-intranet
+
+x-app-environment: &app-environment
+  TZ: Asia/Shanghai
+  CONFIG_FILE: /app/configs/video_prod.yml
+  VIDEO_CONFIG_FILE: /app/configs/video_prod.yml
+  POSTGRES_DSN: ${POSTGRES_DSN}
+  REDIS_ADDR: ${REDIS_ADDR}
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  COS_SECRET_ID: ${COS_SECRET_ID}
+  COS_SECRET_KEY: ${COS_SECRET_KEY}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  ASR_API_KEY: ${ASR_API_KEY:-}
+
+services:
+  worker:
+    image: ${VIDEO_APP_API_IMAGE:-video-service-api:latest}
+    entrypoint: []
+    environment:
+      <<: *app-environment
+      RECBOLE_TRAINER_ENABLED: "false"
+    command: ["worker"]
+    volumes:
+      - ../config/video_prod.yml:/app/configs/video_prod.yml:ro
+      - video_app_worker_logs:/app/logs
+      - video_app_storage:/app/storage
+    restart: unless-stopped
+
+  recbole_trainer:
+    image: ${VIDEO_APP_RECBOLE_IMAGE:-video-recbole-trainer:latest}
+    environment:
+      <<: *app-environment
+      CONFIG_FILE: /app/video-service/configs/video_prod.yml
+      VIDEO_CONFIG_FILE: /app/video-service/configs/video_prod.yml
+      RECBOLE_TRAINER_ENABLED: "true"
+    command: ["recboletrainer"]
+    volumes:
+      - ../config/video_prod.yml:/app/video-service/configs/video_prod.yml:ro
+      - video_app_recbole_data:/app/recbole-training/data
+      - video_app_recbole_artifacts:/app/recbole-training/artifacts
+      - video_app_recbole_logs:/app/video-service/logs
+    restart: unless-stopped
+
+  frontend:
+    image: ${VIDEO_APP_FRONTEND_IMAGE:-video-frontend:latest}
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM}
+    ports:
+      - "${INTRANET_BIND_ADDRESS:-0.0.0.0}:${VIDEO_APP_WEB_PORT:-1325}:8080"
+    restart: unless-stopped
+
+volumes:
+  video_app_worker_logs:
+  video_app_storage:
+  video_app_recbole_data:
+  video_app_recbole_artifacts:
+  video_app_recbole_logs:

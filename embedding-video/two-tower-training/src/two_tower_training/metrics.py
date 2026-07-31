@@ -83,6 +83,8 @@ def evaluate_retrieval(dataset, model, eval_samples: list, train_samples: list, 
             f"ndcg_at_{k}": 0.0,
             f"coverage_at_{k}": 0.0,
             f"negative_hit_rate_at_{k}": 0.0,
+            f"expected_negative_hit_rate_at_{k}": 0.0,
+            f"excess_negative_hit_rate_at_{k}": 0.0,
             f"dislike_hit_rate_at_{k}": 0.0,
         }
 
@@ -92,6 +94,7 @@ def evaluate_retrieval(dataset, model, eval_samples: list, train_samples: list, 
     recommended_items: set[int] = set()
     negative_hits = 0
     negative_total = sum(len(values) for values in eval_negatives.values())
+    expected_negative_hits = 0.0
     dislike_hits = 0
     dislike_total = sum(len(values) for values in eval_dislikes.values())
 
@@ -99,6 +102,9 @@ def evaluate_retrieval(dataset, model, eval_samples: list, train_samples: list, 
         positive_items = eval_positives[user_index]
         seen = train_seen_positives.get(user_index, set())
         ranked = rank_items_for_user(model, user_index, seen, k)
+        candidate_count = max(0, len(dataset.segment_ids) - len(seen))
+        selection_share = min(k, candidate_count) / candidate_count if candidate_count else 0.0
+        expected_negative_hits += len(eval_negatives.get(user_index, set())) * selection_share
         recommended_items.update(ranked)
         hit_count = len(positive_items.intersection(ranked))
         recall_values.append(hit_count / len(positive_items))
@@ -111,12 +117,16 @@ def evaluate_retrieval(dataset, model, eval_samples: list, train_samples: list, 
             if item_index in ranked:
                 dislike_hits += 1
 
+    negative_hit_rate = negative_hits / negative_total if negative_total else 0.0
+    expected_negative_hit_rate = expected_negative_hits / negative_total if negative_total else 0.0
     return {
         f"recall_at_{k}": average(recall_values),
         f"hit_rate_at_{k}": average(hit_values),
         f"ndcg_at_{k}": average(ndcg_values),
         f"coverage_at_{k}": len(recommended_items) / max(1, len(dataset.segment_ids)),
-        f"negative_hit_rate_at_{k}": negative_hits / negative_total if negative_total else 0.0,
+        f"negative_hit_rate_at_{k}": negative_hit_rate,
+        f"expected_negative_hit_rate_at_{k}": expected_negative_hit_rate,
+        f"excess_negative_hit_rate_at_{k}": max(0.0, negative_hit_rate - expected_negative_hit_rate),
         f"dislike_hit_rate_at_{k}": dislike_hits / dislike_total if dislike_total else 0.0,
     }
 

@@ -1,5 +1,7 @@
+import { apiFetch } from '../../auth/api.js'
+
 export async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: {
       Accept: 'application/json',
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -18,4 +20,3 @@ export async function requestJson(url, options = {}) {
 
   return response.json()
 }
-

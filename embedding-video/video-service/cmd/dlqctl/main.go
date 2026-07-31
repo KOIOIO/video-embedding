@@ -12,8 +12,8 @@ import (
 
 	goredis "github.com/go-redis/redis/v8"
 
-	"nlp-video-analysis/internal/config"
-	infraredis "nlp-video-analysis/internal/infrastructure/redis"
+	"video-service/internal/config"
+	infraredis "video-service/internal/infrastructure/redis"
 )
 
 type queueSpec struct {

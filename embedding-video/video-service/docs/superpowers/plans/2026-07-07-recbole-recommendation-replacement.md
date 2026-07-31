@@ -22,9 +22,9 @@ Make RecBole the only personalized embedding recall implementation in this repo,
 Run from `video-service/`:
 
 ```bash
-GOCACHE=/private/tmp/hstv-go-build go test ./tools/export_recbole_dataset ./tools/import_recsys_embeddings ./tools/export_active_recsys_model_metrics ./tools/drop_legacy_recommendation_tables -count=1
-GOCACHE=/private/tmp/hstv-go-build go test ./internal/application/videoapp ./internal/application/videoapp/recommendation ./internal/infrastructure/persistence ./internal/infrastructure/persistence/sqlqueries -count=1
-GOCACHE=/private/tmp/hstv-go-build go test ./...
+GOCACHE=/private/tmp/video_app-go-build go test ./tools/export_recbole_dataset ./tools/import_recsys_embeddings ./tools/export_active_recsys_model_metrics ./tools/drop_legacy_recommendation_tables -count=1
+GOCACHE=/private/tmp/video_app-go-build go test ./internal/application/videoapp ./internal/application/videoapp/recommendation ./internal/infrastructure/persistence ./internal/infrastructure/persistence/sqlqueries -count=1
+GOCACHE=/private/tmp/video_app-go-build go test ./...
 ```
 
 Run from `recbole-training/`:

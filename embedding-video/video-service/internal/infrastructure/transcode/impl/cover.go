@@ -3,7 +3,7 @@ package impl
 import (
 	"fmt"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 // FFmpegCoverImpl 负责构造封面截图参数。

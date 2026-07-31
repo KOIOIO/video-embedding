@@ -3,7 +3,7 @@ package impl
 import (
 	"fmt"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 // FFmpegAudioImpl 负责构造音频抽取参数。

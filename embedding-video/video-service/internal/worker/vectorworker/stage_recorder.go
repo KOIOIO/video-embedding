@@ -6,8 +6,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"nlp-video-analysis/internal/infrastructure/persistence"
-	"nlp-video-analysis/internal/worker/vectorworker/tasks"
+	"video-service/internal/infrastructure/persistence"
+	"video-service/internal/worker/vectorworker/tasks"
 )
 
 type vectorStageRepository interface {

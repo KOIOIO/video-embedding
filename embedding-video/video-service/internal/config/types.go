@@ -2,27 +2,35 @@ package config
 
 // Config 描述整个后端的顶层配置结构，并直接映射到 YAML 文件。
 type Config struct {
-	Name               string                   `yaml:"Name"`
-	Host               string                   `yaml:"Host"`
-	Port               int                      `yaml:"Port"`
-	HTTP               HTTPConfig               `yaml:"HTTP"`
-	GRPC               GRPCConfig               `yaml:"GRPC"`
-	Video              VideoConfig              `yaml:"Video"`
-	FFmpeg             FFmpegConfig             `yaml:"FFmpeg"`
-	Storage            StorageConfig            `yaml:"Storage"`
-	Redis              RedisConfig              `yaml:"Redis"`
-	RedisKeys          RedisKeysConfig          `yaml:"RedisKeys"`
-	Postgres           PostgresConfig           `yaml:"Postgres"`
-	RustFS             RustFSConfig             `yaml:"RustFS"`
-	Transcode          TransConfig              `yaml:"Transcode"`
-	VectorWorker       VectorWorkerConfig       `yaml:"VectorWorker"`
-	VectorStageWorkers VectorStageWorkersConfig `yaml:"VectorStageWorkers"`
-	WorkerPools        WorkerPoolsConfig        `yaml:"WorkerPools"`
-	Recommendation     RecommendationConfig     `yaml:"Recommendation"`
-	Gorse              GorseConfig              `yaml:"Gorse"`
-	Embedding          EmbeddingConfig          `yaml:"embedding"`
-	ASR                ASRConfig                `yaml:"asr"`
-	AI                 AIConfig                 `yaml:"AI"`
+	Name                  string                      `yaml:"Name"`
+	Host                  string                      `yaml:"Host"`
+	Port                  int                         `yaml:"Port"`
+	HTTP                  HTTPConfig                  `yaml:"HTTP"`
+	Auth                  AuthConfig                  `yaml:"Auth"`
+	GRPC                  GRPCConfig                  `yaml:"GRPC"`
+	Video                 VideoConfig                 `yaml:"Video"`
+	FFmpeg                FFmpegConfig                `yaml:"FFmpeg"`
+	Storage               StorageConfig               `yaml:"Storage"`
+	Redis                 RedisConfig                 `yaml:"Redis"`
+	RedisKeys             RedisKeysConfig             `yaml:"RedisKeys"`
+	Postgres              PostgresConfig              `yaml:"Postgres"`
+	RustFS                RustFSConfig                `yaml:"RustFS"`
+	KnowledgeVideoStorage KnowledgeVideoStorageConfig `yaml:"KnowledgeVideoStorage"`
+	KnowledgeVideoWorker  KnowledgeVideoWorkerConfig  `yaml:"KnowledgeVideoWorker"`
+	Transcode             TransConfig                 `yaml:"Transcode"`
+	VectorWorker          VectorWorkerConfig          `yaml:"VectorWorker"`
+	VectorStageWorkers    VectorStageWorkersConfig    `yaml:"VectorStageWorkers"`
+	WorkerPools           WorkerPoolsConfig           `yaml:"WorkerPools"`
+	Recommendation        RecommendationConfig        `yaml:"Recommendation"`
+	Gorse                 GorseConfig                 `yaml:"Gorse"`
+	Embedding             EmbeddingConfig             `yaml:"embedding"`
+	ASR                   ASRConfig                   `yaml:"asr"`
+	AI                    AIConfig                    `yaml:"AI"`
+}
+
+type AuthConfig struct {
+	JWTSecret     string `yaml:"JWTSecret"`
+	JWTExpireHour int    `yaml:"JWTExpireHour"`
 }
 
 // HTTPConfig 定义 HTTP API 监听地址。
@@ -121,22 +129,23 @@ type RedisConfig struct {
 
 // RedisKeysConfig 定义 Redis 队列、状态和运行计数 key 前缀。
 type RedisKeysConfig struct {
-	TranscodeQueue        string `yaml:"TranscodeQueue"`
-	VectorizeQueue        string `yaml:"VectorizeQueue"`
-	VectorPrepareQueue    string `yaml:"VectorPrepareQueue"`
-	VectorCoarseQueue     string `yaml:"VectorCoarseQueue"`
-	VectorRefineQueue     string `yaml:"VectorRefineQueue"`
-	VectorFinalizeQueue   string `yaml:"VectorFinalizeQueue"`
-	VideoReactionQueue    string `yaml:"VideoReactionQueue"`
-	VideoReactionCounts   string `yaml:"VideoReactionCounts"`
-	VideoReactionUser     string `yaml:"VideoReactionUser"`
-	SegmentReactionQueue  string `yaml:"SegmentReactionQueue"`
-	SegmentReactionCounts string `yaml:"SegmentReactionCounts"`
-	SegmentReactionUser   string `yaml:"SegmentReactionUser"`
-	TranscodeStatus       string `yaml:"TranscodeStatus"`
-	RuntimeActiveCounter  string `yaml:"RuntimeActiveCounter"`
-	RandomPlayRecent      string `yaml:"RandomPlayRecent"`
-	RandomPlayBucket      string `yaml:"RandomPlayBucket"`
+	TranscodeQueue               string `yaml:"TranscodeQueue"`
+	KnowledgeVideoTranscodeQueue string `yaml:"KnowledgeVideoTranscodeQueue"`
+	VectorizeQueue               string `yaml:"VectorizeQueue"`
+	VectorPrepareQueue           string `yaml:"VectorPrepareQueue"`
+	VectorCoarseQueue            string `yaml:"VectorCoarseQueue"`
+	VectorRefineQueue            string `yaml:"VectorRefineQueue"`
+	VectorFinalizeQueue          string `yaml:"VectorFinalizeQueue"`
+	VideoReactionQueue           string `yaml:"VideoReactionQueue"`
+	VideoReactionCounts          string `yaml:"VideoReactionCounts"`
+	VideoReactionUser            string `yaml:"VideoReactionUser"`
+	SegmentReactionQueue         string `yaml:"SegmentReactionQueue"`
+	SegmentReactionCounts        string `yaml:"SegmentReactionCounts"`
+	SegmentReactionUser          string `yaml:"SegmentReactionUser"`
+	TranscodeStatus              string `yaml:"TranscodeStatus"`
+	RuntimeActiveCounter         string `yaml:"RuntimeActiveCounter"`
+	RandomPlayRecent             string `yaml:"RandomPlayRecent"`
+	RandomPlayBucket             string `yaml:"RandomPlayBucket"`
 }
 
 // PostgresConfig 定义 PostgreSQL 连接信息与连接池参数。
@@ -157,6 +166,30 @@ type RustFSConfig struct {
 	UseSSL       bool   `yaml:"UseSSL"`
 	Region       string `yaml:"Region"`
 	BucketLookup string `yaml:"BucketLookup"`
+}
+
+// KnowledgeVideoStorageConfig defines isolated object storage and archive limits for knowledge-point videos.
+type KnowledgeVideoStorageConfig struct {
+	Endpoint         string `yaml:"Endpoint"`
+	AccessKey        string `yaml:"AccessKey"`
+	SecretKey        string `yaml:"SecretKey"`
+	Bucket           string `yaml:"Bucket"`
+	UseSSL           bool   `yaml:"UseSSL"`
+	Region           string `yaml:"Region"`
+	BucketLookup     string `yaml:"BucketLookup"`
+	MediaRoutePrefix string `yaml:"MediaRoutePrefix"`
+	TempPath         string `yaml:"TempPath"`
+	MaxArchiveBytes  int64  `yaml:"MaxArchiveBytes"`
+	MaxExpandedBytes int64  `yaml:"MaxExpandedBytes"`
+	MaxEntryBytes    int64  `yaml:"MaxEntryBytes"`
+	MaxEntries       int    `yaml:"MaxEntries"`
+}
+
+// KnowledgeVideoWorkerConfig defines dedicated transcode worker limits for knowledge-point videos.
+type KnowledgeVideoWorkerConfig struct {
+	WorkerCount        int `yaml:"WorkerCount"`
+	TaskTimeoutMinutes int `yaml:"TaskTimeoutMinutes"`
+	ShutdownTimeoutSec int `yaml:"ShutdownTimeoutSec"`
 }
 
 // TransConfig 定义转码 worker 的并发、超时与模式参数。
@@ -217,8 +250,6 @@ type RecommendationConfig struct {
 type GorseConfig struct {
 	Endpoint          string `yaml:"Endpoint"`
 	APIKey            string `yaml:"APIKey"`
-	DashboardUsername string `yaml:"DashboardUsername"`
-	DashboardPassword string `yaml:"DashboardPassword"`
 	TimeoutSeconds    int    `yaml:"TimeoutSeconds"`
 	ShadowMode        bool   `yaml:"ShadowMode"`
 	SyncEnabled       bool   `yaml:"SyncEnabled"`

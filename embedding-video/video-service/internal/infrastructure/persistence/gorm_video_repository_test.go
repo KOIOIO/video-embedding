@@ -2,17 +2,19 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/model"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/model"
 )
 
 type sqlCaptureLogger struct {
@@ -40,18 +42,18 @@ func newVideoRepoTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestCanUploadVideoAllowsUserTypesTwoAndThreeOnly(t *testing.T) {
+func TestCanUploadVideoAllowsOnlyActiveAdministrators(t *testing.T) {
 	ctx := context.Background()
 	db := newVideoRepoTestDB(t)
-	if err := db.Exec(`CREATE TABLE sys_user (id INTEGER PRIMARY KEY, user_type INTEGER NOT NULL)`).Error; err != nil {
+	if err := db.Exec(`CREATE TABLE sys_user (id INTEGER PRIMARY KEY, user_type INTEGER NOT NULL, status INTEGER NOT NULL, deleted INTEGER NOT NULL)`).Error; err != nil {
 		t.Fatalf("create sys_user: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO sys_user (id, user_type) VALUES (1, 1), (2, 2), (3, 3)`).Error; err != nil {
+	if err := db.Exec(`INSERT INTO sys_user (id, user_type, status, deleted) VALUES (1, 1, 1, 0), (2, 2, 1, 0), (3, 3, 1, 0), (4, 3, 0, 0), (5, 3, 1, 1)`).Error; err != nil {
 		t.Fatalf("seed sys_user: %v", err)
 	}
 	repo := NewGormVideoRepository(db)
 
-	for _, userID := range []uint64{2, 3} {
+	for _, userID := range []uint64{3} {
 		allowed, err := repo.CanUploadVideo(ctx, userID)
 		if err != nil {
 			t.Fatalf("CanUploadVideo(%d) returned error: %v", userID, err)
@@ -61,13 +63,59 @@ func TestCanUploadVideoAllowsUserTypesTwoAndThreeOnly(t *testing.T) {
 		}
 	}
 
-	for _, userID := range []uint64{1, 404} {
+	for _, userID := range []uint64{1, 2, 4, 5, 404} {
 		allowed, err := repo.CanUploadVideo(ctx, userID)
 		if err != nil {
 			t.Fatalf("CanUploadVideo(%d) returned error: %v", userID, err)
 		}
 		if allowed {
 			t.Fatalf("CanUploadVideo(%d) = true, want false", userID)
+		}
+	}
+}
+
+func TestMapRecBolePerformanceRowsPreservesModelVersion(t *testing.T) {
+	timestamp := time.Date(2026, 7, 21, 9, 15, 0, 0, time.UTC)
+	points := mapRecBolePerformanceRows([]recBolePerformanceRow{{
+		ModelVersion: "recbole_v2",
+		MetricTime:   timestamp,
+		Value:        0.35,
+	}})
+
+	if len(points) != 1 || points[0].Timestamp != timestamp || points[0].Value != 0.35 || points[0].ModelVersion != "recbole_v2" {
+		t.Fatalf("points = %+v", points)
+	}
+}
+
+func TestListRecommendationRecBolePerformanceBindsMetricAndRange(t *testing.T) {
+	capture := &sqlCaptureLogger{}
+	db, err := gorm.Open(postgres.Open("host=localhost user=test dbname=test sslmode=disable"), &gorm.Config{
+		DryRun:               true,
+		DisableAutomaticPing: true,
+		Logger:               capture,
+	})
+	if err != nil {
+		t.Fatalf("open dry-run postgres: %v", err)
+	}
+	repo := NewGormVideoRepository(db)
+	begin := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 31, 23, 59, 59, 0, time.UTC)
+
+	if _, err := repo.ListRecommendationRecBolePerformance(context.Background(), "NDCG@20", begin, end); err != nil && !errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+		t.Fatalf("ListRecommendationRecBolePerformance returned error: %v", err)
+	}
+	generated := strings.Join(capture.sql, "\n")
+	for _, fragment := range []string{
+		"metrics_json ->> 'NDCG@20'",
+		"jsonb_typeof(metrics_json -> 'NDCG@20')",
+		"model_name = 'recbole'",
+		"framework = 'recbole'",
+		"2026-07-01 00:00:00",
+		"2026-07-31 23:59:59",
+		"ORDER BY metric_time ASC, id ASC",
+	} {
+		if !strings.Contains(generated, fragment) {
+			t.Fatalf("generated SQL missing %q:\n%s", fragment, generated)
 		}
 	}
 }
@@ -271,7 +319,8 @@ func TestRecommendationEffectMetricsAggregatesByDayAndStrategy(t *testing.T) {
 	ctx := context.Background()
 	db := newVideoRepoTestDB(t)
 	repo := NewGormVideoRepository(db)
-	now := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
+	current := time.Now()
+	now := time.Date(current.Year(), current.Month(), current.Day(), 12, 0, 0, 0, current.Location())
 	yesterday := now.AddDate(0, 0, -1)
 
 	if err := db.Create(&[]model.EduRecommendExposure{
@@ -290,10 +339,10 @@ func TestRecommendationEffectMetricsAggregatesByDayAndStrategy(t *testing.T) {
 	if len(metrics.Daily) != 2 {
 		t.Fatalf("daily rows = %+v, want 2", metrics.Daily)
 	}
-	if metrics.Daily[0].Day != "2026-07-08" || metrics.Daily[0].Exposures != 1 || metrics.Daily[0].Watched != 1 || metrics.Daily[0].WatchRate != 1 {
+	if metrics.Daily[0].Day != yesterday.Format(time.DateOnly) || metrics.Daily[0].Exposures != 1 || metrics.Daily[0].Watched != 1 || metrics.Daily[0].WatchRate != 1 {
 		t.Fatalf("first daily = %+v", metrics.Daily[0])
 	}
-	if metrics.Daily[1].Day != "2026-07-09" || metrics.Daily[1].Exposures != 2 || metrics.Daily[1].Watched != 1 || metrics.Daily[1].WatchRate != 0.5 {
+	if metrics.Daily[1].Day != now.Format(time.DateOnly) || metrics.Daily[1].Exposures != 2 || metrics.Daily[1].Watched != 1 || metrics.Daily[1].WatchRate != 0.5 {
 		t.Fatalf("second daily = %+v", metrics.Daily[1])
 	}
 	if len(metrics.Strategies) != 2 {

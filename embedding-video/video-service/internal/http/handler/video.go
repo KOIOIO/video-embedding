@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	videohandler "nlp-video-analysis/internal/http/handler/videos"
+	videohandler "video-service/internal/http/handler/videos"
 )
 
 type VideoHandler struct {
@@ -16,7 +16,7 @@ func NewVideoHandler(app any) *VideoHandler {
 
 // ListVideos godoc
 // @Summary 查询视频列表
-// @Tags 视频服务
+// @Tags 视频资源
 // @Produce json
 // @Param type query string false "视频类型筛选" Enums(ALL,RAW,HLS) default(ALL)
 // @Success 200 {object} dto.VideoListResponse
@@ -29,7 +29,7 @@ func (h *VideoHandler) ListVideos(c *gin.Context) {
 
 // UpdateVideoMetadata godoc
 // @Summary 修改视频基础信息
-// @Tags 视频服务
+// @Tags 视频资源
 // @Accept json
 // @Produce json
 // @Param id path int true "视频ID"
@@ -38,6 +38,7 @@ func (h *VideoHandler) ListVideos(c *gin.Context) {
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
+// @Security BearerAuth
 // @Router /api/videos/{id} [patch]
 func (h *VideoHandler) UpdateVideoMetadata(c *gin.Context) {
 	h.inner.UpdateVideoMetadata(c)
@@ -45,13 +46,14 @@ func (h *VideoHandler) UpdateVideoMetadata(c *gin.Context) {
 
 // DeleteVideo godoc
 // @Summary 删除视频
-// @Tags 视频服务
+// @Tags 视频资源
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} dto.DeleteVideoResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
+// @Security BearerAuth
 // @Router /api/videos/{id} [delete]
 func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 	h.inner.DeleteVideo(c)
@@ -59,7 +61,7 @@ func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 
 // PlayVideo godoc
 // @Summary 获取视频播放地址
-// @Tags 视频服务
+// @Tags 视频播放与转码
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} dto.PlayVideoResponse
@@ -73,7 +75,7 @@ func (h *VideoHandler) PlayVideo(c *gin.Context) {
 
 // GetSimilarVideos godoc
 // @Summary 查询相似视频
-// @Tags 视频服务
+// @Tags 视频资源
 // @Produce json
 // @Param id path int true "视频ID"
 // @Param limit query int false "返回数量" default(6)
@@ -87,7 +89,7 @@ func (h *VideoHandler) GetSimilarVideos(c *gin.Context) {
 
 // GetViewCount godoc
 // @Summary 查询视频播放次数
-// @Tags 视频服务
+// @Tags 视频资源
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} dto.ViewCountResponse
@@ -101,7 +103,7 @@ func (h *VideoHandler) GetViewCount(c *gin.Context) {
 
 // SetVideoPublished godoc
 // @Summary 设置视频发布状态
-// @Tags 视频服务
+// @Tags 视频资源
 // @Accept json
 // @Produce json
 // @Param id path int true "视频ID"
@@ -110,6 +112,7 @@ func (h *VideoHandler) GetViewCount(c *gin.Context) {
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
+// @Security BearerAuth
 // @Router /api/videos/{id}/publish [post]
 func (h *VideoHandler) SetVideoPublished(c *gin.Context) {
 	h.inner.SetVideoPublished(c)
@@ -117,7 +120,7 @@ func (h *VideoHandler) SetVideoPublished(c *gin.Context) {
 
 // SetVideoRecommend godoc
 // @Summary 设置视频推荐状态
-// @Tags 视频服务
+// @Tags 视频资源
 // @Accept json
 // @Produce json
 // @Param id path int true "视频ID"
@@ -126,6 +129,7 @@ func (h *VideoHandler) SetVideoPublished(c *gin.Context) {
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
+// @Security BearerAuth
 // @Router /api/videos/{id}/recommend [post]
 func (h *VideoHandler) SetVideoRecommend(c *gin.Context) {
 	h.inner.SetVideoRecommend(c)
@@ -133,7 +137,7 @@ func (h *VideoHandler) SetVideoRecommend(c *gin.Context) {
 
 // SubmitVideoReaction godoc
 // @Summary 提交或取消视频互动
-// @Tags 视频服务
+// @Tags 视频互动
 // @Accept json
 // @Produce json
 // @Param id path int true "视频ID"
@@ -149,7 +153,7 @@ func (h *VideoHandler) SubmitVideoReaction(c *gin.Context) {
 
 // GetVideoReactionCounts godoc
 // @Summary 查询视频点赞和双击数量
-// @Tags 视频服务
+// @Tags 视频互动
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} dto.VideoReactionCountsResponse
@@ -163,7 +167,7 @@ func (h *VideoHandler) GetVideoReactionCounts(c *gin.Context) {
 
 // SubmitSegmentReaction godoc
 // @Summary 提交或取消视频片段互动
-// @Tags 视频服务
+// @Tags 视频片段
 // @Accept json
 // @Produce json
 // @Param id path int true "视频片段ID"
@@ -179,7 +183,7 @@ func (h *VideoHandler) SubmitSegmentReaction(c *gin.Context) {
 
 // GetSegmentReactionCounts godoc
 // @Summary 查询视频片段点赞和双击数量
-// @Tags 视频服务
+// @Tags 视频片段
 // @Produce json
 // @Param id path int true "视频片段ID"
 // @Success 200 {object} dto.SegmentReactionCountsResponse
@@ -193,7 +197,7 @@ func (h *VideoHandler) GetSegmentReactionCounts(c *gin.Context) {
 
 // RandomPlayVideoSegment godoc
 // @Summary 随机播放视频片段
-// @Tags 视频服务
+// @Tags 视频片段
 // @Produce json
 // @Param user_id query int false "用户ID，用于个性化推荐和最近播放去重"
 // @Success 200 {object} dto.RandomVideoSegmentResponse
@@ -207,7 +211,7 @@ func (h *VideoHandler) RandomPlayVideoSegment(c *gin.Context) {
 
 // ExternalRecBoleRecommendations godoc
 // @Summary 获取 RecBole 召回视频片段ID
-// @Tags 视频服务
+// @Tags 内部接口
 // @Produce json
 // @Param user_id query int true "用户ID"
 // @Param n query int false "返回的视频片段ID数量，最多500个"
@@ -221,13 +225,14 @@ func (h *VideoHandler) ExternalRecBoleRecommendations(c *gin.Context) {
 
 // GetTranscodeStatus godoc
 // @Summary 查询转码任务状态
-// @Tags 视频服务
+// @Tags 视频播放与转码
 // @Produce json
 // @Param taskId path string true "转码任务ID"
 // @Success 200 {object} dto.TranscodeStatusResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
+// @Security BearerAuth
 // @Router /api/transcode-tasks/{taskId} [get]
 func (h *VideoHandler) GetTranscodeStatus(c *gin.Context) {
 	h.inner.GetTranscodeStatus(c)

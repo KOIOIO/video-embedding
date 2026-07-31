@@ -24,7 +24,7 @@ class RecBoleTrainTest(unittest.TestCase):
         try:
             with mock.patch.object(train, "allow_trusted_torch_checkpoint_loads"):
                 train.run_recbole_training(
-                    types.SimpleNamespace(model="BPR", dataset="video_dataset"),
+                    types.SimpleNamespace(model="BPR", dataset="video_app"),
                     {"epochs": 20},
                 )
             self.assertEqual(seen_argv, [["train.py"]])

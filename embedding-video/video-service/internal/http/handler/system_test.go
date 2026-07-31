@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/http/dto"
-	"nlp-video-analysis/internal/http/handler"
+	"video-service/internal/http/dto"
+	"video-service/internal/http/handler"
 )
 
 type stubSystemApp struct {

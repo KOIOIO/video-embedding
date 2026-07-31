@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )

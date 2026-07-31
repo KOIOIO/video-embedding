@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"nlp-video-analysis/internal/config"
-	"nlp-video-analysis/internal/lifecycle"
+	"video-service/internal/config"
+	"video-service/internal/lifecycle"
 
 	"go.uber.org/zap"
 )
