@@ -1,0 +1,35 @@
+# Local override for existing postgres, redis, and minio containers attached to
+# the video-embedding_default network.
+services:
+  api:
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        cp /app/configs/video.yml /tmp/video.yml
+        sed -i 's/localhost:6379/redis:6379/; s/localhost:9000/minio:9000/; s#http://localhost:8087#http://gorse:8088#' /tmp/video.yml
+        export CONFIG_FILE=/tmp/video.yml
+        export VIDEO_CONFIG_FILE=/tmp/video.yml
+        export POSTGRES_DSN="$${POSTGRES_DSN/host=localhost/host=postgres}"
+        exec httpapi
+
+  worker:
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        cp /app/configs/video.yml /tmp/video.yml
+        sed -i 's/localhost:6379/redis:6379/; s/localhost:9000/minio:9000/; s#http://localhost:8087#http://gorse:8088#' /tmp/video.yml
+        export CONFIG_FILE=/tmp/video.yml
+        export VIDEO_CONFIG_FILE=/tmp/video.yml
+        export POSTGRES_DSN="$${POSTGRES_DSN/host=localhost/host=postgres}"
+        exec worker
+
+  recbole_trainer:
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        cp /app/video-service/configs/video.yml /tmp/video.yml
+        sed -i 's/localhost:6379/redis:6379/; s/localhost:9000/minio:9000/; s#http://localhost:8087#http://gorse:8088#' /tmp/video.yml
+        export CONFIG_FILE=/tmp/video.yml
+        export VIDEO_CONFIG_FILE=/tmp/video.yml
+        export POSTGRES_DSN="$${POSTGRES_DSN/host=localhost/host=postgres}"
+        exec recboletrainer
