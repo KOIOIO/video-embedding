@@ -55,12 +55,21 @@ func applyEnvOverrides(c *Config) {
 	}
 	if value := firstEnv("COS_ENDPOINT", "RUSTFS_ENDPOINT"); value != "" {
 		c.RustFS.Endpoint = value
+		c.KnowledgeVideoStorage.Endpoint = value
 	}
 	if value := firstEnv("COS_SECRET_ID", "RUSTFS_ACCESS_KEY"); value != "" {
 		c.RustFS.AccessKey = value
+		c.KnowledgeVideoStorage.AccessKey = value
 	}
 	if value := firstEnv("COS_SECRET_KEY", "RUSTFS_SECRET_KEY"); value != "" {
 		c.RustFS.SecretKey = value
+		c.KnowledgeVideoStorage.SecretKey = value
+	}
+	if value := firstEnv("RUSTFS_BUCKET"); value != "" {
+		c.RustFS.Bucket = value
+	}
+	if value := firstEnv("KNOWLEDGE_VIDEO_BUCKET"); value != "" {
+		c.KnowledgeVideoStorage.Bucket = value
 	}
 	if value := firstEnv("GORSE_API_KEY"); value != "" {
 		c.Gorse.APIKey = value

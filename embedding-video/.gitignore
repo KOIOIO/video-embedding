@@ -6,6 +6,9 @@
 .env
 .env.local
 .env.deploy
+.env.migrated.local
+!.env.migrated.example
+.migration-data/
 gorse/config.local.toml
 gorse/config.deploy.toml
 .idea

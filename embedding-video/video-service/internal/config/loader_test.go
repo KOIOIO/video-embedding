@@ -557,6 +557,9 @@ Gorse:
 	t.Setenv("REDIS_PASSWORD", "env-redis")
 	t.Setenv("COS_SECRET_ID", "env-ak")
 	t.Setenv("COS_SECRET_KEY", "env-sk")
+	t.Setenv("COS_ENDPOINT", "storage.example:9000")
+	t.Setenv("RUSTFS_BUCKET", "video-cloud-drive")
+	t.Setenv("KNOWLEDGE_VIDEO_BUCKET", "knowledge-point-videos")
 	t.Setenv("GORSE_API_KEY", "env-gorse")
 	t.Setenv("GORSE_ENDPOINT", "http://gorse.internal:8088")
 
@@ -573,6 +576,18 @@ Gorse:
 	}
 	if cfg.RustFS.AccessKey != "env-ak" || cfg.RustFS.SecretKey != "env-sk" {
 		t.Fatalf("RustFS credentials = %q/%q, want env overrides", cfg.RustFS.AccessKey, cfg.RustFS.SecretKey)
+	}
+	if cfg.RustFS.Bucket != "video-cloud-drive" {
+		t.Fatalf("RustFS.Bucket = %q, want env override", cfg.RustFS.Bucket)
+	}
+	if cfg.KnowledgeVideoStorage.Endpoint != "storage.example:9000" {
+		t.Fatalf("KnowledgeVideoStorage.Endpoint = %q, want env override", cfg.KnowledgeVideoStorage.Endpoint)
+	}
+	if cfg.KnowledgeVideoStorage.AccessKey != "env-ak" || cfg.KnowledgeVideoStorage.SecretKey != "env-sk" {
+		t.Fatalf("KnowledgeVideoStorage credentials = %q/%q, want env overrides", cfg.KnowledgeVideoStorage.AccessKey, cfg.KnowledgeVideoStorage.SecretKey)
+	}
+	if cfg.KnowledgeVideoStorage.Bucket != "knowledge-point-videos" {
+		t.Fatalf("KnowledgeVideoStorage.Bucket = %q, want env override", cfg.KnowledgeVideoStorage.Bucket)
 	}
 	if cfg.Gorse.APIKey != "env-gorse" {
 		t.Fatalf("Gorse.APIKey = %q, want env override", cfg.Gorse.APIKey)

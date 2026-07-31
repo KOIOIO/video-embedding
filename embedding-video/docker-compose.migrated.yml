@@ -1,0 +1,58 @@
+name: video-embedding-migrated
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: video-embedding-postgres
+    env_file:
+      - .env.migrated.local
+    ports:
+      - "${MIGRATED_POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - migrated_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: video-embedding-redis
+    env_file:
+      - .env.migrated.local
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    ports:
+      - "${MIGRATED_REDIS_PORT:-16379}:6379"
+    volumes:
+      - migrated_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    container_name: video-embedding-minio
+    env_file:
+      - .env.migrated.local
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MIGRATED_MINIO_PORT:-19000}:9000"
+      - "${MIGRATED_MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - migrated_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  migrated_postgres_data:
+  migrated_redis_data:
+  migrated_minio_data:
