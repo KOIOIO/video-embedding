@@ -8,7 +8,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	goredis "github.com/go-redis/redis/v8"
 
-	"nlp-video-analysis/internal/application/videoapp"
+	"video-service/internal/application/videoapp"
 )
 
 func newTestVideoReactionBuffer(t *testing.T) (*VideoReactionBuffer, *goredis.Client, func()) {

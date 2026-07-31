@@ -81,7 +81,7 @@ message RecommendItem {
 
 - [ ] **Step 2: 重新生成 pb 代码**
 
-在 `nlp-video-project/` 工程目录（包含 `video/` 子目录）执行：
+在 `legacy-video/` 工程目录（包含 `video/` 子目录）执行：
 
 ```bash
 protoc --go_out=. --go-grpc_out=. video/video_service.proto
@@ -312,7 +312,7 @@ git commit -m "feat(api): 按问题字符串返回top3相近分段并补齐play_
 - [ ] **Step 1: 启动 rpc 与 api（建议用 go build 避免 go run 被策略拦截）**
 
 ```bash
-cd nlp-video-project
+cd legacy-video
 
 go build -o .\bin\rpc.exe .\cmd\rpc
 go build -o .\bin\api.exe .\cmd\api

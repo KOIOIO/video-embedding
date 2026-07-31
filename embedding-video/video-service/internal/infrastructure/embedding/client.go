@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 type Client struct {

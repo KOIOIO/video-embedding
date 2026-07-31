@@ -13,6 +13,7 @@ export function normalizePerformancePoints(points) {
         timestamp: new Date(time).toISOString(),
         time,
         value,
+        modelVersion: String(point?.model_version || '').trim(),
       }
     })
     .filter(Boolean)

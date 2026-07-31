@@ -32,12 +32,12 @@ describe('shared application shell', () => {
     expect(appVue).toContain('@click="selectWorkspace(\'video\')"')
     expect(appVue).toContain('@click="selectWorkspace(\'recommendation\')"')
     expect(appVue).toContain('@click="logout"')
-    expect(appVue).toContain('CONSOLE_ADMIN_USERNAME')
+    expect(appVue).toContain('{{ accountName }}')
   })
 
   test('keeps browser storage access behind safe session helpers', () => {
     expect(appVue).toContain('clearLegacyAuthenticated()')
-    expect(appVue).toContain('readUIUnlocked()')
+    expect(appVue).toContain('readAuthSession()')
     expect(appVue).toContain('readActiveWorkspace()')
     expect(appVue).not.toContain('window.localStorage')
     expect(appVue).not.toContain('globalThis.localStorage')

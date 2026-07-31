@@ -9,8 +9,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"nlp-video-analysis/internal/infrastructure/persistence/sqlqueries"
-	"nlp-video-analysis/internal/model"
+	"video-service/internal/infrastructure/persistence/sqlqueries"
+	"video-service/internal/model"
 )
 
 // LLMSegment 表示 LLM 生成的视频分段

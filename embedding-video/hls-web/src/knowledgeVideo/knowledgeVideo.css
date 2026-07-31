@@ -1,0 +1,57 @@
+.knowledge-video-workspace { min-height: calc(100vh - 66px); padding: 24px; color: var(--text); background: #f5f7f8; }
+.kv-heading { max-width: 1600px; margin: 0 auto 18px; display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+.kv-heading p, .kv-heading h1, .kv-section-title h2, .kv-section-title p { margin: 0; }
+.kv-heading p { color: var(--primary); font-size: 12px; font-weight: 800; }
+.kv-heading h1 { margin-top: 3px; font-size: 28px; line-height: 1.2; }
+.kv-layout { width: min(100%, 1600px); margin: 0 auto; display: grid; grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.kv-upload-panel, .kv-tree-panel, .kv-player-panel { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-card); }
+.kv-upload-panel { position: sticky; top: 90px; padding: 20px; }
+.kv-browser { min-width: 0; display: grid; gap: 18px; }
+.kv-tree-panel, .kv-player-panel { padding: 20px; }
+.kv-section-title { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; }
+.kv-section-title > span { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 6px; background: var(--primary-soft); color: var(--primary-strong); font-size: 12px; font-weight: 800; }
+.kv-section-title h2 { font-size: 17px; line-height: 1.25; }
+.kv-section-title p { margin-top: 2px; color: var(--text-muted); font-size: 12px; }
+.kv-upload-form { display: grid; gap: 14px; }
+.kv-file-field, .kv-user-field { display: grid; gap: 7px; color: #465250; font-size: 13px; font-weight: 700; }
+.kv-file-field { padding: 13px; border: 1px dashed var(--border-strong); border-radius: 7px; background: var(--surface-soft); cursor: pointer; }
+.kv-file-field input { width: 100%; color: var(--text-muted); font-size: 12px; }
+.kv-file-field small { overflow: hidden; color: var(--primary-strong); text-overflow: ellipsis; white-space: nowrap; }
+.kv-user-field input, .kv-search-row input { width: 100%; min-height: 40px; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--field); color: var(--text); outline: none; }
+.kv-user-field input:focus, .kv-search-row input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(15, 118, 110, .12); }
+.kv-primary, .kv-secondary, .kv-filters button { min-height: 38px; border-radius: 6px; font-weight: 750; cursor: pointer; }
+.kv-primary { border: 1px solid var(--primary); background: var(--primary); color: #fff; }
+.kv-primary:disabled { cursor: not-allowed; opacity: .55; }
+.kv-secondary { padding: 0 14px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
+.kv-progress-stack { display: grid; gap: 14px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.kv-progress-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; color: var(--text-muted); font-size: 12px; }
+.kv-progress-label strong { color: var(--text); }
+.kv-progress-stack progress { width: 100%; height: 8px; accent-color: var(--primary); }
+.kv-batch-status { margin: 0; color: var(--text-muted); font-size: 12px; }
+.kv-batch-list, .kv-issues { max-height: 180px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.kv-batch-list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
+.kv-batch-list b { color: var(--text-muted); }
+.kv-search-row { margin-bottom: 10px; }
+.kv-filters { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; }
+.kv-filters button { flex: 0 0 auto; min-height: 32px; padding: 0 12px; border: 1px solid var(--border); background: var(--surface-soft); color: var(--text-muted); font-size: 12px; }
+.kv-filters button.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-strong); }
+.kv-tree { max-height: 440px; overflow: auto; border-top: 1px solid var(--border); }
+.tree-node { width: 100%; min-height: 54px; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 10px 7px calc(10px + var(--depth) * 22px); border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.tree-node:hover, .tree-node.selected { background: var(--primary-soft); }
+.tree-branch { width: 7px; height: 7px; border: 2px solid var(--border-strong); border-radius: 50%; }
+.tree-copy { min-width: 0; display: grid; }
+.tree-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.tree-copy small { color: var(--text-soft); font-size: 11px; }
+.kv-status { min-width: 54px; padding: 3px 7px; border-radius: 5px; background: var(--surface-muted); color: var(--text-muted); font-size: 11px; font-weight: 750; text-align: center; }
+.kv-status[data-status="ready"] { background: var(--primary-soft); color: var(--primary-strong); }
+.kv-status[data-status="pending"], .kv-status[data-status="transcoding"] { background: var(--accent-soft); color: #96520a; }
+.kv-status[data-status="failed"] { background: var(--danger-soft); color: var(--danger); }
+.kv-player-panel { min-height: 340px; }
+.kv-player-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 16px; align-items: start; }
+.kv-player-window { min-width: 0; padding: 14px; border: 1px solid #33413f; border-radius: 7px; background: #18201f; }
+.kv-player-empty { min-height: 230px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; background: #18201f; color: #cbd8d5; text-align: center; }
+.kv-empty { padding: 30px 10px; color: var(--text-muted); text-align: center; }
+.kv-error { margin: 12px 0 0; padding: 9px 11px; border-left: 3px solid var(--danger); background: var(--danger-soft); color: #8f1233; font-size: 12px; }
+.kv-issues { margin-top: 8px; color: #8f1233; font-size: 12px; }
+@media (max-width: 900px) { .knowledge-video-workspace { padding: 16px; } .kv-layout { grid-template-columns: 1fr; } .kv-upload-panel { position: static; } }
+@media (max-width: 560px) { .kv-heading { align-items: stretch; flex-direction: column; } .kv-heading h1 { font-size: 24px; } .kv-tree-panel, .kv-player-panel, .kv-upload-panel { padding: 15px; } .tree-node { padding-left: calc(7px + var(--depth) * 14px); } }

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 func TestRecommendationTraceRandomPlayUsesPreviewOnlyPath(t *testing.T) {

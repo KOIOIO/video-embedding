@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
 
-	"nlp-video-analysis/internal/infrastructure/objectstorage"
+	"video-service/internal/infrastructure/objectstorage"
 )
 
 func init() {

@@ -33,21 +33,21 @@
 
 ### 从原项目复制并复用的目录
 
-- `nlp-video-project/internal/application/videoapp/*`
-- `nlp-video-project/internal/infrastructure/*`
-- `nlp-video-project/internal/config/*`
-- `nlp-video-project/internal/lifecycle/*`
-- `nlp-video-project/internal/domain/*`
-- `nlp-video-project/internal/model/*`
-- `nlp-video-project/middleware/*`
+- `video-embedding/internal/application/videoapp/*`
+- `video-embedding/internal/infrastructure/*`
+- `video-embedding/internal/config/*`
+- `video-embedding/internal/lifecycle/*`
+- `video-embedding/internal/domain/*`
+- `video-embedding/internal/model/*`
+- `video-embedding/middleware/*`
 
 ### 参考但不纳入新运行链路的旧文件
 
-- `nlp-video-project/cmd/api/main.go`
-- `nlp-video-project/cmd/rpc/main.go`
-- `nlp-video-project/internal/api/handler/impl/*.go`
-- `nlp-video-project/internal/api/client/client.go`
-- `nlp-video-project/internal/rpc/service/*.go`
+- `video-embedding/cmd/api/main.go`
+- `video-embedding/cmd/rpc/main.go`
+- `video-embedding/internal/api/handler/impl/*.go`
+- `video-embedding/internal/api/client/client.go`
+- `video-embedding/internal/rpc/service/*.go`
 
 ---
 
@@ -100,7 +100,7 @@ cmd/rpc/
 `go.mod` 初版建议沿用原模块名风格，只把根目录改成新工程可自洽的模块路径，例如：
 
 ```go
-module nlp-video-project/video-service
+module video-embedding/video-service
 
 go 1.23
 ```
@@ -109,8 +109,8 @@ go 1.23
 
 ```go
 import (
-    "nlp-video-project/video-service/internal/application/videoapp"
-    "nlp-video-project/video-service/internal/config"
+    "video-embedding/video-service/internal/application/videoapp"
+    "video-embedding/video-service/internal/config"
 )
 ```
 
@@ -288,7 +288,7 @@ git commit -m "feat(http): add api response and error model"
 - Create: `video-service/internal/http/dto/video.go`
 - Create: `video-service/internal/http/handler/video.go`
 - Modify: `video-service/internal/http/router/router.go`
-- Reference: `nlp-video-project/internal/api/handler/impl/video.go`
+- Reference: `video-embedding/internal/api/handler/impl/video.go`
 - Test: `video-service/internal/http/handler/video_test.go`
 
 - [ ] **Step 1: 为列表接口写失败测试**
@@ -420,8 +420,8 @@ git commit -m "feat(http): migrate core video endpoints"
 - Create: `video-service/internal/http/handler/upload.go`
 - Create: `video-service/internal/http/dto/upload.go`
 - Modify: `video-service/internal/http/router/router.go`
-- Reference: `nlp-video-project/internal/api/handler/impl/upload.go`
-- Reference: `nlp-video-project/internal/api/handler/impl/cover.go`
+- Reference: `video-embedding/internal/api/handler/impl/upload.go`
+- Reference: `video-embedding/internal/api/handler/impl/cover.go`
 - Test: `video-service/internal/http/handler/upload_test.go`
 
 - [ ] **Step 1: 为 multipart 上传写失败测试**
@@ -512,9 +512,9 @@ git commit -m "feat(http): migrate upload endpoints"
 - Create: `video-service/internal/http/handler/question.go`
 - Create: `video-service/internal/http/dto/recommend.go`
 - Modify: `video-service/internal/http/router/router.go`
-- Reference: `nlp-video-project/internal/api/handler/impl/recommend.go`
-- Reference: `nlp-video-project/internal/api/handler/impl/watch.go`
-- Reference: `nlp-video-project/internal/api/handler/impl/question.go`
+- Reference: `video-embedding/internal/api/handler/impl/recommend.go`
+- Reference: `video-embedding/internal/api/handler/impl/watch.go`
+- Reference: `video-embedding/internal/api/handler/impl/question.go`
 - Test: `video-service/internal/http/handler/recommend_test.go`
 - Test: `video-service/internal/http/handler/question_test.go`
 
@@ -698,7 +698,7 @@ PASS
 如有前置生成依赖，再补跑：
 
 ```bash
-go test ./video-service/... && go test ./nlp-video-project/... 
+go test ./video-service/... && go test ./video-embedding/...
 ```
 
 目标：

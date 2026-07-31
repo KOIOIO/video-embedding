@@ -1,5 +1,23 @@
 basePath: /
 definitions:
+  adminauth.Admin:
+    properties:
+      id:
+        type: integer
+      real_name:
+        type: string
+      username:
+        type: string
+    type: object
+  adminauth.LoginResult:
+    properties:
+      access_token:
+        type: string
+      admin:
+        $ref: '#/definitions/adminauth.Admin'
+      expires_at:
+        type: string
+    type: object
   dto.ArchiveProcessingProgressData:
     properties:
       batch_id:
@@ -72,6 +90,11 @@ definitions:
       success:
         type: boolean
     type: object
+  dto.HealthResponse:
+    properties:
+      status:
+        type: string
+    type: object
   dto.InitiateChunkedUploadRequest:
     properties:
       chunk_size:
@@ -88,8 +111,182 @@ definitions:
         type: string
       total_chunks:
         type: integer
+    type: object
+  dto.KnowledgeVideoBatchData:
+    properties:
+      batch_id:
+        type: integer
+      failed_count:
+        type: integer
+      ready_count:
+        type: integer
+      status:
+        type: string
+      total_count:
+        type: integer
+      videos:
+        items:
+          $ref: '#/definitions/dto.KnowledgeVideoItem'
+        type: array
+    type: object
+  dto.KnowledgeVideoBatchResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.KnowledgeVideoBatchData'
+      success:
+        type: boolean
+    type: object
+  dto.KnowledgeVideoImportData:
+    properties:
+      batch_id:
+        type: integer
+      progress_url:
+        type: string
+      status:
+        type: string
+      total_count:
+        type: integer
+    type: object
+  dto.KnowledgeVideoImportResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.KnowledgeVideoImportData'
+      success:
+        type: boolean
+    type: object
+  dto.KnowledgeVideoItem:
+    properties:
+      duration:
+        type: integer
+      error_message:
+        type: string
+      id:
+        type: integer
+      knowledge_point_id:
+        type: integer
+      knowledge_point_name:
+        type: string
+      status:
+        type: string
+      video_name:
+        type: string
+    type: object
+  dto.KnowledgeVideoPlaybackData:
+    properties:
+      duration:
+        type: integer
+      knowledge_point_id:
+        type: integer
+      knowledge_point_name:
+        type: string
+      playback_url:
+        type: string
+      video_id:
+        type: integer
+      video_name:
+        type: string
+      videos:
+        items:
+          $ref: '#/definitions/dto.KnowledgeVideoPlaybackItem'
+        type: array
+    type: object
+  dto.KnowledgeVideoPlaybackItem:
+    properties:
+      display_name:
+        type: string
+      duration:
+        type: integer
+      knowledge_video_id:
+        type: integer
+      playback_url:
+        type: string
+      source_file_name:
+        type: string
+    type: object
+  dto.KnowledgeVideoPlaybackRecordData:
+    type: object
+  dto.KnowledgeVideoPlaybackRecordRequest:
+    properties:
       user_id:
         type: integer
+    type: object
+  dto.KnowledgeVideoPlaybackRecordResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.KnowledgeVideoPlaybackRecordData'
+      success:
+        type: boolean
+    type: object
+  dto.KnowledgeVideoPlaybackResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.KnowledgeVideoPlaybackData'
+      success:
+        type: boolean
+    type: object
+  dto.KnowledgeVideoTreeData:
+    properties:
+      nodes:
+        items:
+          $ref: '#/definitions/dto.KnowledgeVideoTreeNode'
+        type: array
+    type: object
+  dto.KnowledgeVideoTreeNode:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/dto.KnowledgeVideoTreeNode'
+        type: array
+      id:
+        type: integer
+      name:
+        type: string
+      parent_id:
+        type: integer
+      video:
+        $ref: '#/definitions/dto.KnowledgeVideoTreeVideo'
+      videos:
+        items:
+          $ref: '#/definitions/dto.KnowledgeVideoTreeVideo'
+        type: array
+    type: object
+  dto.KnowledgeVideoTreeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.KnowledgeVideoTreeData'
+      success:
+        type: boolean
+    type: object
+  dto.KnowledgeVideoTreeVideo:
+    properties:
+      batch_id:
+        type: integer
+      duration:
+        type: integer
+      error_message:
+        type: string
+      id:
+        type: integer
+      status:
+        type: string
+      video_name:
+        type: string
+    type: object
+  dto.KnowledgeVideoValidationError:
+    properties:
+      error:
+        properties:
+          code:
+            type: string
+          issues:
+            items:
+              $ref: '#/definitions/knowledgevideo.ValidationIssue'
+            type: array
+          message:
+            type: string
+        type: object
+      success:
+        type: boolean
     type: object
   dto.PlayVideoData:
     properties:
@@ -251,6 +448,253 @@ definitions:
       success:
         type: boolean
     type: object
+  dto.RecommendationAdminGorseOverviewData:
+    properties:
+      candidate_limit:
+        type: integer
+      configured:
+        type: boolean
+      min_recommend_items:
+        type: integer
+      shadow_mode:
+        type: boolean
+      write_back_enabled:
+        type: boolean
+    type: object
+  dto.RecommendationAdminOverviewData:
+    properties:
+      engine:
+        type: string
+      generated_at:
+        type: string
+      gorse:
+        $ref: '#/definitions/dto.RecommendationAdminGorseOverviewData'
+      preview_only:
+        type: boolean
+      recbole:
+        $ref: '#/definitions/dto.RecommendationAdminRecBoleData'
+      redis:
+        $ref: '#/definitions/dto.RecommendationAdminRedisOverviewData'
+    type: object
+  dto.RecommendationAdminOverviewResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationAdminOverviewData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationAdminPreviewItem:
+    properties:
+      cover_url:
+        type: string
+      end_time_sec:
+        type: integer
+      is_watched:
+        type: boolean
+      model_version:
+        type: string
+      play_url:
+        type: string
+      question_id:
+        type: integer
+      rank:
+        type: integer
+      recommend_score:
+        type: number
+      start_time_sec:
+        type: integer
+      strategy:
+        type: string
+      title:
+        type: string
+      user_reacted:
+        type: boolean
+      user_reaction_type:
+        type: string
+      video_id:
+        type: integer
+      video_segment_id:
+        type: integer
+      watch_duration:
+        type: integer
+    type: object
+  dto.RecommendationAdminPreviewListData:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/dto.RecommendationAdminPreviewItem'
+        type: array
+      preview_only:
+        type: boolean
+      total:
+        type: integer
+    type: object
+  dto.RecommendationAdminPreviewListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationAdminPreviewListData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationAdminRecBoleData:
+    properties:
+      active_model_found:
+        type: boolean
+      active_model_version:
+        type: string
+    type: object
+  dto.RecommendationAdminRedisOverviewData:
+    properties:
+      bucket_enabled:
+        type: boolean
+      bucket_ttl_seconds:
+        type: integer
+      recent_max_size:
+        type: integer
+      recent_ttl_seconds:
+        type: integer
+    type: object
+  dto.RecommendationDailyEffectMetricData:
+    properties:
+      day:
+        type: string
+      exposures:
+        type: integer
+      watch_rate:
+        type: number
+      watched:
+        type: integer
+    type: object
+  dto.RecommendationDataFreshnessData:
+    properties:
+      age_seconds:
+        type: integer
+      detail:
+        type: string
+      has_data:
+        type: boolean
+      label:
+        type: string
+      latest_at:
+        type: string
+      source:
+        type: string
+      stale_after_seconds:
+        type: integer
+      status:
+        type: string
+    type: object
+  dto.RecommendationDatasourceStatsData:
+    properties:
+      embedded_segments:
+        type: integer
+      exposure_total:
+        type: integer
+      exposure_watch_rate:
+        type: number
+      playable_segments:
+        type: integer
+      published_videos:
+        type: integer
+      reaction_rows:
+        type: integer
+      recbole_items:
+        type: integer
+      recbole_users:
+        type: integer
+      recommend_videos:
+        type: integer
+      recommendation_rows:
+        type: integer
+      recommendation_watch_rate:
+        type: number
+      segment_embedding_rate:
+        type: number
+      segment_total:
+        type: integer
+      video_total:
+        type: integer
+      watched_exposures:
+        type: integer
+      watched_recommendations:
+        type: integer
+    type: object
+  dto.RecommendationDatasourceStatsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationDatasourceStatsData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationDiagnosticCheckData:
+    properties:
+      detail:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+      value:
+        type: string
+    type: object
+  dto.RecommendationDiagnosticsData:
+    properties:
+      days:
+        type: integer
+      freshness:
+        items:
+          $ref: '#/definitions/dto.RecommendationDataFreshnessData'
+        type: array
+      generated_at:
+        type: string
+      health:
+        items:
+          $ref: '#/definitions/dto.RecommendationDiagnosticCheckData'
+        type: array
+      recent_requests:
+        items:
+          $ref: '#/definitions/dto.RecommendationRecentRequestData'
+        type: array
+      request_limit:
+        type: integer
+      strategy_effects:
+        items:
+          $ref: '#/definitions/dto.RecommendationStrategyEffectMetricData'
+        type: array
+      tasks:
+        items:
+          $ref: '#/definitions/dto.RecommendationTaskStatusData'
+        type: array
+    type: object
+  dto.RecommendationDiagnosticsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationDiagnosticsData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationEffectMetricsData:
+    properties:
+      daily:
+        items:
+          $ref: '#/definitions/dto.RecommendationDailyEffectMetricData'
+        type: array
+      days:
+        type: integer
+      strategies:
+        items:
+          $ref: '#/definitions/dto.RecommendationStrategyEffectMetricData'
+        type: array
+    type: object
+  dto.RecommendationEffectMetricsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationEffectMetricsData'
+      success:
+        type: boolean
+    type: object
   dto.RecommendationItem:
     properties:
       cover_url:
@@ -295,6 +739,242 @@ definitions:
         $ref: '#/definitions/dto.RecommendationListData'
       success:
         type: boolean
+    type: object
+  dto.RecommendationRecBoleMetricData:
+    properties:
+      label:
+        type: string
+      value:
+        type: string
+    type: object
+  dto.RecommendationRecBolePerformanceData:
+    properties:
+      available_metrics:
+        items:
+          $ref: '#/definitions/dto.RecommendationRecBoleMetricData'
+        type: array
+      label:
+        type: string
+      metric:
+        type: string
+      points:
+        items:
+          $ref: '#/definitions/dto.RecommendationRecBolePerformancePointData'
+        type: array
+    type: object
+  dto.RecommendationRecBolePerformancePointData:
+    properties:
+      model_version:
+        type: string
+      timestamp:
+        type: string
+      value:
+        type: number
+    type: object
+  dto.RecommendationRecBolePerformanceResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationRecBolePerformanceData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationRecentRequestData:
+    properties:
+      exposures:
+        type: integer
+      last_event_time:
+        type: string
+      model_version:
+        type: string
+      question_id:
+        type: integer
+      request_id:
+        type: string
+      strategy:
+        type: string
+      user_id:
+        type: integer
+      watch_rate:
+        type: number
+      watched:
+        type: integer
+    type: object
+  dto.RecommendationRedisBucketItemData:
+    properties:
+      model_version:
+        type: string
+      rank:
+        type: integer
+      score:
+        type: number
+      strategy:
+        type: string
+      video_id:
+        type: integer
+      video_segment_id:
+        type: integer
+    type: object
+  dto.RecommendationRedisBucketStateData:
+    properties:
+      count:
+        type: integer
+      enabled:
+        type: boolean
+      exists:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/dto.RecommendationRedisBucketItemData'
+        type: array
+      max_size:
+        type: integer
+      min_size:
+        type: integer
+      ttl_seconds:
+        type: integer
+    type: object
+  dto.RecommendationRedisRecentStateData:
+    properties:
+      count:
+        type: integer
+      enabled:
+        type: boolean
+      exists:
+        type: boolean
+      max_size:
+        type: integer
+      over_limit:
+        type: boolean
+      segment_ids:
+        items:
+          type: integer
+        type: array
+      ttl_seconds:
+        type: integer
+    type: object
+  dto.RecommendationRedisStateData:
+    properties:
+      bucket:
+        $ref: '#/definitions/dto.RecommendationRedisBucketStateData'
+      generated_at:
+        type: string
+      recent:
+        $ref: '#/definitions/dto.RecommendationRedisRecentStateData'
+      user_id:
+        type: integer
+    type: object
+  dto.RecommendationRedisStateResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationRedisStateData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationStrategyEffectMetricData:
+    properties:
+      average_rank:
+        type: number
+      average_score:
+        type: number
+      exposures:
+        type: integer
+      model_version:
+        type: string
+      strategy:
+        type: string
+      watch_rate:
+        type: number
+      watched:
+        type: integer
+    type: object
+  dto.RecommendationTaskStatusData:
+    properties:
+      detail:
+        type: string
+      has_run_time:
+        type: boolean
+      last_run_at:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.RecommendationTraceData:
+    properties:
+      engine:
+        type: string
+      generated_at:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dto.RecommendationTraceItemData'
+        type: array
+      limit:
+        type: integer
+      mode:
+        type: string
+      preview_only:
+        type: boolean
+      question_id:
+        type: integer
+      question_text:
+        type: string
+      stages:
+        items:
+          $ref: '#/definitions/dto.RecommendationTraceStageData'
+        type: array
+      user_id:
+        type: integer
+    type: object
+  dto.RecommendationTraceItemData:
+    properties:
+      end_time_sec:
+        type: integer
+      is_watched:
+        type: boolean
+      model_version:
+        type: string
+      question_id:
+        type: integer
+      rank:
+        type: integer
+      reasons:
+        items:
+          type: string
+        type: array
+      recommend_score:
+        type: number
+      start_time_sec:
+        type: integer
+      status:
+        type: string
+      strategy:
+        type: string
+      title:
+        type: string
+      video_id:
+        type: integer
+      video_segment_id:
+        type: integer
+      watch_duration:
+        type: integer
+    type: object
+  dto.RecommendationTraceResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.RecommendationTraceData'
+      success:
+        type: boolean
+    type: object
+  dto.RecommendationTraceStageData:
+    properties:
+      detail:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
     type: object
   dto.ReportWatchRequest:
     properties:
@@ -362,6 +1042,34 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/dto.SimilarVideosData'
+      success:
+        type: boolean
+    type: object
+  dto.SystemMetricsData:
+    properties:
+      active_counts:
+        additionalProperties:
+          type: integer
+        type: object
+      cpu_percent:
+        type: number
+      goroutines:
+        type: integer
+      memory_total_bytes:
+        type: integer
+      memory_used_bytes:
+        type: integer
+      memory_used_percent:
+        type: number
+      process_memory_bytes:
+        type: integer
+      timestamp:
+        type: string
+    type: object
+  dto.SystemMetricsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.SystemMetricsData'
       success:
         type: boolean
     type: object
@@ -599,12 +1307,458 @@ definitions:
       success:
         type: boolean
     type: object
+  handler.AdminLoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  knowledgevideo.ValidationIssue:
+    properties:
+      field:
+        type: string
+      message:
+        type: string
+      row:
+        type: integer
+    type: object
 info:
   contact: {}
   description: 提供视频上传、播放、推荐、题目查询等 HTTP 接口。
-  title: 衡水平板视频服务接口
+  title: 视频平板视频服务接口
   version: "1.0"
 paths:
+  /api/admin/knowledge-videos/batches:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: ZIP video archive
+        in: formData
+        name: archive
+        required: true
+        type: file
+      - description: XLSX knowledge-point mapping
+        in: formData
+        name: mapping
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoImportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoValidationError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 批量导入知识点视频
+      tags:
+      - 知识点视频
+  /api/admin/knowledge-videos/batches/{batchId}:
+    get:
+      parameters:
+      - description: Batch ID
+        in: path
+        name: batchId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoBatchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询知识点视频导入进度
+      tags:
+      - 知识点视频
+  /api/admin/recommendation/datasources:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationDatasourceStatsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询推荐数据源统计
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/diagnostics:
+    get:
+      parameters:
+      - default: 14
+        description: 统计天数
+        in: query
+        name: days
+        type: integer
+      - description: 最近请求数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationDiagnosticsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询推荐系统诊断信息
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/effects:
+    get:
+      parameters:
+      - default: 14
+        description: 统计天数
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationEffectMetricsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询推荐命中效果
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/overview:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationAdminOverviewResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询推荐系统概览
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/preview/by-question:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 推荐请求参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RecommendByQuestionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationAdminPreviewListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 预览按题目推荐结果
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/preview/random-play:
+    get:
+      parameters:
+      - description: 用户ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: 返回数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationAdminPreviewListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 预览随机播放推荐结果
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/recbole/performance:
+    get:
+      parameters:
+      - description: 指标名称
+        in: query
+        name: metric
+        required: true
+        type: string
+      - description: 开始时间，RFC3339
+        in: query
+        name: begin
+        required: true
+        type: string
+      - description: 结束时间，RFC3339
+        in: query
+        name: end
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationRecBolePerformanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询 RecBole 性能指标
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/redis-state:
+    get:
+      parameters:
+      - description: 用户ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationRedisStateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询用户推荐 Redis 状态
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/trace/by-question:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 推荐请求参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RecommendByQuestionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationTraceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 追踪按题目推荐链路
+      tags:
+      - 推荐管理
+  /api/admin/recommendation/trace/random-play:
+    get:
+      parameters:
+      - description: 用户ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: 返回数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RecommendationTraceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 追踪随机播放推荐链路
+      tags:
+      - 推荐管理
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 管理员凭据
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AdminLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/adminauth.LoginResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 管理员登录
+      tags:
+      - 管理员认证
+  /api/auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/adminauth.Admin'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询当前管理员
+      tags:
+      - 管理员认证
+  /api/healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.HealthResponse'
+      summary: 查询服务健康状态
+      tags:
+      - 系统与健康
   /api/internal/recommendations/external/recbole:
     get:
       parameters:
@@ -636,7 +1790,133 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 获取 RecBole 召回视频片段ID
       tags:
-      - 视频服务
+      - 内部接口
+  /api/knowledge-points/{knowledgePointId}/video:
+    get:
+      parameters:
+      - description: Knowledge point ID
+        in: path
+        name: knowledgePointId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoPlaybackResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 获取知识点视频播放地址
+      tags:
+      - 知识点视频
+  /api/knowledge-points/{knowledgePointId}/videos:
+    get:
+      parameters:
+      - description: Knowledge point ID
+        in: path
+        name: knowledgePointId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoPlaybackResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 获取知识点视频播放地址
+      tags:
+      - 知识点视频
+  /api/knowledge-videos/{knowledgeVideoId}/playbacks:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge video ID
+        in: path
+        name: knowledgeVideoId
+        required: true
+        type: integer
+      - description: Playback user
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.KnowledgeVideoPlaybackRecordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoPlaybackRecordResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 记录知识点视频实际播放
+      tags:
+      - 知识点视频
+  /api/knowledge-videos/tree:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoTreeResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 查询知识点视频树
+      tags:
+      - 知识点视频
   /api/questions:
     get:
       parameters:
@@ -667,7 +1947,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询题目列表
       tags:
-      - 视频服务
+      - 题目
   /api/questions/{id}:
     get:
       parameters:
@@ -697,7 +1977,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询题目详情
       tags:
-      - 视频服务
+      - 题目
   /api/recommendations:
     get:
       parameters:
@@ -731,7 +2011,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询推荐列表
       tags:
-      - 视频服务
+      - 推荐
   /api/recommendations/by-question:
     post:
       consumes:
@@ -764,7 +2044,25 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 根据题目推荐视频
       tags:
-      - 视频服务
+      - 推荐
+  /api/system/metrics:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SystemMetricsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询系统运行指标
+      tags:
+      - 系统与健康
   /api/transcode-tasks/{taskId}:
     get:
       parameters:
@@ -792,9 +2090,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 查询转码任务状态
       tags:
-      - 视频服务
+      - 视频播放与转码
   /api/video-segments/{id}/reaction-counts:
     get:
       parameters:
@@ -824,7 +2124,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询视频片段点赞和双击数量
       tags:
-      - 视频服务
+      - 视频片段
   /api/video-segments/{id}/reactions:
     post:
       consumes:
@@ -862,7 +2162,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 提交或取消视频片段互动
       tags:
-      - 视频服务
+      - 视频片段
   /api/video-segments/random-play:
     get:
       parameters:
@@ -891,7 +2191,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 随机播放视频片段
       tags:
-      - 视频服务
+      - 视频片段
   /api/videos:
     get:
       parameters:
@@ -921,7 +2221,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询视频列表
       tags:
-      - 视频服务
+      - 视频资源
     post:
       consumes:
       - multipart/form-data
@@ -939,10 +2239,6 @@ paths:
         in: formData
         name: description
         type: string
-      - description: 上传用户ID，默认1
-        in: formData
-        name: user_id
-        type: integer
       produces:
       - application/json
       responses:
@@ -958,9 +2254,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 上传单个视频
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/{id}:
     delete:
       parameters:
@@ -988,9 +2286,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 删除视频
       tags:
-      - 视频服务
+      - 视频资源
     patch:
       consumes:
       - application/json
@@ -1025,9 +2325,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 修改视频基础信息
       tags:
-      - 视频服务
+      - 视频资源
   /api/videos/{id}/cover:
     post:
       consumes:
@@ -1062,9 +2364,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 上传视频封面
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/{id}/play:
     get:
       parameters:
@@ -1094,7 +2398,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 获取视频播放地址
       tags:
-      - 视频服务
+      - 视频播放与转码
   /api/videos/{id}/publish:
     post:
       consumes:
@@ -1130,9 +2434,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 设置视频发布状态
       tags:
-      - 视频服务
+      - 视频资源
   /api/videos/{id}/reaction-counts:
     get:
       parameters:
@@ -1162,7 +2468,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询视频点赞和双击数量
       tags:
-      - 视频服务
+      - 视频互动
   /api/videos/{id}/reactions:
     post:
       consumes:
@@ -1200,7 +2506,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 提交或取消视频互动
       tags:
-      - 视频服务
+      - 视频互动
   /api/videos/{id}/recommend:
     post:
       consumes:
@@ -1236,9 +2542,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 设置视频推荐状态
       tags:
-      - 视频服务
+      - 视频资源
   /api/videos/{id}/similar:
     get:
       parameters:
@@ -1269,7 +2577,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询相似视频
       tags:
-      - 视频服务
+      - 视频资源
   /api/videos/{id}/view-count:
     get:
       parameters:
@@ -1299,7 +2607,7 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 查询视频播放次数
       tags:
-      - 视频服务
+      - 视频资源
   /api/videos/archive:
     post:
       consumes:
@@ -1314,10 +2622,6 @@ paths:
         in: formData
         name: description
         type: string
-      - description: 上传用户ID，默认1
-        in: formData
-        name: user_id
-        type: integer
       produces:
       - application/json
       responses:
@@ -1333,9 +2637,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 上传视频压缩包
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/archive/batches/{batchId}/progress:
     get:
       parameters:
@@ -1363,9 +2669,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 查询视频压缩包处理进度
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/archive/uploads:
     post:
       consumes:
@@ -1392,9 +2700,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 初始化视频压缩包分片上传
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/archive/uploads/{uploadId}/complete:
     post:
       parameters:
@@ -1418,9 +2728,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 完成视频压缩包分片上传
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/uploads:
     post:
       consumes:
@@ -1447,9 +2759,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 初始化视频分片上传
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/uploads/{uploadId}:
     get:
       parameters:
@@ -1477,9 +2791,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 查询视频分片上传状态
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/uploads/{uploadId}/chunks/{chunkIndex}:
     put:
       consumes:
@@ -1516,9 +2832,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 上传视频分片
       tags:
-      - 视频服务
+      - 视频上传
   /api/videos/uploads/{uploadId}/complete:
     post:
       parameters:
@@ -1542,9 +2860,11 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 完成视频分片上传
       tags:
-      - 视频服务
+      - 视频上传
   /api/watch-records:
     post:
       consumes:
@@ -1577,5 +2897,78 @@ paths:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 上报视频观看进度
       tags:
-      - 视频服务
+      - 视频互动
+  /knowledge-video-media/hls/{videoId}/{filepath}:
+    get:
+      description: 返回 master.m3u8、媒体播放清单或视频分片，支持 Range 请求。
+      parameters:
+      - description: 知识视频ID
+        in: path
+        name: videoId
+        required: true
+        type: integer
+      - description: HLS 相对文件路径
+        in: path
+        name: filepath
+        required: true
+        type: string
+      produces:
+      - application/vnd.apple.mpegurl
+      - video/mp2t
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "206":
+          description: Partial Content
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: 获取知识点视频 HLS 媒体
+      tags:
+      - 媒体访问
+  /videos/{filepath}:
+    get:
+      description: 返回原视频、HLS 清单或视频分片，支持 Range 请求。
+      parameters:
+      - description: 对象存储相对路径
+        in: path
+        name: filepath
+        required: true
+        type: string
+      produces:
+      - application/vnd.apple.mpegurl
+      - video/mp2t
+      - video/mp4
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "206":
+          description: Partial Content
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: 获取视频媒体对象
+      tags:
+      - 媒体访问
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

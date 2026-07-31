@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 type openAICompatClient struct {

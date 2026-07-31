@@ -1,6 +1,6 @@
 package main
 
-import "nlp-video-analysis/internal/worker/combined"
+import "video-service/internal/worker/combined"
 
 var runWorker = combined.Run
 

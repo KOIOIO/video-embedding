@@ -2,13 +2,13 @@
 
 ## Context
 
-The existing backend project under `nlp-video-project/` exposes its main business capabilities through a gRPC service started by `cmd/rpc`. There is also an HTTP process started by `cmd/api`, but that process is only an HTTP-to-gRPC gateway. Its handlers accept HTTP requests and forward them to the gRPC service through `internal/api/client`.
+The existing backend project under `video-embedding/` exposes its main business capabilities through a gRPC service started by `cmd/rpc`. There is also an HTTP process started by `cmd/api`, but that process is only an HTTP-to-gRPC gateway. Its handlers accept HTTP requests and forward them to the gRPC service through `internal/api/client`.
 
-The integration path has changed. Instead of calling the gRPC service, the Java API team now needs to communicate with the backend over HTTP. The original project under `nlp-video-project/` should not be modified in place for this migration. A new sibling project named `video-service/` should be created and used as the new delivery target.
+The integration path has changed. Instead of calling the gRPC service, the Java API team now needs to communicate with the backend over HTTP. The original project under `video-embedding/` should not be modified in place for this migration. A new sibling project named `video-service/` should be created and used as the new delivery target.
 
 ## Goals
 
-1. Create a new project under `video-service/` instead of editing the original `nlp-video-project/` in place.
+1. Create a new project under `video-service/` instead of editing the original `video-embedding/` in place.
 2. Replace the old external gRPC integration path with direct HTTP communication.
 3. Reuse the original business capabilities as much as possible instead of rewriting logic.
 4. Provide a cleaner, more stable REST-style HTTP contract for Java callers.
@@ -18,7 +18,7 @@ The integration path has changed. Instead of calling the gRPC service, the Java 
 ## Non-Goals
 
 1. Do not redesign or rewrite the core video business logic unless a protocol-layer dependency forces a targeted refactor.
-2. Do not remove or break the old gRPC project under `nlp-video-project/`.
+2. Do not remove or break the old gRPC project under `video-embedding/`.
 3. Do not introduce a new auth system in this migration.
 4. Do not perform a full clean-architecture rewrite with broad domain or application refactors.
 

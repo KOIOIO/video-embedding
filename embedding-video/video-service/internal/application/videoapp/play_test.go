@@ -8,7 +8,7 @@ import (
 
 	"github.com/pgvector/pgvector-go"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 func TestPlayVideoReturnsCachedHLSAndRepairsDoneStatus(t *testing.T) {

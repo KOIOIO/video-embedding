@@ -17,12 +17,12 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 const (
 	defaultConfigPath = "configs/video.yml"
-	defaultDataset    = "video_dataset"
+	defaultDataset    = "video_app"
 	defaultLimit      = 10000
 	defaultDaysBack   = 30
 )
@@ -359,7 +359,7 @@ func buildInteractionRows(events []interactionEvent) []interactionRow {
 		}
 		key := [2]uint64{row.UserID, row.VideoSegmentID}
 		if index, exists := rowIndexes[key]; exists {
-			if row.Timestamp > rows[index].Timestamp {
+			if preferInteractionRow(row, rows[index]) {
 				rows[index] = row
 			}
 			continue
@@ -368,6 +368,31 @@ func buildInteractionRows(events []interactionEvent) []interactionRow {
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func interactionPriority(row interactionRow) int {
+	switch {
+	case row.Rating >= 3:
+		return 5
+	case row.Rating >= 2:
+		return 4
+	case row.Rating >= 1.5:
+		return 3
+	case row.Rating > 0.3:
+		return 2
+	case row.Rating > 0:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func preferInteractionRow(candidate, current interactionRow) bool {
+	candidatePriority, currentPriority := interactionPriority(candidate), interactionPriority(current)
+	if candidatePriority != currentPriority {
+		return candidatePriority > currentPriority
+	}
+	return candidate.Timestamp > current.Timestamp
 }
 
 func interactionFromEvent(event interactionEvent) (interactionRow, bool) {
@@ -394,7 +419,7 @@ func interactionFromEvent(event interactionEvent) (interactionRow, bool) {
 		if event.SegmentDuration > 0 {
 			ratio = float64(event.WatchDuration) / float64(event.SegmentDuration)
 		}
-		if event.Watched && ratio >= 0.4 {
+		if event.Watched && ratio >= 0.6 {
 			row.Rating, row.Weight = 1.5, 1.5
 		} else {
 			row.Rating, row.Weight = 0.3, 0.3

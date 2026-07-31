@@ -1,4 +1,4 @@
-export const RECOMMENDATION_SECTION_STORAGE_KEY = 'hstv-recommendation-console.active-section'
+export const RECOMMENDATION_SECTION_STORAGE_KEY = 'video_app-recommendation-console.active-section'
 
 function resolveStorage(storage) {
   return storage === undefined ? globalThis.localStorage : storage

@@ -20,8 +20,8 @@ func TestParseOptionsDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseOptions returned error: %v", err)
 	}
-	if opts.dataset != "video_dataset" {
-		t.Fatalf("dataset = %q, want video_dataset", opts.dataset)
+	if opts.dataset != "video_app" {
+		t.Fatalf("dataset = %q, want video_app", opts.dataset)
 	}
 	if opts.limit != 10000 {
 		t.Fatalf("limit = %d, want 10000", opts.limit)
@@ -146,14 +146,14 @@ func TestInteractionFromEventMapsRatingsConservatively(t *testing.T) {
 		{
 			name: "sufficient watch",
 			event: interactionEvent{
-				UserID: 7, VideoSegmentID: 101, Source: "watch", Watched: true, WatchDuration: 50, SegmentDuration: 100, EventTime: now,
+				UserID: 7, VideoSegmentID: 101, Source: "watch", Watched: true, WatchDuration: 60, SegmentDuration: 100, EventTime: now,
 			},
 			wantRating: 1.5,
 		},
 		{
 			name: "question search watch",
 			event: interactionEvent{
-				UserID: 7, VideoSegmentID: 101, Source: "question_search_watch", Watched: true, WatchDuration: 50, SegmentDuration: 100, EventTime: now,
+				UserID: 7, VideoSegmentID: 101, Source: "question_search_watch", Watched: true, WatchDuration: 60, SegmentDuration: 100, EventTime: now,
 			},
 			wantRating: 1.5,
 		},
@@ -192,7 +192,7 @@ func TestInteractionFromEventMapsRatingsConservatively(t *testing.T) {
 	}
 }
 
-func TestBuildInteractionRowsKeepsLatestEventPerUserAndSegment(t *testing.T) {
+func TestBuildInteractionRowsKeepsHigherValueEventPerUserAndSegment(t *testing.T) {
 	older := time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC)
 	newer := older.Add(time.Hour)
 	events := []interactionEvent{
@@ -211,8 +211,8 @@ func TestBuildInteractionRowsKeepsLatestEventPerUserAndSegment(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("len(rows) = %d, want 2: %+v", len(rows), rows)
 	}
-	if rows[0].VideoSegmentID != 101 || rows[0].Source != "exposure" || rows[0].Timestamp != float64(newer.Unix()) {
-		t.Fatalf("rows[0] = %+v, want latest event for user 7 segment 101", rows[0])
+	if rows[0].VideoSegmentID != 101 || rows[0].Source != "segment_reaction" || rows[0].Timestamp != float64(older.Unix()) {
+		t.Fatalf("rows[0] = %+v, want higher-value event for user 7 segment 101", rows[0])
 	}
 	if rows[1].VideoSegmentID != 102 {
 		t.Fatalf("rows[1] = %+v, want user 7 segment 102", rows[1])

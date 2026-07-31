@@ -9,7 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	goredis "github.com/go-redis/redis/v8"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 func newTestRunner(t *testing.T) (*runner, func()) {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/pgvector/pgvector-go"
 
-	"nlp-video-analysis/internal/model"
+	"video-service/internal/model"
 )
 
 func TestBuildRefineSegmentInputUsesCoarseTextWhenConfidenceIsNotLow(t *testing.T) {

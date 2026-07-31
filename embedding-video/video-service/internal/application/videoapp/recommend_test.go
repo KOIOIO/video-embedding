@@ -9,8 +9,8 @@ import (
 
 	"github.com/pgvector/pgvector-go"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
+	domainvideo "video-service/internal/domain/video"
 )
 
 type stubVideoRepository struct {

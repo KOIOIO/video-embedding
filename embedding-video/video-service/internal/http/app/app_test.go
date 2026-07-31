@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
-	"nlp-video-analysis/internal/config"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
+	"video-service/internal/config"
 )
 
 func TestResolveHTTPAddrUsesConfigWhenEnvMissing(t *testing.T) {

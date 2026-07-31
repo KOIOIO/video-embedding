@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-analysis/internal/infrastructure/persistence"
+	"video-service/internal/infrastructure/persistence"
 )
 
 type finalizeRepo struct {

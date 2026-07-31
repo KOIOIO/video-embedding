@@ -86,8 +86,8 @@ cd two-tower-training
 | `RANDOM_NEGATIVES` | `3` | 每个正样本追加的随机负样本数 |
 | `HARD_NEGATIVES` | `2` | 每个正样本追加的 batch 内 hard negatives 数 |
 | `EVAL_RATIO` | `0.15` | 按时间留作评估集的样本比例 |
-| `RETRIEVAL_K` | `20` | 召回评估使用的 Top K |
-| `RETRIEVAL_KS` | `20,50` | 训练后输出的多个 Top K 指标 |
+| `RETRIEVAL_K` | `10` | 召回评估使用的 Top K |
+| `RETRIEVAL_KS` | `10,20,50,100` | 训练后输出的多个 Top K 指标 |
 | `HALF_LIFE_DAYS` | `30` | 样本时间衰减半衰期天数 |
 | `PUBLISH_GATE_ENABLED` | `true` | 是否在发布前执行指标门禁 |
 | `MIN_EVAL_AUC` | `0.55` | 最低评估集 AUC |

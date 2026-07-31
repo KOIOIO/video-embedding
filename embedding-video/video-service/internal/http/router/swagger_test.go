@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	_ "nlp-video-analysis/docs/swagger"
+	"github.com/golang-jwt/jwt/v5"
+	_ "video-service/docs/swagger"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	appbuilder "nlp-video-analysis/internal/http/app"
-	"nlp-video-analysis/internal/http/router"
+	"video-service/internal/application/adminauth"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	appbuilder "video-service/internal/http/app"
+	"video-service/internal/http/router"
 )
 
 type stubStatusStore struct{}
@@ -33,8 +35,9 @@ func init() {
 }
 
 func TestSwaggerRouteRegistered(t *testing.T) {
-	r := router.New(&appbuilder.App{})
+	r, token := authenticatedTestRouter(t, &appbuilder.App{})
 	req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -52,8 +55,9 @@ func TestSwaggerRouteRegistered(t *testing.T) {
 }
 
 func TestSwaggerDocOmitsLegacyAliasPaths(t *testing.T) {
-	r := router.New(&appbuilder.App{})
+	r, token := authenticatedTestRouter(t, &appbuilder.App{})
 	req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -86,6 +90,12 @@ func TestSwaggerDocOmitsLegacyAliasPaths(t *testing.T) {
 		}
 	}
 	newPaths := []string{
+		"/api/knowledge-videos/tree",
+		"/api/admin/knowledge-videos/batches",
+		"/api/admin/knowledge-videos/batches/{batchId}",
+		"/api/knowledge-points/{knowledgePointId}/video",
+		"/api/knowledge-points/{knowledgePointId}/videos",
+		"/api/knowledge-videos/{knowledgeVideoId}/playbacks",
 		"/api/recommendations/by-question",
 		"/api/watch-records",
 		"/api/videos",
@@ -109,8 +119,89 @@ func TestSwaggerDocOmitsLegacyAliasPaths(t *testing.T) {
 	}
 }
 
+func TestSwaggerDocGroupsAllStandardRoutes(t *testing.T) {
+	r, token := authenticatedTestRouter(t, &appbuilder.App{})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("swagger status = %d", w.Code)
+	}
+	var document struct {
+		Paths map[string]map[string]struct {
+			Tags []string `json:"tags"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"GET /api/healthz": "系统与健康", "GET /api/system/metrics": "系统与健康",
+		"GET /api/videos": "视频资源", "PATCH /api/videos/{id}": "视频资源", "DELETE /api/videos/{id}": "视频资源",
+		"POST /api/videos/{id}/publish": "视频资源", "POST /api/videos/{id}/recommend": "视频资源", "GET /api/videos/{id}/similar": "视频资源", "GET /api/videos/{id}/view-count": "视频资源",
+		"POST /api/videos": "视频上传", "POST /api/videos/archive": "视频上传", "POST /api/videos/{id}/cover": "视频上传",
+		"POST /api/videos/uploads": "视频上传", "GET /api/videos/uploads/{uploadId}": "视频上传", "PUT /api/videos/uploads/{uploadId}/chunks/{chunkIndex}": "视频上传", "POST /api/videos/uploads/{uploadId}/complete": "视频上传",
+		"POST /api/videos/archive/uploads": "视频上传", "POST /api/videos/archive/uploads/{uploadId}/complete": "视频上传", "GET /api/videos/archive/batches/{batchId}/progress": "视频上传",
+		"GET /api/videos/{id}/play": "视频播放与转码", "GET /api/transcode-tasks/{taskId}": "视频播放与转码",
+		"POST /api/videos/{id}/reactions": "视频互动", "GET /api/videos/{id}/reaction-counts": "视频互动", "POST /api/watch-records": "视频互动",
+		"GET /api/video-segments/random-play": "视频片段", "POST /api/video-segments/{id}/reactions": "视频片段", "GET /api/video-segments/{id}/reaction-counts": "视频片段",
+		"GET /api/questions": "题目", "GET /api/questions/{id}": "题目",
+		"GET /api/recommendations": "推荐", "POST /api/recommendations/by-question": "推荐",
+		"GET /api/admin/recommendation/overview": "推荐管理", "GET /api/admin/recommendation/diagnostics": "推荐管理", "GET /api/admin/recommendation/datasources": "推荐管理", "GET /api/admin/recommendation/effects": "推荐管理", "GET /api/admin/recommendation/recbole/performance": "推荐管理",
+		"GET /api/admin/recommendation/trace/random-play": "推荐管理", "POST /api/admin/recommendation/trace/by-question": "推荐管理", "GET /api/admin/recommendation/redis-state": "推荐管理", "GET /api/admin/recommendation/preview/random-play": "推荐管理", "POST /api/admin/recommendation/preview/by-question": "推荐管理",
+		"GET /api/knowledge-videos/tree": "知识点视频", "POST /api/admin/knowledge-videos/batches": "知识点视频", "GET /api/admin/knowledge-videos/batches/{batchId}": "知识点视频", "GET /api/knowledge-points/{knowledgePointId}/video": "知识点视频", "GET /api/knowledge-points/{knowledgePointId}/videos": "知识点视频", "POST /api/knowledge-videos/{knowledgeVideoId}/playbacks": "知识点视频",
+		"GET /api/internal/recommendations/external/recbole":  "内部接口",
+		"GET /knowledge-video-media/hls/{videoId}/{filepath}": "媒体访问", "GET /videos/{filepath}": "媒体访问",
+	}
+	for operation, wantTag := range want {
+		parts := strings.SplitN(operation, " ", 2)
+		path, method := parts[1], strings.ToLower(parts[0])
+		got, ok := document.Paths[path][method]
+		if !ok {
+			t.Errorf("swagger missing %s", operation)
+			continue
+		}
+		if len(got.Tags) != 1 || got.Tags[0] != wantTag {
+			t.Errorf("%s tags = %v, want [%s]", operation, got.Tags, wantTag)
+		}
+	}
+}
+
+func TestSwaggerDocumentsAdministratorSecurityBoundary(t *testing.T) {
+	r, token := authenticatedTestRouter(t, &appbuilder.App{})
+	req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("swagger status=%d", w.Code)
+	}
+	var document struct {
+		SecurityDefinitions map[string]any `json:"securityDefinitions"`
+		Paths               map[string]map[string]struct {
+			Security []map[string][]string `json:"security"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := document.SecurityDefinitions["BearerAuth"]; !ok {
+		t.Fatal("swagger missing BearerAuth security definition")
+	}
+	if _, ok := document.Paths["/api/auth/login"]["post"]; !ok {
+		t.Fatal("swagger missing administrator login")
+	}
+	if len(document.Paths["/api/videos"]["post"].Security) == 0 {
+		t.Fatal("video upload is not marked as protected")
+	}
+	if len(document.Paths["/api/watch-records"]["post"].Security) != 0 {
+		t.Fatal("watch records must remain public")
+	}
+}
+
 func TestLegacyAliasRoutesAreRegistered(t *testing.T) {
-	r := router.New(&appbuilder.App{Service: &videoapp.Service{StatusStore: stubStatusStore{}}})
+	r, token := authenticatedTestRouter(t, &appbuilder.App{Service: &videoapp.Service{StatusStore: stubStatusStore{}}})
 	tests := []struct {
 		name   string
 		method string
@@ -140,6 +231,7 @@ func TestLegacyAliasRoutesAreRegistered(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
 			if tc.method == http.MethodPost {
 				req.Header.Set("Content-Type", "application/json")
 			}
@@ -188,7 +280,7 @@ func TestAPIHealthzRouteRegistered(t *testing.T) {
 }
 
 func TestRecommendationAdminRoutesAreRegistered(t *testing.T) {
-	r := router.New(&appbuilder.App{Service: &videoapp.Service{}})
+	r, token := authenticatedTestRouter(t, &appbuilder.App{Service: &videoapp.Service{}})
 
 	tests := []struct {
 		name   string
@@ -201,7 +293,7 @@ func TestRecommendationAdminRoutesAreRegistered(t *testing.T) {
 		{name: "diagnostics", method: http.MethodGet, path: "/api/admin/recommendation/diagnostics", want: http.StatusOK},
 		{name: "datasources", method: http.MethodGet, path: "/api/admin/recommendation/datasources", want: http.StatusOK},
 		{name: "effects", method: http.MethodGet, path: "/api/admin/recommendation/effects?days=bad", want: http.StatusBadRequest},
-		{name: "gorse performance", method: http.MethodGet, path: "/api/admin/recommendation/gorse/performance?metric=cf_ndcg&begin=bad&end=2026-07-16T00:00:00Z", want: http.StatusBadRequest},
+		{name: "recbole performance", method: http.MethodGet, path: "/api/admin/recommendation/recbole/performance?metric=NDCG%4020&begin=bad&end=2026-07-16T00:00:00Z", want: http.StatusBadRequest},
 		{name: "random trace", method: http.MethodGet, path: "/api/admin/recommendation/trace/random-play?user_id=bad", want: http.StatusBadRequest},
 		{name: "question trace", method: http.MethodPost, path: "/api/admin/recommendation/trace/by-question", body: `{"question_text":"   "}`, want: http.StatusBadRequest},
 		{name: "redis state", method: http.MethodGet, path: "/api/admin/recommendation/redis-state?user_id=bad", want: http.StatusBadRequest},
@@ -212,6 +304,7 @@ func TestRecommendationAdminRoutesAreRegistered(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+token)
 			if tc.method == http.MethodPost {
 				req.Header.Set("Content-Type", "application/json")
 			}
@@ -224,6 +317,32 @@ func TestRecommendationAdminRoutesAreRegistered(t *testing.T) {
 			}
 		})
 	}
+}
+
+type routerAuthRepository struct{}
+
+func (routerAuthRepository) FindActiveAdminByUsername(context.Context, string) (adminauth.Admin, bool, error) {
+	return adminauth.Admin{ID: 7, Username: "admin"}, true, nil
+}
+
+func (routerAuthRepository) FindActiveAdminByID(_ context.Context, id uint64) (adminauth.Admin, bool, error) {
+	return adminauth.Admin{ID: id, Username: "admin"}, id == 7, nil
+}
+
+func authenticatedTestRouter(t *testing.T, app *appbuilder.App) (*gin.Engine, string) {
+	t.Helper()
+	const secret = "01234567890123456789012345678901"
+	app.AdminAuth = adminauth.NewService(routerAuthRepository{}, secret, time.Hour)
+	claims := jwt.RegisteredClaims{
+		Subject:   "7",
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return router.New(app), token
 }
 
 func TestRouterAddsCORSHeadersToNormalRequests(t *testing.T) {

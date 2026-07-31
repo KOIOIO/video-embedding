@@ -9,7 +9,7 @@ DEFAULT_METRICS = ["Recall", "NDCG", "Hit", "Precision"]
 
 def build_config(
     dataset_dir: str | Path,
-    dataset: str = "video_dataset",
+    dataset: str = "video_app",
     model: str = "BPR",
     embedding_size: int = 64,
 ) -> dict[str, Any]:
@@ -35,6 +35,18 @@ def build_config(
         "epochs": 20,
         "train_batch_size": 2048,
         "eval_batch_size": 4096,
+        "seed": 20260730,
+        "reproducibility": True,
+        "eval_args": {
+            "split": {"RS": [0.8, 0.1, 0.1]},
+            "order": "TO",
+            "group_by": "user",
+            "mode": "full",
+        },
+        "train_neg_sample_args": {
+            "distribution": "uniform",
+            "sample_num": "none",
+        },
     }
 
 

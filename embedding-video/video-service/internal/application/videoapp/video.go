@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 // ListVideos 按过滤条件列出视频。

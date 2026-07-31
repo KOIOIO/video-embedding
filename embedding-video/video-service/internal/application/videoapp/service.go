@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
 )
 
 // Service 是视频领域的应用服务入口。
@@ -19,7 +19,6 @@ type Service struct {
 	SegmentReactionStore VideoReactionStore
 	RecommendationEngine string
 	GorseClient          recommendationapp.GorseClient
-	GorseDashboardClient recommendationapp.GorseDashboardClient
 	GorseOptions         recommendationapp.GorseOptions
 	RecentSegments       recommendationapp.RecentSegmentStore
 	RecentSegmentTTL     time.Duration

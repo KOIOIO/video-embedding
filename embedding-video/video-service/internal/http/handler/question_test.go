@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/http/handler"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/http/handler"
 )
 
 type stubQuestionApp struct {

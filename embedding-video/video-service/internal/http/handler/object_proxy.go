@@ -1,6 +1,6 @@
 package handler
 
-import objecthandler "nlp-video-analysis/internal/http/handler/objects"
+import objecthandler "video-service/internal/http/handler/objects"
 
 type objectReader = objecthandler.Reader
 type ObjectProxyHandler = objecthandler.Handler

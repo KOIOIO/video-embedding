@@ -12,9 +12,9 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
-	"nlp-video-analysis/internal/application/videoapp/recommendation/gorsesync"
-	"nlp-video-analysis/internal/config"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
+	"video-service/internal/application/videoapp/recommendation/gorsesync"
+	"video-service/internal/config"
 )
 
 type options struct {

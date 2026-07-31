@@ -8,11 +8,11 @@ import (
 
 	"gorm.io/gorm"
 
-	"nlp-video-analysis/internal/infrastructure/objectstorage"
-	"nlp-video-analysis/internal/infrastructure/persistence"
-	"nlp-video-analysis/internal/infrastructure/transcode"
-	"nlp-video-analysis/internal/model"
-	"nlp-video-analysis/internal/worker/vectorworker/tasks"
+	"video-service/internal/infrastructure/objectstorage"
+	"video-service/internal/infrastructure/persistence"
+	"video-service/internal/infrastructure/transcode"
+	"video-service/internal/model"
+	"video-service/internal/worker/vectorworker/tasks"
 )
 
 type refineStageRepository interface {

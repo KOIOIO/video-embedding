@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 type FFmpegDockerImpl struct {

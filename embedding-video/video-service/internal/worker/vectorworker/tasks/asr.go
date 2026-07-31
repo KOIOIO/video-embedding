@@ -14,10 +14,10 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/infrastructure/transcode"
-	"nlp-video-analysis/internal/model"
-	"nlp-video-analysis/internal/worker/antspool"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/infrastructure/transcode"
+	"video-service/internal/model"
+	"video-service/internal/worker/antspool"
 )
 
 const maxRefineASRWorkers = 20

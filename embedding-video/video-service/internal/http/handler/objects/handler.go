@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
 
-	"nlp-video-analysis/internal/infrastructure/objectstorage"
+	"video-service/internal/infrastructure/objectstorage"
 )
 
 type Reader interface {
@@ -43,6 +43,16 @@ func New(store Reader) *Handler {
 	}
 }
 
+// ProxyVideo godoc
+// @Summary 获取视频媒体对象
+// @Description 返回原视频、HLS 清单或视频分片，支持 Range 请求。
+// @Tags 媒体访问
+// @Produce application/vnd.apple.mpegurl,video/mp2t,video/mp4,application/octet-stream
+// @Param filepath path string true "对象存储相对路径"
+// @Success 200 {file} file
+// @Success 206 {file} file
+// @Failure 404 {string} string
+// @Router /videos/{filepath} [get]
 func (h *Handler) ProxyVideo(c *gin.Context) {
 	if h == nil || h.store == nil {
 		c.Status(http.StatusNotFound)

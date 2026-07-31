@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"nlp-video-analysis/internal/model"
+	"video-service/internal/model"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

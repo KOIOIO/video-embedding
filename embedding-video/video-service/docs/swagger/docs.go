@@ -15,13 +15,699 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/admin/knowledge-videos/batches": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "批量导入知识点视频",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "ZIP video archive",
+                        "name": "archive",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "XLSX knowledge-point mapping",
+                        "name": "mapping",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoImportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoValidationError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/knowledge-videos/batches/{batchId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "查询知识点视频导入进度",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Batch ID",
+                        "name": "batchId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/datasources": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "查询推荐数据源统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationDatasourceStatsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/diagnostics": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "查询推荐系统诊断信息",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 14,
+                        "description": "统计天数",
+                        "name": "days",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "最近请求数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationDiagnosticsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/effects": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "查询推荐命中效果",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 14,
+                        "description": "统计天数",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationEffectMetricsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "查询推荐系统概览",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationAdminOverviewResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/preview/by-question": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "预览按题目推荐结果",
+                "parameters": [
+                    {
+                        "description": "推荐请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendByQuestionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationAdminPreviewListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/preview/random-play": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "预览随机播放推荐结果",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "返回数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationAdminPreviewListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/recbole/performance": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "查询 RecBole 性能指标",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "指标名称",
+                        "name": "metric",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始时间，RFC3339",
+                        "name": "begin",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间，RFC3339",
+                        "name": "end",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationRecBolePerformanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/redis-state": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "查询用户推荐 Redis 状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationRedisStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/trace/by-question": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "追踪按题目推荐链路",
+                "parameters": [
+                    {
+                        "description": "推荐请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendByQuestionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationTraceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/recommendation/trace/random-play": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐管理"
+                ],
+                "summary": "追踪随机播放推荐链路",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "返回数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RecommendationTraceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/login": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员认证"
+                ],
+                "summary": "管理员登录",
+                "parameters": [
+                    {
+                        "description": "管理员凭据",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.AdminLoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/adminauth.LoginResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员认证"
+                ],
+                "summary": "查询当前管理员",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/adminauth.Admin"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/healthz": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统与健康"
+                ],
+                "summary": "查询服务健康状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/internal/recommendations/external/recbole": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "内部接口"
                 ],
                 "summary": "获取 RecBole 召回视频片段ID",
                 "parameters": [
@@ -64,13 +750,206 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/knowledge-points/{knowledgePointId}/video": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "获取知识点视频播放地址",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Knowledge point ID",
+                        "name": "knowledgePointId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoPlaybackResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/knowledge-points/{knowledgePointId}/videos": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "获取知识点视频播放地址",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Knowledge point ID",
+                        "name": "knowledgePointId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoPlaybackResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/knowledge-videos/tree": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "查询知识点视频树",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoTreeResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/knowledge-videos/{knowledgeVideoId}/playbacks": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "记录知识点视频实际播放",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Knowledge video ID",
+                        "name": "knowledgeVideoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Playback user",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoPlaybackRecordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoPlaybackRecordResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/questions": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "题目"
                 ],
                 "summary": "查询题目列表",
                 "parameters": [
@@ -117,7 +996,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "题目"
                 ],
                 "summary": "查询题目详情",
                 "parameters": [
@@ -163,7 +1042,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "推荐"
                 ],
                 "summary": "查询推荐列表",
                 "parameters": [
@@ -218,7 +1097,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "推荐"
                 ],
                 "summary": "根据题目推荐视频",
                 "parameters": [
@@ -260,13 +1139,48 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/transcode-tasks/{taskId}": {
+        "/api/system/metrics": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "系统与健康"
+                ],
+                "summary": "查询系统运行指标",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SystemMetricsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/transcode-tasks/{taskId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频播放与转码"
                 ],
                 "summary": "查询转码任务状态",
                 "parameters": [
@@ -312,7 +1226,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频片段"
                 ],
                 "summary": "随机播放视频片段",
                 "parameters": [
@@ -357,7 +1271,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频片段"
                 ],
                 "summary": "查询视频片段点赞和双击数量",
                 "parameters": [
@@ -406,7 +1320,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频片段"
                 ],
                 "summary": "提交或取消视频片段互动",
                 "parameters": [
@@ -461,7 +1375,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "查询视频列表",
                 "parameters": [
@@ -500,6 +1414,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -507,7 +1426,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "上传单个视频",
                 "parameters": [
@@ -528,12 +1447,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "视频描述",
                         "name": "description",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "上传用户ID，默认1",
-                        "name": "user_id",
                         "in": "formData"
                     }
                 ],
@@ -561,6 +1474,11 @@ const docTemplate = `{
         },
         "/api/videos/archive": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -568,7 +1486,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "上传视频压缩包",
                 "parameters": [
@@ -583,12 +1501,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "视频描述",
                         "name": "description",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "上传用户ID，默认1",
-                        "name": "user_id",
                         "in": "formData"
                     }
                 ],
@@ -616,11 +1528,16 @@ const docTemplate = `{
         },
         "/api/videos/archive/batches/{batchId}/progress": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "查询视频压缩包处理进度",
                 "parameters": [
@@ -662,6 +1579,11 @@ const docTemplate = `{
         },
         "/api/videos/archive/uploads": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -669,7 +1591,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "初始化视频压缩包分片上传",
                 "parameters": [
@@ -707,11 +1629,16 @@ const docTemplate = `{
         },
         "/api/videos/archive/uploads/{uploadId}/complete": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "完成视频压缩包分片上传",
                 "parameters": [
@@ -747,6 +1674,11 @@ const docTemplate = `{
         },
         "/api/videos/uploads": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -754,7 +1686,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "初始化视频分片上传",
                 "parameters": [
@@ -792,11 +1724,16 @@ const docTemplate = `{
         },
         "/api/videos/uploads/{uploadId}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "查询视频分片上传状态",
                 "parameters": [
@@ -838,6 +1775,11 @@ const docTemplate = `{
         },
         "/api/videos/uploads/{uploadId}/chunks/{chunkIndex}": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/octet-stream"
                 ],
@@ -845,7 +1787,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "上传视频分片",
                 "parameters": [
@@ -897,11 +1839,16 @@ const docTemplate = `{
         },
         "/api/videos/uploads/{uploadId}/complete": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "完成视频分片上传",
                 "parameters": [
@@ -937,11 +1884,16 @@ const docTemplate = `{
         },
         "/api/videos/{id}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "删除视频",
                 "parameters": [
@@ -981,6 +1933,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -988,7 +1945,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "修改视频基础信息",
                 "parameters": [
@@ -1039,6 +1996,11 @@ const docTemplate = `{
         },
         "/api/videos/{id}/cover": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1046,7 +2008,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频上传"
                 ],
                 "summary": "上传视频封面",
                 "parameters": [
@@ -1099,7 +2061,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频播放与转码"
                 ],
                 "summary": "获取视频播放地址",
                 "parameters": [
@@ -1141,6 +2103,11 @@ const docTemplate = `{
         },
         "/api/videos/{id}/publish": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1148,7 +2115,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "设置视频发布状态",
                 "parameters": [
@@ -1203,7 +2170,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频互动"
                 ],
                 "summary": "查询视频点赞和双击数量",
                 "parameters": [
@@ -1252,7 +2219,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频互动"
                 ],
                 "summary": "提交或取消视频互动",
                 "parameters": [
@@ -1303,6 +2270,11 @@ const docTemplate = `{
         },
         "/api/videos/{id}/recommend": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1310,7 +2282,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "设置视频推荐状态",
                 "parameters": [
@@ -1365,7 +2337,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "查询相似视频",
                 "parameters": [
@@ -1412,7 +2384,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频资源"
                 ],
                 "summary": "查询视频播放次数",
                 "parameters": [
@@ -1461,7 +2433,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "视频服务"
+                    "视频互动"
                 ],
                 "summary": "上报视频观看进度",
                 "parameters": [
@@ -1502,9 +2474,137 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/knowledge-video-media/hls/{videoId}/{filepath}": {
+            "get": {
+                "description": "返回 master.m3u8、媒体播放清单或视频分片，支持 Range 请求。",
+                "produces": [
+                    "application/vnd.apple.mpegurl",
+                    "video/mp2t",
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "媒体访问"
+                ],
+                "summary": "获取知识点视频 HLS 媒体",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "知识视频ID",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "HLS 相对文件路径",
+                        "name": "filepath",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "206": {
+                        "description": "Partial Content",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/videos/{filepath}": {
+            "get": {
+                "description": "返回原视频、HLS 清单或视频分片，支持 Range 请求。",
+                "produces": [
+                    "application/vnd.apple.mpegurl",
+                    "video/mp2t",
+                    "video/mp4",
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "媒体访问"
+                ],
+                "summary": "获取视频媒体对象",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "对象存储相对路径",
+                        "name": "filepath",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "206": {
+                        "description": "Partial Content",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "adminauth.Admin": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "real_name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "adminauth.LoginResult": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "admin": {
+                    "$ref": "#/definitions/adminauth.Admin"
+                },
+                "expires_at": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.ArchiveProcessingProgressData": {
             "type": "object",
             "properties": {
@@ -1617,6 +2717,14 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.InitiateChunkedUploadRequest": {
             "type": "object",
             "properties": {
@@ -1640,9 +2748,278 @@ const docTemplate = `{
                 },
                 "total_chunks": {
                     "type": "integer"
+                }
+            }
+        },
+        "dto.KnowledgeVideoBatchData": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "integer"
                 },
+                "failed_count": {
+                    "type": "integer"
+                },
+                "ready_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.KnowledgeVideoItem"
+                    }
+                }
+            }
+        },
+        "dto.KnowledgeVideoBatchResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoBatchData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.KnowledgeVideoImportData": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "integer"
+                },
+                "progress_url": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.KnowledgeVideoImportResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoImportData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.KnowledgeVideoItem": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "knowledge_point_id": {
+                    "type": "integer"
+                },
+                "knowledge_point_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "video_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.KnowledgeVideoPlaybackData": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "type": "integer"
+                },
+                "knowledge_point_id": {
+                    "type": "integer"
+                },
+                "knowledge_point_name": {
+                    "type": "string"
+                },
+                "playback_url": {
+                    "type": "string"
+                },
+                "video_id": {
+                    "type": "integer"
+                },
+                "video_name": {
+                    "type": "string"
+                },
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.KnowledgeVideoPlaybackItem"
+                    }
+                }
+            }
+        },
+        "dto.KnowledgeVideoPlaybackItem": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "knowledge_video_id": {
+                    "type": "integer"
+                },
+                "playback_url": {
+                    "type": "string"
+                },
+                "source_file_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.KnowledgeVideoPlaybackRecordData": {
+            "type": "object"
+        },
+        "dto.KnowledgeVideoPlaybackRecordRequest": {
+            "type": "object",
+            "properties": {
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "dto.KnowledgeVideoPlaybackRecordResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoPlaybackRecordData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.KnowledgeVideoPlaybackResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoPlaybackData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.KnowledgeVideoTreeData": {
+            "type": "object",
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.KnowledgeVideoTreeNode"
+                    }
+                }
+            }
+        },
+        "dto.KnowledgeVideoTreeNode": {
+            "type": "object",
+            "properties": {
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.KnowledgeVideoTreeNode"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "integer"
+                },
+                "video": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoTreeVideo"
+                },
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.KnowledgeVideoTreeVideo"
+                    }
+                }
+            }
+        },
+        "dto.KnowledgeVideoTreeResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoTreeData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.KnowledgeVideoTreeVideo": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "video_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.KnowledgeVideoValidationError": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string"
+                        },
+                        "issues": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/knowledgevideo.ValidationIssue"
+                            }
+                        },
+                        "message": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },
@@ -1894,6 +3271,385 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.RecommendationAdminGorseOverviewData": {
+            "type": "object",
+            "properties": {
+                "candidate_limit": {
+                    "type": "integer"
+                },
+                "configured": {
+                    "type": "boolean"
+                },
+                "min_recommend_items": {
+                    "type": "integer"
+                },
+                "shadow_mode": {
+                    "type": "boolean"
+                },
+                "write_back_enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationAdminOverviewData": {
+            "type": "object",
+            "properties": {
+                "engine": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "gorse": {
+                    "$ref": "#/definitions/dto.RecommendationAdminGorseOverviewData"
+                },
+                "preview_only": {
+                    "type": "boolean"
+                },
+                "recbole": {
+                    "$ref": "#/definitions/dto.RecommendationAdminRecBoleData"
+                },
+                "redis": {
+                    "$ref": "#/definitions/dto.RecommendationAdminRedisOverviewData"
+                }
+            }
+        },
+        "dto.RecommendationAdminOverviewResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationAdminOverviewData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationAdminPreviewItem": {
+            "type": "object",
+            "properties": {
+                "cover_url": {
+                    "type": "string"
+                },
+                "end_time_sec": {
+                    "type": "integer"
+                },
+                "is_watched": {
+                    "type": "boolean"
+                },
+                "model_version": {
+                    "type": "string"
+                },
+                "play_url": {
+                    "type": "string"
+                },
+                "question_id": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "recommend_score": {
+                    "type": "number"
+                },
+                "start_time_sec": {
+                    "type": "integer"
+                },
+                "strategy": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "user_reacted": {
+                    "type": "boolean"
+                },
+                "user_reaction_type": {
+                    "type": "string"
+                },
+                "video_id": {
+                    "type": "integer"
+                },
+                "video_segment_id": {
+                    "type": "integer"
+                },
+                "watch_duration": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationAdminPreviewListData": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationAdminPreviewItem"
+                    }
+                },
+                "preview_only": {
+                    "type": "boolean"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationAdminPreviewListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationAdminPreviewListData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationAdminRecBoleData": {
+            "type": "object",
+            "properties": {
+                "active_model_found": {
+                    "type": "boolean"
+                },
+                "active_model_version": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RecommendationAdminRedisOverviewData": {
+            "type": "object",
+            "properties": {
+                "bucket_enabled": {
+                    "type": "boolean"
+                },
+                "bucket_ttl_seconds": {
+                    "type": "integer"
+                },
+                "recent_max_size": {
+                    "type": "integer"
+                },
+                "recent_ttl_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationDailyEffectMetricData": {
+            "type": "object",
+            "properties": {
+                "day": {
+                    "type": "string"
+                },
+                "exposures": {
+                    "type": "integer"
+                },
+                "watch_rate": {
+                    "type": "number"
+                },
+                "watched": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationDataFreshnessData": {
+            "type": "object",
+            "properties": {
+                "age_seconds": {
+                    "type": "integer"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "has_data": {
+                    "type": "boolean"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "latest_at": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "stale_after_seconds": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RecommendationDatasourceStatsData": {
+            "type": "object",
+            "properties": {
+                "embedded_segments": {
+                    "type": "integer"
+                },
+                "exposure_total": {
+                    "type": "integer"
+                },
+                "exposure_watch_rate": {
+                    "type": "number"
+                },
+                "playable_segments": {
+                    "type": "integer"
+                },
+                "published_videos": {
+                    "type": "integer"
+                },
+                "reaction_rows": {
+                    "type": "integer"
+                },
+                "recbole_items": {
+                    "type": "integer"
+                },
+                "recbole_users": {
+                    "type": "integer"
+                },
+                "recommend_videos": {
+                    "type": "integer"
+                },
+                "recommendation_rows": {
+                    "type": "integer"
+                },
+                "recommendation_watch_rate": {
+                    "type": "number"
+                },
+                "segment_embedding_rate": {
+                    "type": "number"
+                },
+                "segment_total": {
+                    "type": "integer"
+                },
+                "video_total": {
+                    "type": "integer"
+                },
+                "watched_exposures": {
+                    "type": "integer"
+                },
+                "watched_recommendations": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationDatasourceStatsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationDatasourceStatsData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationDiagnosticCheckData": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RecommendationDiagnosticsData": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer"
+                },
+                "freshness": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationDataFreshnessData"
+                    }
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "health": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationDiagnosticCheckData"
+                    }
+                },
+                "recent_requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationRecentRequestData"
+                    }
+                },
+                "request_limit": {
+                    "type": "integer"
+                },
+                "strategy_effects": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationStrategyEffectMetricData"
+                    }
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationTaskStatusData"
+                    }
+                }
+            }
+        },
+        "dto.RecommendationDiagnosticsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationDiagnosticsData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationEffectMetricsData": {
+            "type": "object",
+            "properties": {
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationDailyEffectMetricData"
+                    }
+                },
+                "days": {
+                    "type": "integer"
+                },
+                "strategies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationStrategyEffectMetricData"
+                    }
+                }
+            }
+        },
+        "dto.RecommendationEffectMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationEffectMetricsData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "dto.RecommendationItem": {
             "type": "object",
             "properties": {
@@ -1960,6 +3716,368 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationRecBoleMetricData": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RecommendationRecBolePerformanceData": {
+            "type": "object",
+            "properties": {
+                "available_metrics": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationRecBoleMetricData"
+                    }
+                },
+                "label": {
+                    "type": "string"
+                },
+                "metric": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationRecBolePerformancePointData"
+                    }
+                }
+            }
+        },
+        "dto.RecommendationRecBolePerformancePointData": {
+            "type": "object",
+            "properties": {
+                "model_version": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "number"
+                }
+            }
+        },
+        "dto.RecommendationRecBolePerformanceResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationRecBolePerformanceData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationRecentRequestData": {
+            "type": "object",
+            "properties": {
+                "exposures": {
+                    "type": "integer"
+                },
+                "last_event_time": {
+                    "type": "string"
+                },
+                "model_version": {
+                    "type": "string"
+                },
+                "question_id": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "strategy": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "watch_rate": {
+                    "type": "number"
+                },
+                "watched": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationRedisBucketItemData": {
+            "type": "object",
+            "properties": {
+                "model_version": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "strategy": {
+                    "type": "string"
+                },
+                "video_id": {
+                    "type": "integer"
+                },
+                "video_segment_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationRedisBucketStateData": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationRedisBucketItemData"
+                    }
+                },
+                "max_size": {
+                    "type": "integer"
+                },
+                "min_size": {
+                    "type": "integer"
+                },
+                "ttl_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationRedisRecentStateData": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "max_size": {
+                    "type": "integer"
+                },
+                "over_limit": {
+                    "type": "boolean"
+                },
+                "segment_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "ttl_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationRedisStateData": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "$ref": "#/definitions/dto.RecommendationRedisBucketStateData"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "recent": {
+                    "$ref": "#/definitions/dto.RecommendationRedisRecentStateData"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationRedisStateResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationRedisStateData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationStrategyEffectMetricData": {
+            "type": "object",
+            "properties": {
+                "average_rank": {
+                    "type": "number"
+                },
+                "average_score": {
+                    "type": "number"
+                },
+                "exposures": {
+                    "type": "integer"
+                },
+                "model_version": {
+                    "type": "string"
+                },
+                "strategy": {
+                    "type": "string"
+                },
+                "watch_rate": {
+                    "type": "number"
+                },
+                "watched": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationTaskStatusData": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "type": "string"
+                },
+                "has_run_time": {
+                    "type": "boolean"
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RecommendationTraceData": {
+            "type": "object",
+            "properties": {
+                "engine": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationTraceItemData"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "preview_only": {
+                    "type": "boolean"
+                },
+                "question_id": {
+                    "type": "integer"
+                },
+                "question_text": {
+                    "type": "string"
+                },
+                "stages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RecommendationTraceStageData"
+                    }
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationTraceItemData": {
+            "type": "object",
+            "properties": {
+                "end_time_sec": {
+                    "type": "integer"
+                },
+                "is_watched": {
+                    "type": "boolean"
+                },
+                "model_version": {
+                    "type": "string"
+                },
+                "question_id": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "recommend_score": {
+                    "type": "number"
+                },
+                "start_time_sec": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "strategy": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "video_id": {
+                    "type": "integer"
+                },
+                "video_segment_id": {
+                    "type": "integer"
+                },
+                "watch_duration": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.RecommendationTraceResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.RecommendationTraceData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.RecommendationTraceStageData": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -2064,6 +4182,49 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/dto.SimilarVideosData"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.SystemMetricsData": {
+            "type": "object",
+            "properties": {
+                "active_counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "cpu_percent": {
+                    "type": "number"
+                },
+                "goroutines": {
+                    "type": "integer"
+                },
+                "memory_total_bytes": {
+                    "type": "integer"
+                },
+                "memory_used_bytes": {
+                    "type": "integer"
+                },
+                "memory_used_percent": {
+                    "type": "number"
+                },
+                "process_memory_bytes": {
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SystemMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.SystemMetricsData"
                 },
                 "success": {
                     "type": "boolean"
@@ -2431,6 +4592,38 @@ const docTemplate = `{
                     "type": "boolean"
                 }
             }
+        },
+        "handler.AdminLoginRequest": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "knowledgevideo.ValidationIssue": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "row": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`
@@ -2441,7 +4634,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "衡水平板视频服务接口",
+	Title:            "视频平板视频服务接口",
 	Description:      "提供视频上传、播放、推荐、题目查询等 HTTP 接口。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

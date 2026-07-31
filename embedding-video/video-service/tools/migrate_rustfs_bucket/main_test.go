@@ -41,14 +41,14 @@ func TestParseOptionsUsesRustFSDefaults(t *testing.T) {
 }
 
 func TestMigrateBucketDryRunListsWithoutCreatingTarget(t *testing.T) {
-	src := newFakeObjectClient("video-embedding-storage")
+	src := newFakeObjectClient("video-object-storage")
 	src.objects["raw/a.mp4"] = fakeObject{body: "a", info: minio.ObjectInfo{Key: "raw/a.mp4", Size: 1, ContentType: "video/mp4"}}
 	dst := newFakeObjectClient("")
 	opts := options{
 		sourceEndpoint: "source",
-		sourceBucket:   "video-embedding-storage",
+		sourceBucket:   "video-object-storage",
 		targetEndpoint: "target",
-		targetBucket:   "video-embedding-storage",
+		targetBucket:   "video-object-storage",
 		workers:        1,
 		dryRun:         true,
 	}

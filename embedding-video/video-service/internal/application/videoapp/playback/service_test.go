@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 func TestPlayVideoPrefersCachedDoneHLSAndRepairsStatus(t *testing.T) {

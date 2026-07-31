@@ -5,7 +5,42 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
+
+func TestJWTSecretPrefersEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "environment-secret")
+	cfg := Config{Auth: AuthConfig{JWTSecret: "yaml-secret"}}
+	if got := JWTSecret(cfg); got != "environment-secret" {
+		t.Fatalf("JWTSecret() = %q, want environment-secret", got)
+	}
+}
+
+func TestLocalConfigDoesNotEmbedJWTSecret(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
+	cfg := MustLoad("../../configs/video.yml")
+	if got := JWTSecret(cfg); got != "" {
+		t.Fatalf("local JWT secret = %q, want empty", got)
+	}
+}
+
+func TestObjectStorageEndpointPrefersEnvironment(t *testing.T) {
+	t.Setenv("COS_ENDPOINT", "storage.example.test")
+	cfg := Config{RustFS: RustFSConfig{Endpoint: "yaml.example.test"}}
+
+	applyEnvOverrides(&cfg)
+
+	if got := cfg.RustFS.Endpoint; got != "storage.example.test" {
+		t.Fatalf("RustFS endpoint = %q, want storage.example.test", got)
+	}
+}
+
+func TestJWTExpiryDefaultsToEightHours(t *testing.T) {
+	if got := JWTExpiry(Config{}); got != 8*time.Hour {
+		t.Fatalf("JWTExpiry() = %s, want 8h", got)
+	}
+}
 
 func TestDefaultConfigPathUsesLocalConfigOnDarwin(t *testing.T) {
 	originalGOOS := runtimeGOOS
@@ -126,6 +161,144 @@ func TestRuntimeConfigDefaultsPreserveExistingValues(t *testing.T) {
 	}
 	if got := GorseDataTTL(cfg); got != 30*24*time.Hour {
 		t.Fatalf("GorseDataTTL() = %s, want %s", got, 30*24*time.Hour)
+	}
+}
+
+func TestKnowledgeVideoConfigDefaults(t *testing.T) {
+	cfg := Config{}
+	applyDefaults(&cfg)
+
+	if got := cfg.KnowledgeVideoStorage.Bucket; got != "knowledge-point-videos" {
+		t.Fatalf("bucket = %q, want knowledge-point-videos", got)
+	}
+	if got := cfg.KnowledgeVideoStorage.MediaRoutePrefix; got != "/knowledge-video-media" {
+		t.Fatalf("media route prefix = %q, want /knowledge-video-media", got)
+	}
+	if got := cfg.KnowledgeVideoStorage.TempPath; got == "" {
+		t.Fatal("temp path is empty")
+	}
+	if cfg.KnowledgeVideoStorage.MaxArchiveBytes <= 0 || cfg.KnowledgeVideoStorage.MaxExpandedBytes <= 0 || cfg.KnowledgeVideoStorage.MaxEntryBytes <= 0 || cfg.KnowledgeVideoStorage.MaxEntries <= 0 {
+		t.Fatalf("archive limits = %+v, want positive values", cfg.KnowledgeVideoStorage)
+	}
+	if got := cfg.RedisKeys.KnowledgeVideoTranscodeQueue; got != "knowledge_video:transcode:stream" {
+		t.Fatalf("transcode queue = %q, want knowledge_video:transcode:stream", got)
+	}
+	if cfg.KnowledgeVideoWorker.WorkerCount < 1 {
+		t.Fatalf("worker count = %d, want >= 1", cfg.KnowledgeVideoWorker.WorkerCount)
+	}
+	if cfg.KnowledgeVideoWorker.TaskTimeoutMinutes <= 0 || cfg.KnowledgeVideoWorker.ShutdownTimeoutSec <= 0 {
+		t.Fatalf("worker timeouts = %+v, want positive values", cfg.KnowledgeVideoWorker)
+	}
+}
+
+func TestKnowledgeVideoObjectStorageConfigFallsBackToSharedConnectionProfile(t *testing.T) {
+	cfg := Config{
+		RustFS: RustFSConfig{
+			Endpoint:     "shared.example.com",
+			AccessKey:    "shared-access",
+			SecretKey:    "shared-secret",
+			Bucket:       "shared-bucket",
+			UseSSL:       true,
+			Region:       "ap-beijing",
+			BucketLookup: "dns",
+		},
+		KnowledgeVideoStorage: KnowledgeVideoStorageConfig{
+			Bucket: "knowledge-point-videos",
+		},
+	}
+
+	got := KnowledgeVideoObjectStorageConfig(cfg)
+	if got.Endpoint != "shared.example.com" || got.AccessKey != "shared-access" || got.SecretKey != "shared-secret" || !got.UseSSL || got.Region != "ap-beijing" || got.BucketLookup != "dns" {
+		t.Fatalf("connection = %+v, want shared connection profile fallback", got)
+	}
+	if got.Bucket != "knowledge-point-videos" {
+		t.Fatalf("bucket = %q, want knowledge-point-videos", got.Bucket)
+	}
+
+	cfg.KnowledgeVideoStorage.Bucket = ""
+	got = KnowledgeVideoObjectStorageConfig(cfg)
+	if got.Bucket == "shared-bucket" {
+		t.Fatalf("bucket = %q, must not fall back to shared bucket", got.Bucket)
+	}
+}
+
+func TestKnowledgeVideoObjectStorageConfigNormalizesInheritedCOSBucketEndpoint(t *testing.T) {
+	cfg := Config{
+		RustFS: RustFSConfig{
+			Endpoint:     "https://video-object-storage.cos.ap-beijing.myqcloud.com",
+			Bucket:       "video-object-storage",
+			BucketLookup: "dns",
+		},
+		KnowledgeVideoStorage: KnowledgeVideoStorageConfig{
+			Bucket: "knowledge-point-videos",
+		},
+	}
+
+	got := KnowledgeVideoObjectStorageConfig(cfg)
+	if got.Endpoint != "cos.ap-beijing.myqcloud.com" {
+		t.Fatalf("endpoint = %q, want regional service endpoint", got.Endpoint)
+	}
+	if got.Bucket != "knowledge-point-videos" {
+		t.Fatalf("bucket = %q, want knowledge-point-videos", got.Bucket)
+	}
+	if got.BucketLookup != "dns" {
+		t.Fatalf("bucket lookup = %q, want dns", got.BucketLookup)
+	}
+}
+
+func TestKnowledgeVideoObjectStorageConfigPreservesDedicatedConnectionProfile(t *testing.T) {
+	cfg := Config{
+		RustFS: RustFSConfig{
+			Endpoint:     "shared.example.com",
+			AccessKey:    "shared-access",
+			SecretKey:    "shared-secret",
+			Bucket:       "shared-bucket",
+			UseSSL:       true,
+			Region:       "ap-beijing",
+			BucketLookup: "dns",
+		},
+		KnowledgeVideoStorage: KnowledgeVideoStorageConfig{
+			Endpoint:     "dedicated.example.com",
+			AccessKey:    "dedicated-access",
+			SecretKey:    "dedicated-secret",
+			Bucket:       "knowledge-point-videos",
+			UseSSL:       false,
+			Region:       "dedicated-region",
+			BucketLookup: "path",
+		},
+	}
+
+	got := KnowledgeVideoObjectStorageConfig(cfg)
+	if got.Endpoint != "dedicated.example.com" || got.AccessKey != "dedicated-access" || got.SecretKey != "dedicated-secret" || got.UseSSL || got.Region != "dedicated-region" || got.BucketLookup != "path" {
+		t.Fatalf("connection = %+v, want dedicated connection profile", got)
+	}
+	if got.Bucket != "knowledge-point-videos" {
+		t.Fatalf("bucket = %q, want knowledge-point-videos", got.Bucket)
+	}
+}
+
+func TestKnowledgeVideoProductionConfigUsesRegionalServiceEndpoint(t *testing.T) {
+	path, err := ResolvePath(prodConfigPath)
+	if err != nil {
+		t.Fatalf("resolve production config: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read production config: %v", err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse production config: %v", err)
+	}
+
+	if got := cfg.KnowledgeVideoStorage.Endpoint; got != "https://cos.ap-beijing.myqcloud.com" {
+		t.Fatalf("KnowledgeVideoStorage.Endpoint = %q, want regional service endpoint", got)
+	}
+	if got := cfg.KnowledgeVideoStorage.Bucket; got != "knowledge-point-videos" {
+		t.Fatalf("KnowledgeVideoStorage.Bucket = %q, want knowledge-point-videos", got)
+	}
+	if got := KnowledgeVideoObjectStorageConfig(cfg).Endpoint; got != "https://cos.ap-beijing.myqcloud.com" {
+		t.Fatalf("knowledge video object storage endpoint = %q, want regional service endpoint", got)
 	}
 }
 
@@ -341,7 +514,7 @@ RustFS:
   Endpoint: "cos.ap-beijing.myqcloud.com"
   AccessKey: "ak"
   SecretKey: "sk"
-  Bucket: "video-embedding-storage"
+  Bucket: "video-object-storage"
   UseSSL: true
   Region: "ap-beijing"
   BucketLookup: "dns"
@@ -364,6 +537,7 @@ func TestMustLoadAppliesSensitiveEnvOverrides(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "video.yml")
 	data := []byte(`
 Redis:
+  Addr: "file-redis:6379"
   Password: "file-redis"
 Postgres:
   DSN: "file-postgres"
@@ -371,21 +545,23 @@ RustFS:
   AccessKey: "file-ak"
   SecretKey: "file-sk"
 Gorse:
+  Endpoint: "http://file-gorse:8088"
   APIKey: "file-gorse"
-  DashboardUsername: "file-admin"
-  DashboardPassword: "file-password"
 `)
 	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
 	t.Setenv("POSTGRES_DSN", "env-postgres")
+	t.Setenv("REDIS_ADDR", "cloud.example:6379")
 	t.Setenv("REDIS_PASSWORD", "env-redis")
 	t.Setenv("COS_SECRET_ID", "env-ak")
 	t.Setenv("COS_SECRET_KEY", "env-sk")
+	t.Setenv("COS_ENDPOINT", "storage.example:9000")
+	t.Setenv("RUSTFS_BUCKET", "video-cloud-drive")
+	t.Setenv("KNOWLEDGE_VIDEO_BUCKET", "knowledge-point-videos")
 	t.Setenv("GORSE_API_KEY", "env-gorse")
-	t.Setenv("GORSE_DASHBOARD_USERNAME", "env-admin")
-	t.Setenv("GORSE_DASHBOARD_PASSWORD", "env-password")
+	t.Setenv("GORSE_ENDPOINT", "http://gorse.internal:8088")
 
 	cfg := MustLoad(cfgPath)
 
@@ -395,14 +571,29 @@ Gorse:
 	if cfg.Redis.Password != "env-redis" {
 		t.Fatalf("Redis.Password = %q, want env override", cfg.Redis.Password)
 	}
+	if cfg.Redis.Addr != "cloud.example:6379" {
+		t.Fatalf("Redis.Addr = %q, want env override", cfg.Redis.Addr)
+	}
 	if cfg.RustFS.AccessKey != "env-ak" || cfg.RustFS.SecretKey != "env-sk" {
 		t.Fatalf("RustFS credentials = %q/%q, want env overrides", cfg.RustFS.AccessKey, cfg.RustFS.SecretKey)
+	}
+	if cfg.RustFS.Bucket != "video-cloud-drive" {
+		t.Fatalf("RustFS.Bucket = %q, want env override", cfg.RustFS.Bucket)
+	}
+	if cfg.KnowledgeVideoStorage.Endpoint != "storage.example:9000" {
+		t.Fatalf("KnowledgeVideoStorage.Endpoint = %q, want env override", cfg.KnowledgeVideoStorage.Endpoint)
+	}
+	if cfg.KnowledgeVideoStorage.AccessKey != "env-ak" || cfg.KnowledgeVideoStorage.SecretKey != "env-sk" {
+		t.Fatalf("KnowledgeVideoStorage credentials = %q/%q, want env overrides", cfg.KnowledgeVideoStorage.AccessKey, cfg.KnowledgeVideoStorage.SecretKey)
+	}
+	if cfg.KnowledgeVideoStorage.Bucket != "knowledge-point-videos" {
+		t.Fatalf("KnowledgeVideoStorage.Bucket = %q, want env override", cfg.KnowledgeVideoStorage.Bucket)
 	}
 	if cfg.Gorse.APIKey != "env-gorse" {
 		t.Fatalf("Gorse.APIKey = %q, want env override", cfg.Gorse.APIKey)
 	}
-	if cfg.Gorse.DashboardUsername != "env-admin" || cfg.Gorse.DashboardPassword != "env-password" {
-		t.Fatalf("Gorse dashboard credentials = %q/%q, want env overrides", cfg.Gorse.DashboardUsername, cfg.Gorse.DashboardPassword)
+	if cfg.Gorse.Endpoint != "http://gorse.internal:8088" {
+		t.Fatalf("Gorse.Endpoint = %q, want env override", cfg.Gorse.Endpoint)
 	}
 }
 
@@ -421,7 +612,7 @@ Gorse:
 	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("VIDEO_ENV_FILE=.env.local\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("VIDEO_APP_ENV_FILE=.env.local\n"), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env.local"), []byte(`
@@ -433,7 +624,7 @@ GORSE_API_KEY=dotenv-gorse
 		t.Fatalf("write .env.local: %v", err)
 	}
 
-	cleanupEnv := cleanEnv(t, "VIDEO_ENV_FILE", "POSTGRES_DSN", "COS_SECRET_ID", "COS_SECRET_KEY", "GORSE_API_KEY")
+	cleanupEnv := cleanEnv(t, "VIDEO_APP_ENV_FILE", "POSTGRES_DSN", "COS_SECRET_ID", "COS_SECRET_KEY", "GORSE_API_KEY")
 	defer cleanupEnv()
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -464,7 +655,7 @@ func TestObjectStorageConfigPassesCOSFieldsAndEnvFallback(t *testing.T) {
 	got := ObjectStorageConfig(Config{
 		RustFS: RustFSConfig{
 			Endpoint:     "cos.ap-beijing.myqcloud.com",
-			Bucket:       "video-embedding-storage",
+			Bucket:       "video-object-storage",
 			UseSSL:       true,
 			Region:       "ap-beijing",
 			BucketLookup: "dns",

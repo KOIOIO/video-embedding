@@ -12,11 +12,11 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/infrastructure/objectstorage"
-	"nlp-video-analysis/internal/infrastructure/transcode"
-	"nlp-video-analysis/internal/worker/antspool"
-	"nlp-video-analysis/internal/worker/vectorworker/tasks"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/infrastructure/objectstorage"
+	"video-service/internal/infrastructure/transcode"
+	"video-service/internal/worker/antspool"
+	"video-service/internal/worker/vectorworker/tasks"
 )
 
 type coarseClipJob struct {

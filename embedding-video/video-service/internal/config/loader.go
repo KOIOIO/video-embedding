@@ -37,6 +37,7 @@ func MustLoad(path string) Config {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		panic("parse config yaml failed: " + err.Error())
 	}
+	applyDefaults(&c)
 	applyEnvOverrides(&c)
 
 	return c
@@ -46,23 +47,35 @@ func applyEnvOverrides(c *Config) {
 	if value := firstEnv("POSTGRES_DSN"); value != "" {
 		c.Postgres.DSN = value
 	}
+	if value := firstEnv("REDIS_ADDR"); value != "" {
+		c.Redis.Addr = value
+	}
 	if value := firstEnv("REDIS_PASSWORD"); value != "" {
 		c.Redis.Password = value
 	}
+	if value := firstEnv("COS_ENDPOINT", "RUSTFS_ENDPOINT"); value != "" {
+		c.RustFS.Endpoint = value
+		c.KnowledgeVideoStorage.Endpoint = value
+	}
 	if value := firstEnv("COS_SECRET_ID", "RUSTFS_ACCESS_KEY"); value != "" {
 		c.RustFS.AccessKey = value
+		c.KnowledgeVideoStorage.AccessKey = value
 	}
 	if value := firstEnv("COS_SECRET_KEY", "RUSTFS_SECRET_KEY"); value != "" {
 		c.RustFS.SecretKey = value
+		c.KnowledgeVideoStorage.SecretKey = value
+	}
+	if value := firstEnv("RUSTFS_BUCKET"); value != "" {
+		c.RustFS.Bucket = value
+	}
+	if value := firstEnv("KNOWLEDGE_VIDEO_BUCKET"); value != "" {
+		c.KnowledgeVideoStorage.Bucket = value
 	}
 	if value := firstEnv("GORSE_API_KEY"); value != "" {
 		c.Gorse.APIKey = value
 	}
-	if value := firstEnv("GORSE_DASHBOARD_USERNAME"); value != "" {
-		c.Gorse.DashboardUsername = value
-	}
-	if value := firstEnv("GORSE_DASHBOARD_PASSWORD"); value != "" {
-		c.Gorse.DashboardPassword = value
+	if value := firstEnv("GORSE_ENDPOINT"); value != "" {
+		c.Gorse.Endpoint = value
 	}
 	if value := firstEnv("ASR_API_KEY", "DASHSCOPE_API_KEY", "OPENAI_API_KEY"); value != "" {
 		c.ASR.APIKey = value
@@ -76,7 +89,7 @@ func loadDotEnv() {
 	if path, err := findUpward(".env", 6); err == nil {
 		loadEnvFile(path)
 	}
-	envFile := firstEnv("VIDEO_ENV_FILE")
+	envFile := firstEnv("VIDEO_APP_ENV_FILE")
 	if envFile == "" {
 		return
 	}
@@ -175,7 +188,7 @@ func FindProjectRoot() (string, error) {
 	}
 
 	configCandidates := []string{DefaultConfigPath(), defaultConfigPath, prodConfigPath}
-	projectDirs := []string{"", "video-service", "embedding-video"}
+	projectDirs := []string{"", "video-service", "video-embedding"}
 
 	dir := cwd
 	for {
@@ -210,7 +223,7 @@ func moduleMatches(dir string) bool {
 		return false
 	}
 	moduleLine := strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
-	return moduleLine == "module nlp-video-analysis"
+	return moduleLine == "module video-service"
 }
 
 // tryReadUpward 尝试向上读取文件

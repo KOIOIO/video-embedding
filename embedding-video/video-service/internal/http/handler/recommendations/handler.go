@@ -9,10 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	domainvideo "nlp-video-analysis/internal/domain/video"
-	"nlp-video-analysis/internal/http/dto"
-	httperrors "nlp-video-analysis/internal/http/errors"
+	"video-service/internal/application/videoapp"
+	domainvideo "video-service/internal/domain/video"
+	"video-service/internal/http/dto"
+	httperrors "video-service/internal/http/errors"
 )
 
 type Handler struct {

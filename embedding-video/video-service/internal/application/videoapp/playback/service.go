@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 type Status struct {

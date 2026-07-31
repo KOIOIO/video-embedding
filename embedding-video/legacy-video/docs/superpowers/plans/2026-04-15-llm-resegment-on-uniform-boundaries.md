@@ -52,7 +52,7 @@
 ## Task 1：实现“规整度检测”
 
 **Files:**
-- Modify: `c:\Users\xiaoy\Desktop\nlp-video-project\nlp-video-project\cmd\vector_worker\task.go`
+- Modify: `c:\Users\xiaoy\Desktop\legacy-video\legacy-video\cmd\vector_worker\task.go`
 
 - [ ] Step 1: 增加函数 `isUniformSegments(segs []llmSegment) bool`
   - 统计每段时长（桶化，桶宽建议 10s）

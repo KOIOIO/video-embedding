@@ -1,5 +1,5 @@
 const DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024
-const STORAGE_KEY_PREFIX = 'hengshui-video-upload'
+const STORAGE_KEY_PREFIX = 'video-upload'
 
 export function buildUploadSessionKey(file) {
   return [
@@ -14,7 +14,6 @@ export async function uploadVideoInChunks({
   apiBase,
   kind = 'video',
   file,
-  userId = 1,
   title = '',
   description = '',
   chunkSize = DEFAULT_CHUNK_SIZE,
@@ -28,7 +27,6 @@ export async function uploadVideoInChunks({
 
   let normalizedChunkSize = Math.max(1, Number(chunkSize || DEFAULT_CHUNK_SIZE))
   let totalChunks = Math.max(1, Math.ceil(Number(file.size || 0) / normalizedChunkSize))
-  const normalizedUserId = Math.max(1, Math.floor(Number(userId || 1)))
   const key = buildUploadSessionKey(file)
   const isArchive = kind === 'archive'
   let uploadID = storage?.getItem(key) || ''
@@ -52,7 +50,6 @@ export async function uploadVideoInChunks({
         content_type: file.type || '',
         title: String(title || '').trim(),
         description: String(description || ''),
-        user_id: normalizedUserId,
         file_size: Number(file.size || 0),
         chunk_size: normalizedChunkSize,
         total_chunks: totalChunks,
@@ -98,10 +95,11 @@ export async function uploadVideoInChunks({
   return result
 }
 
-export function uploadChunkWithXHR({ url, chunk, onProgress = () => {} }) {
+export function uploadChunkWithXHR({ url, chunk, onProgress = () => {}, accessToken = readAuthSession()?.accessToken }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
+    if (accessToken) xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable || !event.total) return
       onProgress(Math.max(0, Math.min(1, event.loaded / event.total)))
@@ -132,3 +130,4 @@ function reportChunkProgress(uploadedChunks, totalChunks, currentChunkRatio, onP
   const percent = Math.floor(((uploaded + current) / total) * 100)
   onProgress(Math.max(0, Math.min(99, percent)))
 }
+import { readAuthSession } from './auth/session.js'

@@ -6,7 +6,7 @@ import (
 
 	"github.com/pgvector/pgvector-go"
 
-	domainvideo "nlp-video-analysis/internal/domain/video"
+	domainvideo "video-service/internal/domain/video"
 )
 
 // UploadMeta 是上传接口额外传入的业务元信息。

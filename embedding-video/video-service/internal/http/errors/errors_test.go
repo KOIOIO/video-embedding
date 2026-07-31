@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	httperrors "nlp-video-analysis/internal/http/errors"
+	httperrors "video-service/internal/http/errors"
 )
 
 func TestWriteError_InvalidArgument(t *testing.T) {

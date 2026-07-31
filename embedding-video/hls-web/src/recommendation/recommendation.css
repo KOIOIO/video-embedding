@@ -494,20 +494,20 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(79, 128, 184, 0.16);
 }
 
-.gorse-performance-panel {
+.recbole-performance-panel {
   gap: 0;
   padding: 0;
   overflow: hidden;
   background: #fbfaf3;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-heading) {
+.recbole-performance-panel :deep(.recbole-performance-heading) {
   align-items: end;
   padding: 20px;
   border-bottom: 1px solid rgba(24, 32, 31, 0.14);
 }
 
-.gorse-performance-panel :deep(.gorse-performance-filters) {
+.recbole-performance-panel :deep(.recbole-performance-filters) {
   display: grid;
   grid-template-columns: 142px 142px minmax(220px, 1fr) auto;
   gap: 10px;
@@ -515,28 +515,28 @@ textarea:focus {
   min-width: min(100%, 680px);
 }
 
-.gorse-performance-panel :deep(.gorse-performance-filters label) {
+.recbole-performance-panel :deep(.recbole-performance-filters label) {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-filters label span) {
+.recbole-performance-panel :deep(.recbole-performance-filters label span) {
   color: #53645f;
   font-size: 12px;
   font-weight: 800;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-filters input),
-.gorse-performance-panel :deep(.gorse-performance-filters select),
-.gorse-performance-panel :deep(.gorse-performance-filters button) {
+.recbole-performance-panel :deep(.recbole-performance-filters input),
+.recbole-performance-panel :deep(.recbole-performance-filters select),
+.recbole-performance-panel :deep(.recbole-performance-filters button) {
   width: 100%;
   min-width: 0;
   min-height: 44px;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-filters input),
-.gorse-performance-panel :deep(.gorse-performance-filters select) {
+.recbole-performance-panel :deep(.recbole-performance-filters input),
+.recbole-performance-panel :deep(.recbole-performance-filters select) {
   padding: 0 10px;
   color: #18201f;
   background: #fbfaf3;
@@ -545,13 +545,20 @@ textarea:focus {
   outline: none;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-filters input:focus),
-.gorse-performance-panel :deep(.gorse-performance-filters select:focus) {
+.recbole-performance-panel :deep(.recbole-performance-filters input:focus),
+.recbole-performance-panel :deep(.recbole-performance-filters select:focus) {
   border-color: #4f80b8;
   box-shadow: 0 0 0 3px rgba(79, 128, 184, 0.16);
 }
 
-.gorse-performance-panel :deep(.gorse-performance-error) {
+.recbole-performance-panel :deep(.recbole-metric-description) {
+  margin: 10px 20px 0;
+  color: #53645f;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.recbole-performance-panel :deep(.recbole-performance-error) {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -559,7 +566,7 @@ textarea:focus {
   margin: 16px 20px 0;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-error button) {
+.recbole-performance-panel :deep(.recbole-performance-error button) {
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid rgba(123, 29, 29, 0.24);
@@ -567,7 +574,7 @@ textarea:focus {
   cursor: pointer;
 }
 
-.gorse-performance-panel :deep(.gorse-chart-stage) {
+.recbole-performance-panel :deep(.recbole-chart-stage) {
   position: relative;
   min-height: 280px;
   margin: 20px;
@@ -578,7 +585,7 @@ textarea:focus {
   border-radius: 6px;
 }
 
-.gorse-performance-panel :deep(.gorse-chart-state) {
+.recbole-performance-panel :deep(.recbole-chart-state) {
   display: grid;
   min-height: 280px;
   place-items: center;
@@ -586,7 +593,7 @@ textarea:focus {
   font-size: 14px;
 }
 
-.gorse-performance-panel :deep(.gorse-trend-chart) {
+.recbole-performance-panel :deep(.recbole-trend-chart) {
   display: block;
   width: 100%;
   min-width: 620px;
@@ -595,22 +602,22 @@ textarea:focus {
   max-height: 390px;
 }
 
-.gorse-performance-panel :deep(.gorse-grid-lines line) {
+.recbole-performance-panel :deep(.recbole-grid-lines line) {
   stroke: #2c3c38;
   stroke-width: 1;
 }
 
-.gorse-performance-panel :deep(.gorse-axis-labels text) {
+.recbole-performance-panel :deep(.recbole-axis-labels text) {
   fill: #96aaa4;
   font-size: 11px;
 }
 
-.gorse-performance-panel :deep(.gorse-area) {
+.recbole-performance-panel :deep(.recbole-area) {
   fill: #2fba9c;
   opacity: 0.16;
 }
 
-.gorse-performance-panel :deep(.gorse-line) {
+.recbole-performance-panel :deep(.recbole-line) {
   fill: none;
   stroke: #49d4b6;
   stroke-linecap: round;
@@ -618,60 +625,60 @@ textarea:focus {
   stroke-width: 3;
 }
 
-.gorse-performance-panel :deep(.gorse-chart-points circle) {
+.recbole-performance-panel :deep(.recbole-chart-points circle) {
   fill: transparent;
   stroke: transparent;
   stroke-width: 2;
   cursor: crosshair;
 }
 
-.gorse-performance-panel :deep(.gorse-chart-points circle:hover),
-.gorse-performance-panel :deep(.gorse-chart-points circle:focus) {
+.recbole-performance-panel :deep(.recbole-chart-points circle:hover),
+.recbole-performance-panel :deep(.recbole-chart-points circle:focus) {
   fill: #172321;
   stroke: #d7ff65;
   outline: none;
 }
 
-.gorse-performance-panel :deep(.gorse-tooltip rect) {
+.recbole-performance-panel :deep(.recbole-tooltip rect) {
   fill: #fbfaf3;
   stroke: #2f4540;
 }
 
-.gorse-performance-panel :deep(.gorse-tooltip text:first-of-type) {
+.recbole-performance-panel :deep(.recbole-tooltip text:first-of-type) {
   fill: #18201f;
   font-size: 12px;
   font-weight: 800;
 }
 
-.gorse-performance-panel :deep(.gorse-tooltip text:last-of-type) {
+.recbole-performance-panel :deep(.recbole-tooltip text:last-of-type) {
   fill: #53645f;
   font-size: 9px;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-summary) {
+.recbole-performance-panel :deep(.recbole-performance-summary) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-top: 1px solid rgba(24, 32, 31, 0.14);
 }
 
-.gorse-performance-panel :deep(.gorse-performance-summary > div) {
+.recbole-performance-panel :deep(.recbole-performance-summary > div) {
   display: grid;
   gap: 6px;
   min-width: 0;
   padding: 16px 20px;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-summary > div + div) {
+.recbole-performance-panel :deep(.recbole-performance-summary > div + div) {
   border-left: 1px solid rgba(24, 32, 31, 0.12);
 }
 
-.gorse-performance-panel :deep(.gorse-performance-summary span) {
+.recbole-performance-panel :deep(.recbole-performance-summary span) {
   color: #53645f;
   font-size: 12px;
   font-weight: 800;
 }
 
-.gorse-performance-panel :deep(.gorse-performance-summary strong) {
+.recbole-performance-panel :deep(.recbole-performance-summary strong) {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 18px;
@@ -879,14 +886,14 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .gorse-performance-panel :deep(.gorse-performance-heading),
-  .gorse-performance-panel :deep(.gorse-performance-filters) {
+  .recbole-performance-panel :deep(.recbole-performance-heading),
+  .recbole-performance-panel :deep(.recbole-performance-filters) {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 
-  .gorse-performance-panel :deep(.gorse-metric-select) {
+  .recbole-performance-panel :deep(.recbole-metric-select) {
     grid-column: 1 / -1;
   }
 }
@@ -918,18 +925,18 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .gorse-performance-panel :deep(.gorse-performance-heading),
-  .gorse-performance-panel :deep(.gorse-performance-filters),
-  .gorse-performance-panel :deep(.gorse-performance-summary) {
+  .recbole-performance-panel :deep(.recbole-performance-heading),
+  .recbole-performance-panel :deep(.recbole-performance-filters),
+  .recbole-performance-panel :deep(.recbole-performance-summary) {
     grid-template-columns: 1fr;
   }
 
-  .gorse-performance-panel :deep(.gorse-chart-stage) {
+  .recbole-performance-panel :deep(.recbole-chart-stage) {
     margin: 14px;
     overflow-x: auto;
   }
 
-  .gorse-performance-panel :deep(.gorse-performance-summary > div + div) {
+  .recbole-performance-panel :deep(.recbole-performance-summary > div + div) {
     border-top: 1px solid rgba(24, 32, 31, 0.12);
     border-left: 0;
   }

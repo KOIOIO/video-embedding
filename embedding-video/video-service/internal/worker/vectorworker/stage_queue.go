@@ -3,8 +3,8 @@ package vectorworker
 import (
 	"time"
 
-	"nlp-video-analysis/internal/config"
-	infraredis "nlp-video-analysis/internal/infrastructure/redis"
+	"video-service/internal/config"
+	infraredis "video-service/internal/infrastructure/redis"
 
 	goredis "github.com/go-redis/redis/v8"
 )

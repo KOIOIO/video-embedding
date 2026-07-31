@@ -26,7 +26,7 @@ function createStorage(initial = {}) {
 
 describe('recommendation section session helpers', () => {
   it('uses the recommendation console active-section storage key', () => {
-    expect(RECOMMENDATION_SECTION_STORAGE_KEY).toBe('hstv-recommendation-console.active-section')
+    expect(RECOMMENDATION_SECTION_STORAGE_KEY).toBe('video_app-recommendation-console.active-section')
   })
 
   it('recognizes only configured navigation sections', () => {

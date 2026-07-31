@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	"nlp-video-analysis/internal/infrastructure/persistence"
+	"video-service/internal/application/videoapp"
+	"video-service/internal/infrastructure/persistence"
 )
 
 var errNonHierarchicalStageAdapter = errors.New("stage adapter only handles hierarchical mode")

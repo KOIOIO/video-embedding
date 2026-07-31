@@ -12,25 +12,33 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"nlp-video-analysis/internal/application/videoapp"
-	recommendationapp "nlp-video-analysis/internal/application/videoapp/recommendation"
-	"nlp-video-analysis/internal/config"
-	aiinfra "nlp-video-analysis/internal/infrastructure/ai"
-	einoai "nlp-video-analysis/internal/infrastructure/ai/eino"
-	"nlp-video-analysis/internal/infrastructure/embedding"
-	"nlp-video-analysis/internal/infrastructure/fs"
-	"nlp-video-analysis/internal/infrastructure/objectstorage"
-	"nlp-video-analysis/internal/infrastructure/persistence"
-	infraredis "nlp-video-analysis/internal/infrastructure/redis"
+	"video-service/internal/application/adminauth"
+	"video-service/internal/application/knowledgevideo"
+	"video-service/internal/application/videoapp"
+	recommendationapp "video-service/internal/application/videoapp/recommendation"
+	"video-service/internal/config"
+	aiinfra "video-service/internal/infrastructure/ai"
+	einoai "video-service/internal/infrastructure/ai/eino"
+	"video-service/internal/infrastructure/embedding"
+	"video-service/internal/infrastructure/fs"
+	"video-service/internal/infrastructure/objectstorage"
+	"video-service/internal/infrastructure/persistence"
+	infraredis "video-service/internal/infrastructure/redis"
 )
 
 type App struct {
-	DB               *gorm.DB
-	Redis            *redis.Client
-	Store            *objectstorage.RustFS
-	Service          *videoapp.Service
-	MediaRoutePrefix string
-	HTTP             HTTPRuntimeConfig
+	DB                             *gorm.DB
+	Redis                          *redis.Client
+	Store                          *objectstorage.RustFS
+	Service                        *videoapp.Service
+	MediaRoutePrefix               string
+	HTTP                           HTTPRuntimeConfig
+	KnowledgeVideoService          *knowledgevideo.Service
+	KnowledgeVideoStore            *objectstorage.RustFS
+	KnowledgeVideoMediaRoutePrefix string
+	KnowledgeVideoMaxRequestBytes  int64
+	KnowledgeVideoRepository       knowledgevideo.WorkerRepository
+	AdminAuth                      *adminauth.Service
 }
 
 type HTTPRuntimeConfig struct {
@@ -51,6 +59,10 @@ func ResolveHTTPAddr(cfg config.Config) string {
 }
 
 func New(ctx context.Context, cfg config.Config) (*App, error) {
+	jwtSecret := config.JWTSecret(cfg)
+	if len(jwtSecret) < 32 {
+		return nil, errConfig("jwt_secret_invalid", "JWT_SECRET must contain at least 32 characters")
+	}
 	rawDir := config.RawPath(cfg)
 	hlsDir := config.HLSPath(cfg)
 
@@ -96,8 +108,25 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 		return nil, err
 	}
+	knowledgeStore, err := objectstorage.NewRustFS(config.KnowledgeVideoObjectStorageConfig(cfg))
+	if err != nil {
+		_ = rdb.Close()
+		if sqlDB, dbErr := db.DB(); dbErr == nil {
+			_ = sqlDB.Close()
+		}
+		return nil, err
+	}
+	if err := knowledgeStore.EnsureBucket(ctx); err != nil {
+		_ = rdb.Close()
+		if sqlDB, dbErr := db.DB(); dbErr == nil {
+			_ = sqlDB.Close()
+		}
+		return nil, err
+	}
 
 	repo := persistence.NewGormVideoRepository(db)
+	adminRepo := persistence.NewGormAdminRepository(db)
+	adminAuth := adminauth.NewService(adminRepo, jwtSecret, config.JWTExpiry(cfg))
 	queue := infraredis.NewTranscodeQueue(rdb, config.TranscodeQueueKey(cfg))
 	vectorQueue := infraredis.NewVectorizeQueue(rdb, config.VectorizeQueueKey(cfg))
 	reactionBuffer := infraredis.NewVideoReactionBufferWithOptions(rdb, infraredis.VideoReactionBufferOptions{
@@ -127,7 +156,6 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	gorseClient, recommendationEngine, gorseOptions := recommendationRuntimeFromConfig(cfg)
 	service.RecommendationEngine = recommendationEngine
 	service.GorseClient = gorseClient
-	service.GorseDashboardClient = gorseDashboardRuntimeFromConfig(cfg)
 	service.GorseOptions = gorseOptions
 	service.RecentSegments = infraredis.NewRecentSegmentStoreWithOptions(rdb, infraredis.RecentSegmentStoreOptions{
 		Prefix:  config.RandomPlayRecentPrefix(cfg),
@@ -138,6 +166,21 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	service.RandomPlayBucket = infraredis.NewRandomPlayBucketStore(rdb, config.RandomPlayBucketPrefix(cfg))
 	service.ReactionStore = reactionBuffer
 	service.SegmentReactionStore = segmentReactionBuffer
+	knowledgeRepo := persistence.NewGormKnowledgeVideoRepository(db)
+	knowledgeQueue := infraredis.NewKnowledgeVideoTranscodeQueue(rdb, cfg.RedisKeys.KnowledgeVideoTranscodeQueue)
+	knowledgeImporter := &knowledgevideo.ImportService{
+		Validator: knowledgevideo.Validator{Dictionary: knowledgeRepo, Limits: knowledgevideo.ValidationLimits{
+			MaxArchiveBytes: cfg.KnowledgeVideoStorage.MaxArchiveBytes, MaxExpandedBytes: cfg.KnowledgeVideoStorage.MaxExpandedBytes,
+			MaxEntryBytes: cfg.KnowledgeVideoStorage.MaxEntryBytes, MaxEntries: cfg.KnowledgeVideoStorage.MaxEntries,
+		}},
+		Repository: knowledgeRepo, Store: knowledgeStore, Queue: knowledgeQueue, TempRoot: cfg.KnowledgeVideoStorage.TempPath,
+	}
+	knowledgeService := &knowledgevideo.Service{
+		Importer: knowledgeImporter,
+		Playback: knowledgevideo.PlaybackService{Repo: knowledgeRepo, MediaRoutePrefix: cfg.KnowledgeVideoStorage.MediaRoutePrefix},
+		Batches:  knowledgeRepo,
+		Tree:     knowledgeRepo,
+	}
 
 	return &App{
 		DB:               db,
@@ -154,19 +197,13 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			CORSExposeHeaders:    config.CORSExposeHeaders(cfg),
 			CORSMaxAge:           config.CORSMaxAge(cfg),
 		},
+		KnowledgeVideoService:          knowledgeService,
+		KnowledgeVideoStore:            knowledgeStore,
+		KnowledgeVideoMediaRoutePrefix: cfg.KnowledgeVideoStorage.MediaRoutePrefix,
+		KnowledgeVideoMaxRequestBytes:  cfg.KnowledgeVideoStorage.MaxArchiveBytes + 32<<20,
+		KnowledgeVideoRepository:       knowledgeRepo,
+		AdminAuth:                      adminAuth,
 	}, nil
-}
-
-func gorseDashboardRuntimeFromConfig(cfg config.Config) recommendationapp.GorseDashboardClient {
-	if strings.TrimSpace(config.GorseEndpoint(cfg)) == "" {
-		return nil
-	}
-	return recommendationapp.NewGorseDashboardHTTPClient(recommendationapp.GorseDashboardClientConfig{
-		Endpoint: config.GorseEndpoint(cfg),
-		Username: cfg.Gorse.DashboardUsername,
-		Password: cfg.Gorse.DashboardPassword,
-		Timeout:  config.GorseTimeout(cfg),
-	})
 }
 
 func recommendationRuntimeFromConfig(cfg config.Config) (recommendationapp.GorseClient, string, recommendationapp.GorseOptions) {

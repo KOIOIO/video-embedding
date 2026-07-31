@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"nlp-video-analysis/internal/config"
+	"video-service/internal/config"
 )
 
 func TestBuildASRWSModelCandidatesPrefersPrimaryAndDeduplicates(t *testing.T) {

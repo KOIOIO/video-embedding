@@ -1,5 +1,5 @@
 Name: video-rpc
-Host: 127.0.0.1
+Host: 10.200.10.12
 Port: 9090
 HTTP:
   Addr: ":8081"
@@ -12,6 +12,9 @@ HTTP:
     AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Requested-With"
     ExposeHeaders: "Content-Length, Content-Type"
     MaxAge: "86400"
+Auth:
+  JWTSecret: ""
+  JWTExpireHour: 24
 GRPC:
   MaxMsgSize: 104857600
   KeepaliveTime: 30
@@ -57,11 +60,12 @@ FFmpeg:
     Channels: 1
 
 Redis:
-  Addr: "127.0.0.1:16379"
+  Addr: "10.200.10.12:16379"
   Password: ""
   DB: 0
 RedisKeys:
   TranscodeQueue: "video:transcode:queue"
+  KnowledgeVideoTranscodeQueue: "knowledge_video:transcode:stream"
   VectorizeQueue: "video:vectorize:queue"
   VectorPrepareQueue: "video:vector:prepare"
   VectorCoarseQueue: "video:vector:coarse"
@@ -86,14 +90,33 @@ Postgres:
   ConnMaxIdleTime: 60
 
 RustFS:
-  Endpoint: "https://video-embedding-storage.cos.ap-beijing.myqcloud.com"
+  Endpoint: "https://video-object-storage.cos.ap-beijing.myqcloud.com"
   AccessKey: ""
   SecretKey: ""
-  Bucket: "video-embedding-storage"
+  Bucket: "video-object-storage"
   UseSSL: true
   Region: "ap-beijing"
   BucketLookup: "dns"
 
+KnowledgeVideoStorage:
+  Endpoint: "https://cos.ap-beijing.myqcloud.com"
+  AccessKey: ""
+  SecretKey: ""
+  Bucket: "knowledge-point-videos"
+  UseSSL: true
+  Region: "ap-beijing"
+  BucketLookup: "dns"
+  MediaRoutePrefix: "/knowledge-video-media"
+  TempPath: "./storage/tmp/knowledge_video"
+  MaxArchiveBytes: 1073741824
+  MaxExpandedBytes: 4294967296
+  MaxEntryBytes: 536870912
+  MaxEntries: 1000
+
+KnowledgeVideoWorker:
+  WorkerCount: 2
+  TaskTimeoutMinutes: 30
+  ShutdownTimeoutSec: 120
 
 Transcode:
   WorkerCount: 2
@@ -146,8 +169,6 @@ Recommendation:
 Gorse:
   Endpoint: "http://gorse:8088"
   APIKey: ""
-  DashboardUsername: ""
-  DashboardPassword: ""
   TimeoutSeconds: 2
   ShadowMode: false
   SyncEnabled: true

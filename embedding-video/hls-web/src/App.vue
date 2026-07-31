@@ -1,38 +1,44 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { loadCurrentAdmin, loginAdmin } from './auth/api.js'
+import { clearAuthSession, readAuthSession, writeAuthSession } from './auth/session.js'
 import {
-  CONSOLE_ADMIN_USERNAME,
   clearLegacyAuthenticated,
   isKnownWorkspace,
-  isValidConsoleLogin,
   readActiveWorkspace,
-  readUIUnlocked,
   writeActiveWorkspace,
-  writeUIUnlocked,
 } from './config/consoleSession.js'
 import RecommendationWorkspace from './workspaces/RecommendationWorkspace.vue'
+import KnowledgeVideoWorkspace from './workspaces/KnowledgeVideoWorkspace.vue'
 import VideoWorkspace from './workspaces/VideoWorkspace.vue'
 
 clearLegacyAuthenticated()
 
-const isUIUnlocked = ref(readUIUnlocked())
+const authSession = ref(readAuthSession())
+const isUIUnlocked = computed(() => Boolean(authSession.value?.accessToken && authSession.value?.admin?.id))
+const accountName = computed(() => authSession.value?.admin?.real_name || authSession.value?.admin?.username || '')
 const activeWorkspace = ref(readActiveWorkspace())
 const loginForm = reactive({
   username: '',
   password: '',
 })
 const loginError = ref('')
+const loggingIn = ref(false)
 
-function submitLogin() {
-  loginError.value = ''
-  if (!isValidConsoleLogin(loginForm.username, loginForm.password)) {
-    loginError.value = '账号或密码不正确'
-    return
-  }
-
-  writeUIUnlocked(true)
-  isUIUnlocked.value = true
-  loginForm.password = ''
+async function submitLogin() {
+	loginError.value = ''
+	loggingIn.value = true
+	try {
+		const result = await loginAdmin(loginForm.username.trim(), loginForm.password)
+		const session = { accessToken: result.access_token, admin: result.admin }
+		writeAuthSession(session)
+		authSession.value = session
+		loginForm.password = ''
+	} catch (error) {
+		loginError.value = error?.status === 401 ? '账号或密码不正确' : String(error?.message || '登录失败')
+	} finally {
+		loggingIn.value = false
+	}
 }
 
 function selectWorkspace(workspace) {
@@ -43,11 +49,31 @@ function selectWorkspace(workspace) {
 }
 
 function logout() {
-  writeUIUnlocked(false)
-  isUIUnlocked.value = false
+	clearAuthSession()
+	authSession.value = null
   loginForm.password = ''
   loginError.value = ''
 }
+
+function expireSession() {
+	authSession.value = null
+	loginError.value = '登录已失效，请重新登录'
+}
+
+onMounted(async () => {
+	globalThis.addEventListener?.('admin-auth-expired', expireSession)
+	if (!authSession.value?.accessToken) return
+	try {
+		const admin = await loadCurrentAdmin()
+		authSession.value = { ...authSession.value, admin }
+		writeAuthSession(authSession.value)
+	} catch {
+		clearAuthSession()
+		authSession.value = null
+	}
+})
+
+onBeforeUnmount(() => globalThis.removeEventListener?.('admin-auth-expired', expireSession))
 </script>
 
 <template>
@@ -56,7 +82,7 @@ function logout() {
       <div class="auth-brand">
         <span class="shell-brand-mark" aria-hidden="true">HS</span>
         <div>
-          <p>衡水视频平台</p>
+          <p>视频视频平台</p>
           <h1 id="login-title">视频与推荐控制台</h1>
         </div>
       </div>
@@ -86,7 +112,7 @@ function logout() {
         </label>
 
         <p v-if="loginError" class="auth-error" role="alert">{{ loginError }}</p>
-        <button class="login-button" type="submit">登录</button>
+        <button class="login-button" type="submit" :disabled="loggingIn">{{ loggingIn ? '登录中...' : '登录' }}</button>
       </form>
     </section>
   </main>
@@ -96,7 +122,7 @@ function logout() {
       <div class="toolbar-brand">
         <span class="toolbar-brand-mark" aria-hidden="true">HS</span>
         <div>
-          <strong>衡水视频平台</strong>
+          <strong>视频视频平台</strong>
           <span>视频与推荐控制台</span>
         </div>
       </div>
@@ -118,10 +144,18 @@ function logout() {
         >
           推荐控制台
         </button>
+        <button
+          type="button"
+          :class="{ active: activeWorkspace === 'knowledge-video' }"
+          :aria-pressed="activeWorkspace === 'knowledge-video'"
+          @click="selectWorkspace('knowledge-video')"
+        >
+          知识点视频
+        </button>
       </nav>
 
       <div class="account-actions">
-        <span class="account-name">{{ CONSOLE_ADMIN_USERNAME }}</span>
+        <span class="account-name">{{ accountName }}</span>
         <button class="logout-button" type="button" @click="logout">退出</button>
       </div>
     </header>
@@ -129,6 +163,7 @@ function logout() {
     <main class="workspace-mount">
       <VideoWorkspace v-if="activeWorkspace === 'video'" />
       <RecommendationWorkspace v-else-if="activeWorkspace === 'recommendation'" />
+      <KnowledgeVideoWorkspace v-else-if="activeWorkspace === 'knowledge-video'" />
     </main>
   </div>
 </template>

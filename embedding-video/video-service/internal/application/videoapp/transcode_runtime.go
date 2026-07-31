@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	workerapp "nlp-video-analysis/internal/application/videoapp/worker"
+	workerapp "video-service/internal/application/videoapp/worker"
 )
 
 const maxRetryAttempts = workerapp.MaxRetryAttempts
