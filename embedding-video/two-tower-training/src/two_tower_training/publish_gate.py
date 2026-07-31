@@ -30,9 +30,13 @@ def evaluate_gate(metrics: dict, thresholds: Thresholds, metric_k: int = 20, bas
     recall_name = f"recall_at_{metric_k}"
     coverage_name = f"coverage_at_{metric_k}"
     negative_hit_rate_name = f"negative_hit_rate_at_{metric_k}"
+    excess_negative_hit_rate_name = f"excess_negative_hit_rate_at_{metric_k}"
+    effective_negative_hit_rate_name = (
+        excess_negative_hit_rate_name if excess_negative_hit_rate_name in metrics else negative_hit_rate_name
+    )
     recall = float(metrics.get(recall_name, 0.0))
     coverage = float(metrics.get(coverage_name, 0.0))
-    negative_hit_rate = float(metrics.get(negative_hit_rate_name, 1.0))
+    negative_hit_rate = float(metrics.get(effective_negative_hit_rate_name, 1.0))
     dislike_hit_rate_name = f"dislike_hit_rate_at_{metric_k}"
     dislike_hit_rate = float(metrics.get(dislike_hit_rate_name, 0.0))
     eval_samples = int(float(metrics.get("eval_sample_count", 0.0)))
@@ -44,14 +48,19 @@ def evaluate_gate(metrics: dict, thresholds: Thresholds, metric_k: int = 20, bas
     if coverage < thresholds.min_coverage_at_k:
         failures.append(f"{coverage_name} {coverage:.6f} < {thresholds.min_coverage_at_k:.6f}")
     if negative_hit_rate > thresholds.max_negative_hit_rate_at_k:
-        failures.append(f"{negative_hit_rate_name} {negative_hit_rate:.6f} > {thresholds.max_negative_hit_rate_at_k:.6f}")
+        failures.append(
+            f"{effective_negative_hit_rate_name} {negative_hit_rate:.6f} > "
+            f"{thresholds.max_negative_hit_rate_at_k:.6f}"
+        )
     if eval_samples < thresholds.min_eval_sample_count:
         failures.append(f"eval_sample_count {eval_samples} < {thresholds.min_eval_sample_count}")
     if baseline:
         baseline_auc = float(baseline.get("eval_auc", 0.0))
         baseline_recall = float(baseline.get(recall_name, 0.0))
         baseline_coverage = float(baseline.get(coverage_name, 0.0))
-        baseline_negative_hit_rate = float(baseline.get(negative_hit_rate_name, 0.0))
+        baseline_negative_hit_rate = float(
+            baseline.get(effective_negative_hit_rate_name, baseline.get(negative_hit_rate_name, 0.0))
+        )
         baseline_dislike_hit_rate = float(baseline.get(dislike_hit_rate_name, 0.0))
         auc_drop = baseline_auc - eval_auc
         recall_drop = baseline_recall - recall
@@ -65,7 +74,10 @@ def evaluate_gate(metrics: dict, thresholds: Thresholds, metric_k: int = 20, bas
         if coverage_drop > thresholds.max_coverage_drop:
             failures.append(f"{coverage_name} drop {coverage_drop:.6f} > {thresholds.max_coverage_drop:.6f}")
         if negative_increase > thresholds.max_negative_hit_rate_increase:
-            failures.append(f"{negative_hit_rate_name} increase {negative_increase:.6f} > {thresholds.max_negative_hit_rate_increase:.6f}")
+            failures.append(
+                f"{effective_negative_hit_rate_name} increase {negative_increase:.6f} > "
+                f"{thresholds.max_negative_hit_rate_increase:.6f}"
+            )
         if dislike_increase > thresholds.max_dislike_hit_rate_increase:
             failures.append(f"{dislike_hit_rate_name} increase {dislike_increase:.6f} > {thresholds.max_dislike_hit_rate_increase:.6f}")
 
