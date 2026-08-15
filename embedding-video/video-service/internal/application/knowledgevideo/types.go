@@ -139,6 +139,36 @@ type PlayRecord struct {
 	CreateTime       time.Time
 }
 
+type WatchSessionReport struct {
+	UserID           uint64
+	KnowledgePointID uint64
+	KnowledgeVideoID uint64
+	SessionID        string
+	WatchedSeconds   int
+	UpdatedAt        time.Time
+}
+
+type WatchSessionAggregate struct {
+	SessionWatchedSeconds int
+	TotalWatchedSeconds   int
+}
+
+type WatchSessionInput struct {
+	UserID           uint64
+	KnowledgeVideoID uint64
+	SessionID        string
+	WatchedSeconds   int
+}
+
+type WatchSessionResult struct {
+	SessionID             string
+	SessionWatchedSeconds int
+	TotalWatchedSeconds   int
+	DurationSeconds       int
+	ProgressRatio         float64
+	EffectiveWatch        bool
+}
+
 type TranscodeTask struct {
 	KnowledgeVideoID uint64 `json:"knowledge_video_id"`
 	SourceObjectKey  string `json:"source_object_key"`

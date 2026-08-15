@@ -288,6 +288,35 @@ definitions:
       success:
         type: boolean
     type: object
+  dto.KnowledgeVideoWatchSessionData:
+    properties:
+      duration_seconds:
+        type: integer
+      effective_watch:
+        type: boolean
+      progress_ratio:
+        type: number
+      session_id:
+        type: string
+      session_watched_seconds:
+        type: integer
+      total_watched_seconds:
+        type: integer
+    type: object
+  dto.KnowledgeVideoWatchSessionRequest:
+    properties:
+      user_id:
+        type: integer
+      watched_seconds:
+        type: integer
+    type: object
+  dto.KnowledgeVideoWatchSessionResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.KnowledgeVideoWatchSessionData'
+      success:
+        type: boolean
+    type: object
   dto.PlayVideoData:
     properties:
       play_url:
@@ -1899,6 +1928,53 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: 记录知识点视频实际播放
+      tags:
+      - 知识点视频
+  /api/knowledge-videos/{knowledgeVideoId}/watch-sessions/{sessionId}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge video ID
+        in: path
+        name: knowledgeVideoId
+        required: true
+        type: integer
+      - description: Playback session ID
+        in: path
+        name: sessionId
+        required: true
+        type: string
+      - description: Absolute watched seconds
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.KnowledgeVideoWatchSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.KnowledgeVideoWatchSessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 上报知识点视频观看会话
       tags:
       - 知识点视频
   /api/knowledge-videos/tree:

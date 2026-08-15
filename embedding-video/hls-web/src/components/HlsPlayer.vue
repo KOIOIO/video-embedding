@@ -28,6 +28,7 @@ let watchStartedAt = 0
 let watchedMs = 0
 let lastEmittedSec = 0
 let activeWatchContext = null
+let watchHeartbeatInterval = null
 
 const segmentProgress = ref(0)
 const segmentCurrentSec = ref(0)
@@ -96,23 +97,32 @@ function clearSegmentHandlers() {
   playbackDurationSec.value = 0
 }
 
-function emitWatchProgress(force = false) {
-  const watchedSec = Math.floor(watchedMs / 1000)
-  if (!force && watchedSec <= lastEmittedSec) return
-  lastEmittedSec = watchedSec
-  emit('watch-progress', {
-    context: activeWatchContext,
-    watchedSec,
-    completed: Boolean(force),
-  })
+function watchedSnapshotMs(now = Date.now()) {
+	return watchedMs + (watchStartedAt > 0 ? Math.max(0, now - watchStartedAt) : 0)
 }
 
-function stopWatchTimer(forceEmit = false) {
+function emitWatchProgress(force = false, keepalive = false) {
+	const watchedSec = Math.floor(watchedSnapshotMs() / 1000)
+	if (!force && watchedSec <= lastEmittedSec) return
+	lastEmittedSec = watchedSec
+	emit('watch-progress', {
+		context: activeWatchContext,
+		watchedSec,
+		completed: Boolean(force),
+		keepalive,
+	})
+}
+
+function stopWatchTimer(forceEmit = false, keepalive = false) {
+	if (watchHeartbeatInterval) {
+		clearInterval(watchHeartbeatInterval)
+		watchHeartbeatInterval = null
+	}
   if (watchStartedAt > 0) {
     watchedMs += Math.max(0, Date.now() - watchStartedAt)
     watchStartedAt = 0
   }
-  emitWatchProgress(forceEmit)
+	emitWatchProgress(forceEmit, keepalive)
 }
 
 function startWatchTimer() {
@@ -121,10 +131,19 @@ function startWatchTimer() {
 }
 
 function resetWatchTracking() {
+	if (watchHeartbeatInterval) {
+		clearInterval(watchHeartbeatInterval)
+		watchHeartbeatInterval = null
+	}
   watchStartedAt = 0
   watchedMs = 0
   lastEmittedSec = 0
   activeWatchContext = null
+}
+
+function startWatchHeartbeat() {
+	if (watchHeartbeatInterval) return
+	watchHeartbeatInterval = setInterval(() => emitWatchProgress(false), 15_000)
 }
 
 function syncPlaybackUI() {
@@ -209,8 +228,8 @@ function onSeekInput(e) {
   syncPlaybackUI()
 }
 
-function teardown() {
-  stopWatchTimer(true)
+function teardown(keepalive = false) {
+	stopWatchTimer(true, keepalive)
   resetWatchTracking()
   clearSegmentHandlers()
   const video = videoRef.value
@@ -292,7 +311,8 @@ async function setup() {
 
   video.onplay = () => {
 		emit('play')
-    startWatchTimer()
+		startWatchTimer()
+		startWatchHeartbeat()
     syncPlaybackUI()
   }
   video.onpause = () => {
@@ -410,7 +430,7 @@ async function setup() {
 onMounted(setup)
 watch(() => [props.src, props.startTimeSec, props.endTimeSec, props.watchContext], setup)
 watch(selectedLevel, applySelectedLevel)
-onBeforeUnmount(teardown)
+onBeforeUnmount(() => teardown(true))
 </script>
 
 <template>

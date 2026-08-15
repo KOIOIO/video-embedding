@@ -2,9 +2,9 @@
 
 该 Vue 3 + Vite 工程是 `video-service/` 的统一联调前端。登录后可通过页面顶部的工作区切换器，在“视频调试台”“推荐控制台”和“知识点视频”之间切换。
 
-它是调试控制台，不是独立后端或生产鉴权边界；服务配置、API 契约和部署入口以 `../video-service/README.md` 为准。
+它是调试控制台，不是独立后端或账号管理系统；服务配置、API 契约和部署入口以 `../video-service/README.md` 为准。
 
-> 登录账号 `aaddmmiinn`、密码 `admin123` 仅在浏览器内校验，用于避免误操作，不是安全鉴权。后端管理 API 在受可信网关或真实鉴权保护前，不得暴露到不受信任网络。
+控制台使用后端管理员 JWT 鉴权。登录账号来自后端 `sys_user`，仓库不提供或记录默认管理员密码；生产环境必须设置独立的 `JWT_SECRET` 并按后端规则维护管理员账号。
 
 ## 三个工作区
 
@@ -12,7 +12,7 @@
 - **推荐控制台**：集中展示推荐链路诊断、运行状态、数据源、RecBole 性能趋势、业务效果指标、链路追踪、Redis 状态和结果预览。
 - **知识点视频**：批量导入 ZIP 视频包与 XLSX 映射表，查看处理进度、筛选知识点树，并预览同一知识点下的多个 HLS 视频。
 
-三个工作区共用一个登录门禁和顶部应用栏，同一时刻只挂载当前选中的工作区。浏览器会保存 UI 解锁状态、当前工作区和推荐控制台的当前栏目。
+三个工作区共用一个管理员会话和顶部应用栏，同一时刻只挂载当前选中的工作区。浏览器会保存 access token、管理员资料、当前工作区和推荐控制台的当前栏目。
 
 ## 技术栈
 
@@ -40,6 +40,15 @@ npm run dev
 | `npm run build` | 生产构建，输出到 `dist/` |
 | `npm run preview` | 预览生产构建 |
 | `npm test` | 运行 Vitest 单元测试 |
+
+## 管理员登录
+
+1. 登录表单调用 `POST /api/auth/login`，提交 `username` 和 `password`。
+2. 成功响应中的 `access_token` 与管理员资料保存在浏览器本地会话中。
+3. 页面恢复已有会话时调用 `GET /api/auth/me` 重新校验账号；受保护请求统一附带 `Authorization: Bearer <token>`。
+4. 任一受保护请求返回 `401` 或 `403` 时，前端清除会话并要求重新登录；用户也可主动退出。
+
+控制台不创建或重置账号，当前后端服务也没有对应 API；管理员必须由现有身份/数据库运维流程预置到 `sys_user`。密码校验、管理员状态和令牌有效期由后端负责。浏览器本地保存只用于维持会话，不能替代后端授权检查。
 
 ## 视频调试台
 
@@ -97,7 +106,7 @@ npm run dev
 
 ## 知识点视频工作区
 
-批量导入需要一个 ZIP 视频包和一个 `.xlsx` 映射表。服务从管理员 JWT 获取上传用户 ID，验证文件后异步转码；页面轮询批次状态并在完成后刷新知识点树。同一知识点可关联并同时展示多个可播放视频。
+批量导入需要一个 ZIP 视频包和一个 `.xlsx` 映射表。映射表第一个 worksheet 的首行必须严格为 `id`、`name`、`video_name`，视频名按 ZIP entry 的 basename 匹配；完整校验规则见后端 README 的“知识点视频导入文件约定”。服务从管理员 JWT 获取上传用户 ID，验证文件后异步转码；页面轮询批次状态并在完成后刷新知识点树。同一知识点可关联并同时展示多个可播放视频。
 
 | 方法 | 路径 | 用途 |
 |------|------|------|
@@ -106,7 +115,12 @@ npm run dev
 | `GET` | `/api/knowledge-videos/tree` | 获取知识点树及其视频状态 |
 | `GET` | `/api/knowledge-points/:knowledgePointId/videos` | 获取知识点下全部可播放视频 |
 | `POST` | `/api/knowledge-videos/:knowledgeVideoId/playbacks` | 记录用户实际播放 |
+| `PUT` | `/api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId` | 幂等上报当前会话的实际累计观看秒数 |
 | `GET` | `/knowledge-video-media/hls/:videoId/*filepath` | 代理知识点视频 HLS 资源 |
+
+播放器使用 `crypto.randomUUID()` 为每次播放生成符合后端 `[A-Za-z0-9_-]{16,64}` 约束的 session ID，只在实际播放期间累计墙钟秒数，并按绝对累计值周期上报；暂停、结束和组件卸载时也会尽力刷新。客户端重试不会重复累计，服务端按会话保留最大值并汇总多个会话。累计达到视频时长 60% 后，该行为可作为 RecBole 的训练期辅助信号，但知识点视频不会成为线上推荐候选。
+
+播放记录和观看会话接口本身是公开路由，`user_id` 由调用方提供，后端没有把它绑定到管理员 JWT 或浏览器身份。生产接入必须由上游业务服务/网关完成身份绑定、限流和防刷，避免冒用用户并污染训练数据。
 
 ## 测试
 
@@ -115,7 +129,9 @@ npm run dev
 统一控制台与推荐工作区新增测试：
 
 - `src/appShell.test.js` - 统一登录、工作区切换和样式隔离
-- `src/config/consoleSession.test.js` - UI 会话、固定登录和工作区持久化
+- `src/auth/api.test.js` - 后端登录、Bearer token 和会话失效处理
+- `src/auth/session.test.js` - 管理员 token/资料的本地持久化与清理
+- `src/config/consoleSession.test.js` - 工作区与推荐栏目持久化
 - `src/recommendation/api/recommendationConsole.test.js` - 推荐管理 API 请求构造
 - `src/recommendation/recbolePerformance.test.js` - RecBole 时间序列归一化与 SVG 几何计算
 - `src/recommendation/components/RecBolePerformanceChart.test.js` - 趋势图控件、状态和页面位置契约
@@ -123,6 +139,7 @@ npm run dev
 - `src/workspaceBoundary.test.js` - 视频与推荐工作区边界
 - `src/knowledgeVideo/api.test.js` - 知识点视频上传、轮询和多视频响应归一化
 - `src/knowledgeVideo/proxyConfig.test.js` - 本地代理路径契约
+- `src/knowledgeVideo/watchSession.test.js` - 观看会话串行重试、绝对时长和确认进度
 - `src/knowledgeVideo/workspace.test.js` - 知识点视频工作区交互契约
 
 保留的现有视频调试测试：

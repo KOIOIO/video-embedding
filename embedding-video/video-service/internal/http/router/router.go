@@ -47,6 +47,7 @@ func New(httpApp *app.App) *gin.Engine {
 		public.GET("/api/knowledge-points/:knowledgePointId/video", knowledgeHandler.Playback)
 		public.GET("/api/knowledge-points/:knowledgePointId/videos", knowledgeHandler.Playback)
 		public.POST("/api/knowledge-videos/:knowledgeVideoId/playbacks", knowledgeHandler.RecordPlayback)
+		public.PUT("/api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId", knowledgeHandler.ReportWatchSession)
 	}
 	if httpApp.KnowledgeVideoStore != nil && httpApp.KnowledgeVideoRepository != nil {
 		mediaHandler := handler.NewKnowledgeVideoMediaHandler(httpApp.KnowledgeVideoRepository, httpApp.KnowledgeVideoStore)

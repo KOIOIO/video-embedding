@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +52,7 @@ type interactionEvent struct {
 
 type interactionRow struct {
 	UserID         uint64
+	ItemID         string
 	VideoSegmentID uint64
 	Rating         float64
 	Timestamp      float64
@@ -57,7 +60,25 @@ type interactionRow struct {
 	Weight         float64
 }
 
+type knowledgeWatchSession struct {
+	UserID           uint64
+	KnowledgeVideoID uint64
+	SessionID        string
+	Duration         int
+	WatchedSeconds   int
+	UpdatedAt        time.Time
+}
+
+type knowledgeWatchStats struct {
+	SessionRows         int
+	EffectiveAggregates int
+	ShortAggregates     int
+	EffectiveUsers      int
+	EffectiveVideos     int
+}
+
 type itemRow struct {
+	ItemID          string
 	VideoSegmentID  uint64
 	VideoID         uint64
 	SegmentDuration int
@@ -160,6 +181,13 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	interactions := buildInteractionRows(events)
+	watchSessions, err := loadKnowledgeWatchSessions(ctx, db, opts.daysBack)
+	if err != nil {
+		return err
+	}
+	watchInteractions, watchStats := buildKnowledgeWatchRows(watchSessions)
+	interactions = append(interactions, watchInteractions...)
+	train, valid, test := benchmarkSplit(interactions)
 	items, err := loadItems(ctx, db)
 	if err != nil {
 		return err
@@ -169,9 +197,24 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 
-	if err := writeAtomicFile(filepath.Join(opts.outputDir, opts.dataset+".inter"), func(w io.Writer) error {
-		return writeInteractions(w, interactions)
-	}); err != nil {
+	for suffix, rows := range map[string][]interactionRow{"train": train, "valid": valid, "test": test} {
+		if err := writeAtomicFile(filepath.Join(opts.outputDir, opts.dataset+"."+suffix+".inter"), func(w io.Writer) error { return writeInteractions(w, rows) }); err != nil {
+			return err
+		}
+	}
+	for _, row := range watchInteractions {
+		items = append(items, itemRow{ItemID: row.ItemID})
+	}
+	statsPath := filepath.Join(opts.outputDir, opts.dataset+".export_stats.json")
+	statsPayload := map[string]int{
+		"knowledge_watch_session_rows":          watchStats.SessionRows,
+		"knowledge_watch_effective_aggregates":  watchStats.EffectiveAggregates,
+		"knowledge_watch_short_aggregates":      watchStats.ShortAggregates,
+		"knowledge_watch_effective_users":       watchStats.EffectiveUsers,
+		"knowledge_watch_effective_videos":      watchStats.EffectiveVideos,
+		"knowledge_watch_training_interactions": len(watchInteractions),
+	}
+	if err := writeJSONFile(statsPath, statsPayload); err != nil {
 		return err
 	}
 	if err := writeAtomicFile(filepath.Join(opts.outputDir, opts.dataset+".item"), func(w io.Writer) error {
@@ -184,8 +227,39 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "dataset=%s interactions=%d items=%d users=%d output_dir=%s\n", opts.dataset, len(interactions), len(items), len(users), opts.outputDir)
+	fmt.Fprintf(out, "dataset=%s interactions=%d items=%d users=%d knowledge_watch_session_rows=%d knowledge_watch_effective_aggregates=%d knowledge_watch_short_aggregates=%d knowledge_watch_effective_users=%d knowledge_watch_effective_videos=%d knowledge_watch_training_interactions=%d output_dir=%s\n", opts.dataset, len(interactions), len(items), len(users), watchStats.SessionRows, watchStats.EffectiveAggregates, watchStats.ShortAggregates, watchStats.EffectiveUsers, watchStats.EffectiveVideos, len(watchInteractions), opts.outputDir)
 	return nil
+}
+
+func writeJSONFile(path string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o644)
+}
+
+func loadKnowledgeWatchSessions(ctx context.Context, db *sql.DB, daysBack int) ([]knowledgeWatchSession, error) {
+	rows, err := db.QueryContext(ctx, `SELECT r.user_id, r.knowledge_video_id, r.session_id, v.duration, r.watch_duration, r.update_time
+FROM public.edu_knowledge_video_play_record r
+JOIN public.edu_knowledge_video v ON v.id=r.knowledge_video_id
+JOIN public.sys_user u ON u.id=r.user_id
+WHERE r.session_id IS NOT NULL AND r.session_id <> '' AND r.update_time >= NOW()-($1::int*INTERVAL '1 day')
+AND v.deleted=0 AND v.status=2 AND v.duration>0 AND COALESCE(u.deleted,0)=0`, daysBack)
+	if err != nil {
+		return nil, fmt.Errorf("query knowledge watch sessions: %w", err)
+	}
+	defer rows.Close()
+	var result []knowledgeWatchSession
+	for rows.Next() {
+		var row knowledgeWatchSession
+		if err := rows.Scan(&row.UserID, &row.KnowledgeVideoID, &row.SessionID, &row.Duration, &row.WatchedSeconds, &row.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
 }
 
 func openDB(cfg config.Config) (*sql.DB, error) {
@@ -398,6 +472,7 @@ func preferInteractionRow(candidate, current interactionRow) bool {
 func interactionFromEvent(event interactionEvent) (interactionRow, bool) {
 	row := interactionRow{
 		UserID:         event.UserID,
+		ItemID:         strconv.FormatUint(event.VideoSegmentID, 10),
 		VideoSegmentID: event.VideoSegmentID,
 		Source:         event.Source,
 		Timestamp:      float64(event.EventTime.Unix()),
@@ -437,6 +512,122 @@ func interactionFromEvent(event interactionEvent) (interactionRow, bool) {
 		return interactionRow{}, false
 	}
 	return row, true
+}
+
+func buildKnowledgeWatchRows(sessions []knowledgeWatchSession) ([]interactionRow, knowledgeWatchStats) {
+	type sessionAggregate struct {
+		userID, videoID   uint64
+		sessionID         string
+		duration, watched int
+		updated           time.Time
+	}
+	type aggregate struct {
+		userID, videoID   uint64
+		duration, watched int
+		updated           time.Time
+	}
+	sessionRows := make(map[[3]any]sessionAggregate)
+	stats := knowledgeWatchStats{SessionRows: len(sessions)}
+	for _, session := range sessions {
+		key := [3]any{session.UserID, session.KnowledgeVideoID, session.SessionID}
+		current := sessionRows[key]
+		if current.userID == 0 {
+			current.userID, current.videoID, current.sessionID, current.duration = session.UserID, session.KnowledgeVideoID, session.SessionID, session.Duration
+		}
+		if session.WatchedSeconds > current.watched {
+			current.watched = session.WatchedSeconds
+		}
+		if session.Duration > current.duration {
+			current.duration = session.Duration
+		}
+		if session.UpdatedAt.After(current.updated) {
+			current.updated = session.UpdatedAt
+		}
+		sessionRows[key] = current
+	}
+	aggregates := make(map[[2]uint64]aggregate)
+	for _, session := range sessionRows {
+		key := [2]uint64{session.userID, session.videoID}
+		current := aggregates[key]
+		current.userID, current.videoID = session.userID, session.videoID
+		current.duration = maxInt(current.duration, session.duration)
+		current.watched += session.watched
+		if session.updated.After(current.updated) {
+			current.updated = session.updated
+		}
+		aggregates[key] = current
+	}
+	rows := make([]interactionRow, 0, len(aggregates))
+	users := make(map[uint64]struct{})
+	videos := make(map[uint64]struct{})
+	for _, item := range aggregates {
+		if item.duration <= 0 {
+			continue
+		}
+		if item.watched > item.duration {
+			item.watched = item.duration
+		}
+		if item.watched*100 < item.duration*60 {
+			stats.ShortAggregates++
+			continue
+		}
+		stats.EffectiveAggregates++
+		users[item.userID] = struct{}{}
+		videos[item.videoID] = struct{}{}
+		rows = append(rows, interactionRow{
+			UserID: item.userID, ItemID: fmt.Sprintf("knowledge_video:%d", item.videoID),
+			Timestamp: float64(item.updated.Unix()), Source: "knowledge_video_watch",
+			Rating: 1.5, Weight: 1.5,
+		})
+	}
+	stats.EffectiveUsers = len(users)
+	stats.EffectiveVideos = len(videos)
+	return rows, stats
+}
+
+func benchmarkSplit(rows []interactionRow) (train, valid, test []interactionRow) {
+	byUser := make(map[uint64][]interactionRow)
+	for _, row := range rows {
+		if strings.HasPrefix(row.ItemID, "knowledge_video:") {
+			train = append(train, row)
+			continue
+		}
+		byUser[row.UserID] = append(byUser[row.UserID], row)
+	}
+	users := make([]uint64, 0, len(byUser))
+	for userID := range byUser {
+		users = append(users, userID)
+	}
+	sort.Slice(users, func(i, j int) bool { return users[i] < users[j] })
+	for _, userID := range users {
+		userRows := byUser[userID]
+		sort.SliceStable(userRows, func(i, j int) bool {
+			if userRows[i].Timestamp == userRows[j].Timestamp {
+				return userRows[i].ItemID < userRows[j].ItemID
+			}
+			return userRows[i].Timestamp < userRows[j].Timestamp
+		})
+		switch len(userRows) {
+		case 0:
+		case 1:
+			train = append(train, userRows...)
+		case 2:
+			train = append(train, userRows[0])
+			test = append(test, userRows[1])
+		default:
+			train = append(train, userRows[:len(userRows)-2]...)
+			valid = append(valid, userRows[len(userRows)-2])
+			test = append(test, userRows[len(userRows)-1])
+		}
+	}
+	return train, valid, test
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func loadItems(ctx context.Context, db *sql.DB) ([]itemRow, error) {
@@ -663,7 +854,7 @@ func writeInteractions(out io.Writer, rows []interactionRow) error {
 	for _, row := range rows {
 		if err := writer.Write([]string{
 			strconv.FormatUint(row.UserID, 10),
-			strconv.FormatUint(row.VideoSegmentID, 10),
+			row.ItemID,
 			strconv.FormatFloat(row.Rating, 'f', 3, 64),
 			strconv.FormatFloat(row.Timestamp, 'f', 0, 64),
 			row.Source,
@@ -693,8 +884,12 @@ func writeItems(out io.Writer, rows []itemRow) error {
 		return err
 	}
 	for _, row := range rows {
+		itemID := row.ItemID
+		if itemID == "" {
+			itemID = strconv.FormatUint(row.VideoSegmentID, 10)
+		}
 		if err := writer.Write([]string{
-			strconv.FormatUint(row.VideoSegmentID, 10),
+			itemID,
 			strconv.FormatUint(row.VideoID, 10),
 			strconv.Itoa(row.SegmentDuration),
 			strconv.Itoa(row.VideoDuration),

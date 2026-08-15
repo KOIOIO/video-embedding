@@ -22,6 +22,7 @@
 - 标准对接入口：`video-service/cmd/httpapi`
 - 异步处理入口：`video-service/cmd/worker`
 - RecBole 训练入口：`video-service/cmd/recboletrainer`
+- 知识点视频初始化导入工具：`video-service/cmd/knowledgevideo-import`（运维初始化，不经过 HTTP/ZIP）
 - 知识点视频处理：由 `cmd/worker` 中的独立 Redis Stream worker 消费
 - 本地默认监听地址：`:8081`
 - 当前 `docker-compose.yml` 服务器部署端口：`8083`
@@ -39,7 +40,6 @@
 ├── docker-compose.yml               # 根目录便捷部署编排
 ├── docker-compose.local.yml         # 复用本地 Postgres/Redis/MinIO 的覆盖配置
 ├── deployment/                      # 服务器部署包、拓扑和运维脚本
-├── hls-web.zip                      # 前端预构建压缩包
 ├── video-vectorization-cost-report.md
 ├── docs/                            # 仓库级设计文档、演示文稿等
 ├── video-service/      # 推荐部署的 HTTP 后端，供 Java 调用
@@ -79,6 +79,9 @@
 | `VIDEO_APP_ENV_FILE` | Compose 使用的私有环境文件，默认 `.env.deploy` |
 | `VIDEO_APP_HTTP_PORT` | 宿主机暴露的后端 HTTP 端口，默认 `8083` |
 | `VIDEO_APP_WEB_PORT` | 宿主机暴露的调试前端端口，默认 `1325` |
+| `JWT_SECRET` | 管理员 JWT 签名密钥，必须替换为至少 32 个字符的随机值 |
+| `GORSE_VERSION` | Compose 镜像插值变量，默认 `0.5.11`；仅由 shell 或 Compose `.env` 提供，升级时显式设置并验证 |
+| `GORSE_API_KEY` / `GORSE_SERVER_API_KEY` | Go 客户端和 Gorse 服务端 API key，两个值必须完全一致 |
 | `GORSE_DASHBOARD_USERNAME` | 可选诊断 Dashboard 登录用户，不供 Go API 使用 |
 | `GORSE_DASHBOARD_PASSWORD` | 可选诊断 Dashboard 登录密码，生产环境必须替换示例值 |
 
@@ -86,7 +89,8 @@
 
 ```bash
 cp .env.deploy.example .env.deploy
-# 编辑 .env.deploy，填入数据库 DSN、对象存储、Gorse 和 AI API key
+# 编辑 .env.deploy，填入数据库 DSN、JWT_SECRET、对象存储、Gorse 和 AI API key
+# JWT_SECRET 必须使用本部署独有的随机值，不要沿用模板占位值
 docker compose up -d
 ```
 
@@ -103,10 +107,12 @@ docker compose logs -f api worker
 docker compose -f docker-compose.yml -f docker-compose.gorse.yml up -d
 ```
 
-Gorse 默认使用宿主机 Redis 和主服务 PostgreSQL 的独立 schema，具体初始化、同步和回滚见
+Gorse 使用主 PostgreSQL 实例中的独立 schema 保存数据和缓存，向量存储与 blob 默认保存在 Gorse 自己的 SQLite/具名卷中；根 Compose 不为 Gorse 配置宿主机 Redis 连接。具体初始化、端口、同步和回滚见
 `video-service/docs/gorse-recommendation-runbook.md`。
 
 推荐控制台的“命中效果”页通过 API 展示 PostgreSQL 中保存的 RecBole 离线评估趋势，包括 Recall@20、NDCG@20、Hit@20 和 Precision@20。
+
+知识点视频达到服务端计算的有效观看阈值后，才会作为训练期辅助信号进入 RecBole；知识点视频虚拟 item 不进入线上候选或 item embedding。训练发布前还会执行数据质量门禁，失败时保留上一版 active 模型。
 
 生产后端镜像内置 FFmpeg，`configs/video_prod.yml` 使用原生 FFmpeg，不需要挂载宿主 Docker socket。API 和 worker 共享受控具名卷作为本地转码暂存区，持久对象仍由对象存储管理。
 

@@ -25,6 +25,9 @@
   - [3.18 AIConfig](#318-aiconfig)
   - [3.19 RecommendationConfig](#319-recommendationconfig)
   - [3.20 GorseConfig](#320-gorseconfig)
+  - [3.21 AuthConfig](#321-authconfig)
+  - [3.22 KnowledgeVideoStorageConfig](#322-knowledgevideostorageconfig)
+  - [3.23 KnowledgeVideoWorkerConfig](#323-knowledgevideoworkerconfig)
 - [4. Environment Variables](#4-environment-variables)
 - [5. HTTP API Parameters](#5-http-api-parameters)
   - [5.1 Common Response Shape](#51-common-response-shape)
@@ -34,6 +37,9 @@
   - [5.5 Playback and Task Status API Parameters](#55-playback-and-task-status-api-parameters)
   - [5.6 Recommendation API Parameters](#56-recommendation-api-parameters)
   - [5.7 Question Bank API Parameters](#57-question-bank-api-parameters)
+  - [5.8 Authentication and Administrator Sessions](#58-authentication-and-administrator-sessions)
+  - [5.9 Knowledge-video APIs](#59-knowledge-video-apis)
+  - [5.10 Recommendation Administration and Internal Candidates](#510-recommendation-administration-and-internal-candidates)
 - [6. Worker / Internal Default Parameters](#6-worker--internal-default-parameters)
   - [6.1 HTTP Runtime Defaults](#61-http-runtime-defaults)
   - [6.2 Transcode Worker Defaults](#62-transcode-worker-defaults)
@@ -41,8 +47,12 @@
   - [6.4 Hierarchical Segmentation Internal Parameters](#64-hierarchical-segmentation-internal-parameters)
   - [6.5 Tail Alignment Internal Parameters](#65-tail-alignment-internal-parameters)
 - [7. Usage Notes](#7-usage-notes)
+  - [7.1 If You Are a Developer](#71-if-you-are-a-developer)
+  - [7.2 If You Are an Upstream Caller](#72-if-you-are-an-upstream-caller)
+  - [7.3 If You Are Debugging Worker Issues](#73-if-you-are-debugging-worker-issues)
   - [7.4 DLQ Inspection and Replay](#74-dlq-inspection-and-replay)
-  - [7.5 Downstream Service Governance](#75-if-you-are-productizing-the-service-as-a-downstream-capability)
+  - [7.5 MinIO Knowledge-video Initialization Import Tool](#75-minio-knowledge-video-initialization-import-tool)
+  - [7.6 Downstream Service Governance](#76-if-you-are-productizing-the-service-as-a-downstream-capability)
 
 ## 1. Document Scope
 
@@ -92,7 +102,7 @@ Current object storage environment convention:
 1. `configs/video.yml` is for local testing. `RustFS.Endpoint = localhost:9000`.
 2. `configs/video_prod.yml` is for server/production deployment and currently uses the COS endpoint.
 3. Object storage credentials are not stored in YAML. Inject them from private `.env.local` / `.env.deploy` files through `COS_SECRET_ID` / `COS_SECRET_KEY` or `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`.
-4. Both environments keep the bucket name in configuration.
+4. The general video-storage bucket is `video-object-storage` in the local example and `video-object-storage` in the HTTP-service production/delivery example; knowledge videos use an isolated bucket described in 3.22.
 
 ### 3.1 Top-Level Config
 
@@ -102,6 +112,7 @@ Current object storage environment convention:
 | `Host` | `string` | `localhost` | Legacy host field; the current HTTP service does not listen directly based on this value |
 | `Port` | `int` | `9090` | Legacy port field; the current HTTP service does not listen directly based on this value |
 | `HTTP` | `HTTPConfig` | see below | HTTP API listening, logging, slow-request, and CORS configuration |
+| `Auth` | `AuthConfig` | see 3.21 | Administrator JWT signing secret and lifetime |
 | `GRPC` | `GRPCConfig` | see below | gRPC-related configuration, mainly kept for compatibility with the historical project |
 | `Video` | `VideoConfig` | see below | Local video path configuration |
 | `FFmpeg` | `FFmpegConfig` | see below | Transcoding, snapshot, and audio extraction configuration |
@@ -110,6 +121,8 @@ Current object storage environment convention:
 | `RedisKeys` | `RedisKeysConfig` | see below | Redis Stream queue, status, and runtime counter key configuration |
 | `Postgres` | `PostgresConfig` | see below | PostgreSQL connection and pool configuration |
 | `RustFS` | `RustFSConfig` | see below | Object storage connection configuration |
+| `KnowledgeVideoStorage` | `KnowledgeVideoStorageConfig` | see 3.22 | Isolated knowledge-video storage, media proxy, and archive limits |
+| `KnowledgeVideoWorker` | `KnowledgeVideoWorkerConfig` | see 3.23 | Knowledge-video transcode worker count and timeouts |
 | `Transcode` | `TransConfig` | see below | Transcode worker configuration |
 | `VectorWorker` | `VectorWorkerConfig` | see below | Vector worker configuration |
 | `VectorStageWorkers` | `VectorStageWorkersConfig` | see below | Consumer-count configuration for the four hierarchical vector Redis stages |
@@ -232,6 +245,7 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 | Parameter | Type | Example | Default | Purpose |
 |---|---|---|---|---|
 | `TranscodeQueue` | `string` | `video:transcode:queue` | `video:transcode:queue` | Redis Stream key for transcode tasks |
+| `KnowledgeVideoTranscodeQueue` | `string` | `knowledge_video:transcode:stream` | `knowledge_video:transcode:stream` | Isolated knowledge-video transcode queue; `cmd/dlqctl` does not support it |
 | `VectorizeQueue` | `string` | `video:vectorize:queue` | `video:vectorize:queue` | Redis Stream key for vectorization tasks |
 | `VectorPrepareQueue` | `string` | `video:vector:prepare` | `video:vector:prepare` | Redis Stream key for the hierarchical vector prepare stage |
 | `VectorCoarseQueue` | `string` | `video:vector:coarse` | `video:vector:coarse` | Redis Stream key for the hierarchical vector coarse stage |
@@ -245,6 +259,8 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 | `SegmentReactionUser` | `string` | `segment:reaction:user:` | `segment:reaction:user:` | Prefix for per-user segment reaction state keys |
 | `TranscodeStatus` | `string` | `video:transcode:status:` | `video:transcode:status:` | Prefix for transcode task status keys |
 | `RuntimeActiveCounter` | `string` | `video:runtime:active:` | `video:runtime:active:` | Prefix for runtime active counter keys |
+| `RandomPlayRecent` | `string` | `video:random_play:recent:` | `video:random_play:recent:` | Per-user recent-play de-duplication records |
+| `RandomPlayBucket` | `string` | `video:random_play:bucket:` | `video:random_play:bucket:` | Per-user prefetched recommendation bucket |
 
 ### 3.10 PostgresConfig
 
@@ -260,11 +276,13 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 
 | Parameter | Type | Example | Purpose |
 |---|---|---|---|
-| `Endpoint` | `string` | local `localhost:9000`; production `10.200.10.201:9001` | Object storage endpoint |
+| `Endpoint` | `string` | local `localhost:9000`; HTTP production COS URL | Object storage endpoint; delivery uses COS rather than the old RustFS address |
 | `AccessKey` | `string` | `""` | Access key, injected through environment variables |
 | `SecretKey` | `string` | `""` | Secret key, injected through environment variables |
 | `Bucket` | `string` | `video-object-storage` | Bucket name |
 | `UseSSL` | `bool` | `false` | Whether HTTPS is used |
+| `Region` | `string` | empty locally; `ap-beijing` in production | S3/COS region |
+| `BucketLookup` | `string` | `auto` / `dns` | Bucket resolution mode |
 
 ### 3.12 TransConfig
 
@@ -291,8 +309,8 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 
 | Parameter | Type | Example | Purpose |
 |---|---|---|---|
-| `LLMModel` | `string` | `qwen-plus` | Model used for hierarchical content segmentation |
-| `LLMTimeoutMinutes` | `int` | `2` | Timeout for LLM calls |
+| `LLMModel` | `string` | local/production `qwen3.7-plus` | Model used for hierarchical content segmentation |
+| `LLMTimeoutMinutes` | `int` | `5` | Timeout for LLM calls; do not use the old two-minute example |
 
 #### 3.13.3 Tail Alignment Parameters
 
@@ -310,7 +328,7 @@ Note: in `video-service/`, the main service path is HTTP. These fields are retai
 |---|---|---|---|
 | `SegmentWindowSec` | `int` | `30` | Fixed window length for non-hierarchical mode |
 | `SegmentStepSec` | `int` | `30` | Fixed window step size for non-hierarchical mode |
-| `ASRWorkers` | `int` | `30` | ASR worker count |
+| `ASRWorkers` | `int` | `8` | ASR worker count; the runtime also enforces a code-level upper bound |
 | `CoarseWorkers` | `int` | `60` | Coarse-stage related worker parameter; currently also affects video-level worker count |
 | `EmbedBatch` | `int` | `10` | Embedding batch size |
 | `SampleCount` | `int` | `6` | Number of sampled windows in sample mode |
@@ -380,19 +398,55 @@ The vector worker AI client resolves the API key in this order: `DASHSCOPE_API_K
 
 ### 3.20 GorseConfig
 
-Gorse is an optional external candidate service. It is used as the primary recommendation chain only when `Recommendation.Engine=gorse`; the checked-in configs enable `SyncEnabled`, so the combined worker runs an immediate and periodic Gorse sync. Sync failure is logged without stopping the worker; disable `SyncEnabled` when Gorse is not deployed. `WriteBackEnabled` writes feedback only when the Gorse primary chain returns candidates.
+Gorse is an optional external candidate service. It is used as the primary recommendation chain only when `Recommendation.Engine=gorse`; the HTTP-service example config enables `SyncEnabled`, while the delivery config `deployment/config/video_prod.yml` disables synchronization and write-back and uses RecBole as the online recommendation engine. The root Compose file runs one Gorse service, not a cluster. The local service endpoint defaults to `localhost:8087`; the diagnostic override exposes the master HTTP endpoint to the host at `localhost:8088`.
 
-| Parameter | Type | Default | Purpose |
+| Parameter | Type | Current example / delivery value | Purpose |
 |---|---|---|---|
-| `Endpoint` | `string` | `http://localhost:8087` | Gorse server endpoint |
+| `Endpoint` | `string` | local `http://localhost:8087`; Compose/delivery `http://gorse:8088` | Gorse server endpoint; the host diagnostic override is `http://localhost:8088` |
 | `APIKey` | `string` | empty | Gorse API key; `GORSE_API_KEY` overrides it |
 | `TimeoutSeconds` | `int` | `2` | Gorse request timeout in seconds |
 | `ShadowMode` | `bool` | `false` | Observe Gorse candidates without switching the primary chain |
-| `SyncEnabled` / `SyncIntervalMins` | `bool` / `int` | current examples: `true` / `60` | Enable periodic data synchronization and set its interval |
-| `WriteBackEnabled` | `bool` | current examples: `true` | Write online feedback back to Gorse |
+| `SyncEnabled` / `SyncIntervalMins` | `bool` / `int` | HTTP-service example: `true` / `60`; delivery config: `false` / `60` | Enable periodic data synchronization and set its interval |
+| `WriteBackEnabled` | `bool` | HTTP-service example: `true`; delivery config: `false` | Write online feedback back to Gorse |
 | `CandidateLimit` | `int` | `100` | Candidate count requested from Gorse |
-| `EnableGate` / `MinFeedbackCount` / `MinRecommendItems` | `bool` / `int` / `int` | current examples: `true` / `20` / `1` | Data-volume and candidate guards before switching |
-| `CleanupEnabled` / `DataRetentionDays` | `bool` / `int` | current examples: `true` / `30` | Reserved for synchronized-data cleanup; current production code does not consume these fields and does not delete data automatically |
+| `EnableGate` / `MinFeedbackCount` / `MinRecommendItems` | `bool` / `int` / `int` | HTTP/delivery examples: `true` / `20` / `1` | Data-volume and candidate guards before switching |
+| `CleanupEnabled` / `DataRetentionDays` | `bool` / `int` | HTTP/delivery examples: `true` / `30` | Reserved for synchronized-data cleanup; current production code does not consume these fields and does not delete data automatically |
+
+### 3.21 AuthConfig
+
+| Parameter | Type | Local example | HTTP-service production example | Delivery fallback / notes |
+|---|---|---|---|---|
+| `JWTSecret` | `string` | Config file contains a local-development fallback only | Empty in YAML; must be injected through `JWT_SECRET` | `JWT_SECRET` takes precedence over YAML; startup requires at least 32 characters |
+| `JWTExpireHour` | `int` | `8` | `24` (`configs/video_prod.yml`) | When omitted by `deployment/config/video_prod.yml`, code falls back to `8` hours |
+
+Administrator login uses `POST /api/auth/login` and accepts only enabled administrator rows in `sys_user`. The service has no administrator-account creation or password-reset API; provision a qualifying `sys_user` row and password hash through the existing identity/database operations process before deployment. Protected requests send `Authorization: Bearer <access_token>`. Never commit a real signing secret or a default password to the repository.
+
+### 3.22 KnowledgeVideoStorageConfig
+
+| Parameter | Type | Local example | Production / delivery example | Purpose |
+|---|---|---|---|---|
+| `Endpoint` | `string` | `localhost:9000` | COS endpoint (`https://cos.ap-beijing.myqcloud.com` for the HTTP service) | Knowledge-video object storage endpoint |
+| `AccessKey` / `SecretKey` | `string` | Injected from the environment | Injected from the environment | Isolated object-storage credentials |
+| `Bucket` | `string` | `knowledge-point-videos` | `knowledge-point-videos` | Dedicated knowledge-video bucket |
+| `UseSSL` | `bool` | `false` | `true` | Whether HTTPS is used |
+| `Region` | `string` | empty | `ap-beijing` | S3/COS region |
+| `BucketLookup` | `string` | `auto` | `dns` | Bucket resolution mode |
+| `MediaRoutePrefix` | `string` | `/knowledge-video-media` | same | HLS media proxy prefix |
+| `TempPath` | `string` | `./storage/tmp/knowledge_video` | same structure; falls back to the system temp directory when missing | Import/transcode temporary directory |
+| `MaxArchiveBytes` | `int64` | `1073741824` | `1073741824` | Maximum ZIP size (1 GiB) |
+| `MaxExpandedBytes` | `int64` | `4294967296` | `4294967296` | Maximum total expanded size (4 GiB) |
+| `MaxEntryBytes` | `int64` | `536870912` | `536870912` | Maximum size of one archive entry (512 MiB) |
+| `MaxEntries` | `int` | `1000` | `1000` | Maximum number of archive entries |
+
+### 3.23 KnowledgeVideoWorkerConfig
+
+| Parameter | Type | Local / production default | Purpose |
+|---|---|---:|---|
+| `WorkerCount` | `int` | `2` | Knowledge-video transcode consumer count; missing or less than `1` falls back to `2` |
+| `TaskTimeoutMinutes` | `int` | `30` | Timeout in minutes for one knowledge-video transcode task |
+| `ShutdownTimeoutSec` | `int` | `120` | Seconds to wait for tasks during worker shutdown |
+
+This block has no separate blocking, temporary-file retention, or DLQ-management fields. The queue key comes from `RedisKeys.KnowledgeVideoTranscodeQueue`.
 
 ## 4. Environment Variables
 
@@ -401,6 +455,9 @@ The project currently uses the following environment variables explicitly:
 | Environment Variable | Source Location | Purpose |
 |---|---|---|
 | `HTTP_ADDR` | `internal/http/app/app.go` | Overrides the HTTP listening address; default is `:8081` |
+| `JWT_SECRET` | `internal/config/defaults.go`, `internal/http/app/app.go` | Administrator JWT signing secret; takes precedence over `Auth.JWTSecret` and must be at least 32 characters |
+| `VIDEO_APP_ENV_FILE` | `internal/config/loader.go` | Selects an additional dotenv file; `.env` is loaded first and existing shell variables are not overwritten by the file |
+| `REDIS_ADDR` | `internal/config/loader.go` | Overrides `Redis.Addr` |
 | `CONFIG_FILE` | `internal/config/loader.go` | Overrides the default config file path; has higher priority than `VIDEO_CONFIG_FILE` |
 | `VIDEO_CONFIG_FILE` | `internal/config/loader.go` | Overrides the default config file path |
 | `POSTGRES_DSN` | `internal/config/loader.go` | Overrides `Postgres.DSN` |
@@ -410,6 +467,9 @@ The project currently uses the following environment variables explicitly:
 | `RUSTFS_ACCESS_KEY` | `internal/config/loader.go` | Overrides object storage access key when COS variables are not set |
 | `RUSTFS_SECRET_KEY` | `internal/config/loader.go` | Overrides object storage secret key when COS variables are not set |
 | `GORSE_API_KEY` | `internal/config/loader.go` | Overrides `Gorse.APIKey` |
+| `GORSE_ENDPOINT` | `internal/config/loader.go` | Overrides `Gorse.Endpoint`; local diagnostics usually use `http://localhost:8088` |
+| `GORSE_SERVER_API_KEY` | `gorse/entrypoint.sh` | API key checked by the Gorse server in root Compose; must exactly match `GORSE_API_KEY` |
+| `GORSE_VERSION` | `docker-compose.yml` | Gorse image interpolation version, default `0.5.11`; supplied only by the shell or Compose root `.env`, not by a service `env_file` |
 | `DASHSCOPE_API_KEY` | `internal/config/loader.go`, embedding client, vector worker AI client | DashScope / Bailian-compatible API key |
 | `OPENAI_API_KEY` | `internal/config/loader.go`, embedding client, vector worker AI client | Fallback OpenAI-compatible API key |
 | `EMBEDDING_API_KEY` | `internal/config/loader.go`, embedding client | Fallback API key for recommendation embedding |
@@ -423,6 +483,18 @@ The project currently uses the following environment variables explicitly:
 | `UPLOAD_BENCH_BASE_URL` | `tools/upload_bench` | Target service URL for the upload benchmark tool |
 | `SOURCE_DSN` | `tools/db_migrate_except_video_tables` | Source database DSN for the migration tool |
 | `TARGET_DSN` | `tools/db_migrate_except_video_tables` | Target database DSN for the migration tool |
+| `RECBOLE_TRAINER_ENABLED` | `internal/worker/recboletrainer` | Registers the training scheduler; disabled by default and must be `true` for a standalone trainer |
+| `SOURCE_MINIO_ENDPOINT` | `cmd/knowledgevideo-import/main.go` | Source MinIO S3 API endpoint for the knowledge-video initialization import tool; required |
+| `SOURCE_MINIO_BUCKET` | `cmd/knowledgevideo-import/main.go` | Source MinIO bucket; required |
+| `SOURCE_MINIO_ACCESS_KEY` | `cmd/knowledgevideo-import/main.go` | Source MinIO access key; required |
+| `SOURCE_MINIO_SECRET_KEY` | `cmd/knowledgevideo-import/main.go` | Source MinIO secret key; required |
+| `SOURCE_MINIO_USE_SSL` | `cmd/knowledgevideo-import/main.go` | Whether the source MinIO uses HTTPS; default `false` |
+| `SERVICE_DIR` | `recbole-training/scripts/run_recbole_pipeline.sh` | HTTP-service tools and config directory |
+| `CONFIG_FILE` (RecBole script) | RecBole shell pipeline | Config path passed to export/import tools; it has the same name as the service selector but is passed explicitly by the script |
+| `MODEL_VERSION`, `MODEL_NAME`, `RECBOLE_MODEL` | RecBole shell pipeline | Candidate version, online model name, and model class |
+| `DATASET`, `DIM`, `EPOCHS`, `SAMPLE_LIMIT`, `DAYS_BACK` | RecBole shell pipeline | Dataset prefix, embedding dimension, training epochs, sample limit, and lookback days |
+| `PYTHON_BIN`, `DATA_ROOT`, `DATA_DIR`, `ARTIFACT_DIR`, `BASELINE_METRICS` | RecBole shell pipeline | Python executable, data/artifact directories, and baseline metrics file |
+| `PUBLISH_GATE_ENABLED` | RecBole shell pipeline | Runs the publish gate; default is `true` |
 
 ### 4.1 `HTTP_ADDR`
 
@@ -462,6 +534,8 @@ Production deployments should inject API keys through environment variables or a
 - `DIM`, `EPOCHS`, `PYTHON_BIN`: embedding dimension, epochs, and Python executable; defaults are `64`, `20`, and `.venv/bin/python` when available.
 - `DATA_ROOT`, `DATA_DIR`, `ARTIFACT_DIR`, `BASELINE_METRICS`: locations for atomic files, artifacts, and active-model metrics.
 - `PUBLISH_GATE_ENABLED`: runs the RecBole publish gate, default `true`. Its defaults are `Recall@20 >= 0.01`, `NDCG@20 >= 0.005`, and no more than `20%` relative `NDCG@20` decline from the active model; adjust them with the `recbole_recommendation.publish_gate` command-line flags.
+
+The RecBole shell script does not consume `MIN_RECALL_AT_20`, `MIN_NDCG_AT_20`, `MAX_RELATIVE_NDCG_DROP`, or `ARTIFACT_RETENTION_DAYS`. Gate thresholds are CLI flags: `--min-recall-at-20`, `--min-ndcg-at-20`, `--max-relative-ndcg-drop`, `--min-positive-rows`, and `--min-positive-users`; the last two default to `1`. The current exporter does not yet write `positive_rows` / `positive_users`; `publish_gate` checks them only when those fields exist in the metrics file. The current pipeline is therefore fail-open for these two data-volume conditions; do not treat the default `1` as an already-enforced requirement.
 
 ### 4.6 Object Storage Migration Tool Parameters
 
@@ -541,6 +615,8 @@ Fields:
 | `error.code` | `string` | Error code |
 | `error.message` | `string` | Error message |
 
+Business APIs use the envelope above. `/healthz` and `/api/healthz` return health-status JSON, `/swagger/*any` returns Swagger resources, and `/videos/*filepath` plus `/knowledge-video-media/*` may return raw media or Range/206 responses; these entry points do not use the business envelope.
+
 ### 5.2 Health Check and Static Entry Points
 
 #### `GET /healthz`
@@ -556,6 +632,7 @@ Fields:
 
 #### `GET /api/system/metrics`
 
+- Authentication: administrator JWT
 - No request parameters
 - Purpose: Query system runtime metrics
 
@@ -566,6 +643,8 @@ Fields:
 - Note: the actual media proxy route prefix is controlled by `Storage.MediaRoutePrefix` and defaults to `/videos`; if another prefix is configured, `/videos/*filepath` remains registered as a compatibility route
 
 ### 5.3 Upload API Parameters
+
+Every endpoint in this section requires an administrator JWT and derives the uploader ID from the authenticated administrator. Requests must send `Authorization: Bearer <access_token>`.
 
 #### `POST /api/videos`
 
@@ -687,6 +766,12 @@ Path parameters:
 
 Response fields: same as `ChunkedUploadData`.
 
+#### `GET /api/videos/archive/batches/:batchId/progress`
+
+- Authentication: administrator JWT.
+- Path parameter: `batchId`, a positive integer archive-processing batch ID.
+- Returns progress fields such as `batch_id`, `status`, `total`, `processed`, `succeeded`, `failed`, `skipped`, and `errors`; use the current Swagger schema as the authoritative field reference.
+
 #### `POST /api/videos/uploads/:uploadId/complete`
 
 Purpose: complete a single-video chunked upload. The backend validates all chunks, merges them into a local file, uploads the raw object, creates the video record, and enqueues transcoding.
@@ -735,6 +820,8 @@ Response fields:
 | `cover_url` | `string` | Cover access URL |
 
 ### 5.4 Video Management API Parameters
+
+Authentication boundary: `PATCH /api/videos/:id`, `DELETE /api/videos/:id`, `POST /api/videos/:id/publish`, and `POST /api/videos/:id/recommend` require an administrator JWT. The remaining list, playback, and reaction endpoints in this section are public.
 
 #### `GET /api/videos`
 
@@ -955,6 +1042,8 @@ Path parameters:
 
 #### `GET /api/transcode-tasks/:taskId`
 
+- Authentication: administrator JWT
+
 Path parameters:
 
 | Parameter | Type | Required | Purpose |
@@ -1023,6 +1112,140 @@ Path parameters:
 |---|---|---|---|
 | `id` | `uint64` | Yes | Question ID |
 
+### 5.8 Authentication and Administrator Sessions
+
+#### `POST /api/auth/login`
+
+- Authentication: public login entry point.
+- Request type: `application/json`.
+
+| Field | Type | Required | Purpose |
+|---|---|---|---|
+| `username` | `string` | Yes | `sys_user.username` |
+| `password` | `string` | Yes | Administrator password; the repository does not provide a default password |
+
+Only administrator accounts with `user_type=3`, `status=1`, and `deleted=0` are accepted. On success, the response includes `data.access_token`, `data.expires_at`, and a redacted `data.admin`; subsequent administrator requests use `Authorization: Bearer <access_token>`. The service has no administrator-account creation or password-reset endpoint; provision the account through the existing identity/database operations process before deployment.
+
+#### `GET /api/auth/me`
+
+- Authentication: administrator JWT.
+- No request parameters.
+- Returns the current administrator's `id`, `username`, and `real_name`; an invalid account or expired token returns `401`.
+
+### 5.9 Knowledge-video APIs
+
+#### `POST /api/admin/knowledge-videos/batches`
+
+- Authentication: administrator JWT; the uploader ID is taken from the token.
+- Request type: `multipart/form-data`.
+
+| Field | Type | Required | Purpose |
+|---|---|---|---|
+| `archive` | `file` | Yes | ZIP video archive |
+| `mapping` | `file` | Yes | XLSX knowledge-point mapping |
+
+XLSX/ZIP contract:
+
+1. The first worksheet is read. Row 1 must contain exactly three columns: `id`, `name`, and `video_name`; a fourth column is rejected, and at least one data row is required.
+2. `id` must be an existing positive knowledge-point ID, and `name` must exactly match the dictionary name. Multiple rows may refer to the same knowledge point.
+3. `video_name` must be unique in the workbook and match exactly one video basename in the ZIP. ZIP entries may be nested in directories, but duplicate basenames, missing mapped videos, or extra unreferenced videos reject the whole batch.
+4. Supported extensions are `.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`, and `.m4v`. Traversal paths, absolute paths, symbolic links, and other extensions are rejected. `__MACOSX`, `.DS_Store`, and `._*` metadata entries are ignored.
+
+Success returns `202` with `batch_id`, `total_count`, `status`, and `progress_url`. Archive size, total expanded size, single-entry size, and entry count are limited by `KnowledgeVideoStorage`.
+
+#### `GET /api/admin/knowledge-videos/batches/:batchId`
+
+- Authentication: administrator JWT.
+- Path parameter: positive integer `batchId`.
+- Returns `batch_id`, `total_count`, `ready_count`, `failed_count`, `status`, and `videos[]`; each video includes its knowledge point, source filename, duration, status, and an optional error.
+
+#### `GET /api/knowledge-videos/tree`
+
+- Authentication: public.
+- No request parameters.
+- Returns a `nodes[]` tree; nodes contain `id`, `parent_id`, `name`, `children`, and associated `videos`.
+
+#### `GET /api/knowledge-points/:knowledgePointId/video`
+#### `GET /api/knowledge-points/:knowledgePointId/videos`
+
+- Authentication: public; the singular path is a compatibility route and the plural path is the standard route.
+- Path parameter: positive integer `knowledgePointId`.
+- Returns `knowledge_point_id`, `knowledge_point_name`, and `videos[]`; each video contains `knowledge_video_id`, source filename, display name, duration, and `playback_url`. Compatibility responses may also expose `video_id`, `video_name`, `duration`, and `playback_url` for the first video.
+
+#### `POST /api/knowledge-videos/:knowledgeVideoId/playbacks`
+
+- Authentication: public; records a playback start / playback record.
+- Path parameter: positive integer `knowledgeVideoId`.
+- JSON body: `user_id` (`uint64`, required and greater than `0`).
+- Success returns an empty `data` envelope; repeated calls follow the business recording semantics.
+
+#### `PUT /api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId`
+
+- Authentication: public; the player reports progress with session-level retries.
+- Path parameters: positive integer `knowledgeVideoId`; the client generates `sessionId` for one playback session and it must match `^[A-Za-z0-9_-]{16,64}$`. Its idempotency scope is `(user_id, knowledge_video_id, session_id)`.
+- JSON body: `user_id` (required and greater than `0`) and `watched_seconds` (the current session's required absolute watched seconds, non-negative). Retries for the same session keep the larger value; different sessions are summed per user and video, and the service caps both each report and the aggregate at the video duration. Clients must not send an increment and should generate a new `sessionId` for a genuinely new playback session.
+- Returns `session_id`, `session_watched_seconds`, `total_watched_seconds`, `duration_seconds`, `progress_ratio`, and `effective_watch`. `effective_watch=true` when accumulated watching reaches `60%` of the video duration. This signal enters only the RecBole training-time virtual item and is never an online candidate.
+
+Security boundary: these playback-record and watch-session endpoints currently do not use JWT; `user_id` is supplied by the caller, and the service only verifies that the user exists for watch-session reports. It does not verify that the caller owns that identity. For untrusted clients, add identity binding, rate limiting, and anti-abuse controls in an upstream gateway/service; otherwise any valid user ID can be impersonated and RecBole training signals can be polluted.
+
+#### `GET /knowledge-video-media/hls/:videoId/*filepath`
+
+- Authentication: public media proxy.
+- Path parameters: `videoId` and `filepath`.
+- Returns a raw HLS/media response and may support Range/206; it does not use the business JSON envelope.
+
+### 5.10 Recommendation Administration and Internal Candidates
+
+All `/api/admin/recommendation/*` routes require an administrator JWT. Successful responses use the success envelope and errors use the common error shape.
+
+#### `GET /api/admin/recommendation/overview`
+
+- No parameters; returns the current engine, Gorse/RecBole status, and a Redis random-play state summary.
+
+#### `GET /api/admin/recommendation/diagnostics`
+
+- Query: optional `days` (default `14`) and optional `limit` (recent request count). Returns health checks, data freshness, recent requests, strategy effects, and task status.
+
+#### `GET /api/admin/recommendation/datasources`
+
+- No parameters; returns counts and ratios for video, segment, exposure, watch, reaction, and RecBole data sources.
+
+#### `GET /api/admin/recommendation/effects`
+
+- Query: optional `days` (default `14`); returns daily and per-strategy exposure, watch, watch rate, average rank, and average score.
+
+#### `GET /api/admin/recommendation/recbole/performance`
+
+- Query: `metric`, `begin`, and `end` are all required. `begin` and `end` use RFC3339; `metric` is a performance metric name such as `Recall@20` or `NDCG@20`.
+- Returns available metrics and point series by model version and time.
+
+#### `GET /api/admin/recommendation/trace/random-play`
+
+- Query: required positive integer `user_id`; optional `limit`.
+- Returns random-play pipeline stages, candidate items, strategy, model version, and filter reasons.
+
+#### `POST /api/admin/recommendation/trace/by-question`
+
+- JSON body is the same `RecommendByQuestionRequest` used by `POST /api/recommendations/by-question`; returns a question-recommendation pipeline trace.
+
+#### `GET /api/admin/recommendation/redis-state`
+
+- Query: required positive integer `user_id`; returns that user's random-play bucket/recent TTLs, counts, limits, and segment IDs.
+
+#### `GET /api/admin/recommendation/preview/random-play`
+
+- Query: required positive integer `user_id`; optional `limit`; returns preview candidates without writing exposure or recommendation records.
+
+#### `POST /api/admin/recommendation/preview/by-question`
+
+- JSON body is the same `RecommendByQuestionRequest`; returns candidates with `preview_only=true` and does not count them as normal business exposure.
+
+#### `GET /api/internal/recommendations/external/recbole`
+
+- Authentication: none at the application layer (no JWT or API key). This route is intended only for the Gorse external script or trusted internal callers, so deployment must restrict it with a reverse-proxy ACL, network policy, or firewall. It is not a public Java/browser contract, and the `internal` path segment is not a security boundary.
+- Query: required positive integer `user_id`; optional `n`, default `100`, maximum `500`.
+- Success returns a plain numeric `video_segment_id` array (not the business envelope) for the Gorse external script. Knowledge-video virtual items never appear in this list.
+
 ## 6. Worker / Internal Default Parameters
 
 These are not typically supplied by external callers, but they strongly affect runtime behavior.
@@ -1070,6 +1293,8 @@ File: `internal/config/defaults.go`
 | `SegmentReactionQueueKey()` | `segment:reaction:queue` | Segment reaction async queue |
 | `SegmentReactionCountsPrefix()` | `segment:reaction:counts:` | Segment reaction count prefix |
 | `SegmentReactionUserPrefix()` | `segment:reaction:user:` | User segment reaction state prefix |
+
+All Redis Stream queue dead-letter streams use `<queue-key>:dlq`. For example, `VectorCoarseQueueKey()` maps to `video:vector:coarse:dlq`.
 
 ### 6.2 Transcode Worker Defaults
 
@@ -1203,21 +1428,103 @@ Focus first on:
 
 ### 7.4 DLQ Inspection and Replay
 
-`cmd/dlqctl` inspects and explicitly replays Redis Stream dead-letter messages. It follows the same `CONFIG_FILE` / `VIDEO_CONFIG_FILE` loading rules as the service and derives queue keys from `RedisKeys`.
+`cmd/dlqctl` inspects and explicitly replays Redis Stream dead-letter messages. It follows the same `CONFIG_FILE` / `VIDEO_CONFIG_FILE` loading rules as the service and derives Redis connection and primary queue keys from `Redis` and `RedisKeys`.
 
-Supported queue names are `transcode`, `vectorize`, `vector-prepare`, `vector-coarse`, `vector-refine`, `vector-finalize`, `video-reaction`, and `segment-reaction`.
+Supported queue names are:
+
+| Queue name | Configuration |
+|---|---|
+| `transcode` | `RedisKeys.TranscodeQueue` |
+| `vectorize` | `RedisKeys.VectorizeQueue` |
+| `vector-prepare` | `RedisKeys.VectorPrepareQueue` |
+| `vector-coarse` | `RedisKeys.VectorCoarseQueue` |
+| `vector-refine` | `RedisKeys.VectorRefineQueue` |
+| `vector-finalize` | `RedisKeys.VectorFinalizeQueue` |
+| `video-reaction` | `RedisKeys.VideoReactionQueue` |
+| `segment-reaction` | `RedisKeys.SegmentReactionQueue` |
+
+Terminal knowledge-video transcode failures are written to `RedisKeys.KnowledgeVideoTranscodeQueue + ":dlq"` (default `knowledge_video:transcode:stream:dlq`), but the current `cmd/dlqctl` does not include this queue and `--queue all` does not inspect or replay it. The batch API exposes the failed status and error. The repository currently ships no supported knowledge-video DLQ recovery tool or runbook. Production recovery must address the persisted failed state, retry count, and Redis payload together; simply reinserting the original payload will immediately be treated as a terminal failure again. Do not apply the generic commands below.
 
 ```bash
 cd video-service
 
 go run ./cmd/dlqctl list --queue all --limit 20
+go run ./cmd/dlqctl list --queue transcode --limit 20
 go run ./cmd/dlqctl replay --queue vector-coarse --limit 10 --dry-run
 go run ./cmd/dlqctl replay --queue transcode --id <dlq-message-id>
+go run ./cmd/dlqctl replay --queue vector-coarse --limit 10 --keep-dlq
 ```
 
-By default, a replay writes the stored payload back to its primary queue and removes the original DLQ message. Use `--keep-dlq` to retain the record. Inspect the failure and recover its dependency before replaying; corrupted media, missing object keys, and invalid payloads are permanent failures and should not be batch-replayed.
+By default, `replay` writes the payload from the DLQ message back to the primary queue and removes the original DLQ message. `--keep-dlq` retains the original message; `--dry-run` only shows what would be replayed. Inspect the failure and recover its dependency before replaying. Corrupted media, missing object keys, and invalid payloads are permanent failures and should not be replayed directly.
 
-### 7.5 If You Are Productizing the Service as a Downstream Capability
+Recommended workflow:
+
+1. Run `list` or `replay --dry-run` to inspect the failure reason and payload summary.
+2. Confirm that the node, object storage, AI service, or database dependency has recovered.
+3. Replay clearly recoverable tasks by ID; use `--queue all --limit` cautiously.
+4. Do not replay permanently failed tasks with corrupted videos, missing object keys, or invalid parameters.
+
+### 7.5 MinIO Knowledge-video Initialization Import Tool
+
+Files:
+
+- `cmd/knowledgevideo-import/main.go`
+- `cmd/knowledgevideo-import/bulk.go`
+
+`cmd/knowledgevideo-import` is an ops initialization tool: it scans a source MinIO prefix directly, bypassing HTTP, ZIP, and browser authentication, copies source objects to the knowledge-video object store, creates batch/video records, and enqueues transcode tasks. The target PostgreSQL, Redis, and knowledge-video object store keep using the project config; the source MinIO is configured only through the `SOURCE_MINIO_*` environment variables.
+
+The XLSX mapping contract matches the HTTP batch API: the first row must be exactly the three headers `id`, `name`, `video_name`; `video_name` can be a basename unique under the source prefix or a relative object path. The database knowledge-point name is authoritative; `parent / leaf` style inputs are normalized to the leaf name on an exact match. The same source object may appear in multiple rows attached to multiple knowledge points; each unique object is stream-copied only once.
+
+#### Single-batch mode CLI flags
+
+| Flag | Required | Purpose |
+|---|---|---|
+| `--mapping <path>` | Yes | Path to the XLSX mapping file |
+| `--source-prefix <prefix>` | Yes | Allowed source MinIO object prefix |
+| `--batch-key <key>` | Yes | Idempotency key; skipped when a batch with the same key already exists, stored as `minio:<key>` in `zip_file_name` |
+| `--upload-user-id <id>` | Yes | Owner user ID of the batch; positive integer |
+| `--dry-run` | No | Validate and count only (`validated rows / knowledge_points / unique_objects / bytes`) without writing |
+| `--list-only` | No | List objects and total bytes under the source prefix without database access |
+| `--inspect-object <key>` | No | Download and print the raw header, parsed rows, and validation issues of one XLSX |
+
+After validation the tool prints `validated rows=N knowledge_points=N unique_objects=N ...`; a real run creates `direct-import/<batch_id>/<hash>-<basename>` objects, a `manifests/<batch_id>/mapping.xlsx` manifest, and enqueues tasks to `RedisKeys.KnowledgeVideoTranscodeQueue`.
+
+#### Bulk mode CLI flags
+
+| Flag | Required | Purpose |
+|---|---|---|
+| `--all-prefix <prefix>` | Yes (in this mode) | Process every `batch-*.xlsx` + `batch-*.zip` batch below the prefix |
+| `--batch-key <key>` | Yes | Idempotency key; batches are deduplicated per `minio:<key>:<batch-name>` |
+| `--upload-user-id <id>` | Yes | Owner user ID of the batches |
+| `--report-dir <dir>` | No | Report directory; defaults to `knowledge-video-import-<batch-key>` under the system temp dir |
+| `--continue-on-error` | No | Continue after a batch failure; default `true` |
+
+Bulk report files:
+
+| File | Content |
+|---|---|
+| `summary.json` | Result for every batch (`batch`, `status`, `rows`, `unique_objects`, `skipped_empty_rows`, `error`) |
+| `valid-batches.csv` | `imported` / `skipped` / `dry-run` / `skipped-empty` batches |
+| `invalid-batches.csv` | `failed` / `invalid` batches with error details |
+
+Common failure modes: an imprecise header (the three `row=1 field=...: header must be exactly ...` issues) fails the whole batch; data rows with an empty `video_name` (`row=N field=video_name: video name is required`) also fail the whole batch. The reports and batch records are not auto-recovered; fix the mappings and re-run (the idempotency key prevents already-created batches from being inserted again).
+
+Common commands:
+
+```bash
+cd video-service
+SOURCE_MINIO_ENDPOINT=http://minio.example:9000 \
+SOURCE_MINIO_BUCKET=source-bucket \
+SOURCE_MINIO_ACCESS_KEY=... \
+SOURCE_MINIO_SECRET_KEY=... \
+go run ./cmd/knowledgevideo-import \
+  --all-prefix 'batch_imports/2026-08' \
+  --upload-user-id 1 \
+  --batch-key bulk-import-202608 \
+  --report-dir /private/tmp/knowledge-video-import-report
+```
+
+### 7.6 If You Are Productizing the Service as a Downstream Capability
 
 You should additionally pay attention to:
 

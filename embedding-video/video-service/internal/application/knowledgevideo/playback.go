@@ -2,7 +2,9 @@ package knowledgevideo
 
 import (
 	"context"
+	"math"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -12,7 +14,11 @@ type PlaybackRepository interface {
 	ReadyVideosResolver
 	GetVideo(ctx context.Context, id uint64) (Video, bool, error)
 	PlaybackRecorder
+	UserExists(ctx context.Context, userID uint64) (bool, error)
+	UpsertWatchSession(ctx context.Context, report WatchSessionReport, duration int) (WatchSessionAggregate, error)
 }
+
+var watchSessionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
 type PlaybackService struct {
 	Repo             PlaybackRepository
@@ -83,4 +89,58 @@ func (s PlaybackService) Record(ctx context.Context, userID, knowledgeVideoID ui
 		now = s.Now()
 	}
 	return s.Repo.RecordPlayback(ctx, PlayRecord{UserID: userID, KnowledgePointID: video.KnowledgePointID, KnowledgeVideoID: video.ID, CreateTime: now})
+}
+
+func (s PlaybackService) ReportWatchSession(ctx context.Context, input WatchSessionInput) (WatchSessionResult, error) {
+	if input.UserID == 0 {
+		return WatchSessionResult{}, &InvalidArgument{Field: "user_id"}
+	}
+	if input.KnowledgeVideoID == 0 {
+		return WatchSessionResult{}, &InvalidArgument{Field: "knowledge_video_id"}
+	}
+	if !watchSessionPattern.MatchString(input.SessionID) {
+		return WatchSessionResult{}, &InvalidArgument{Field: "session_id"}
+	}
+	if input.WatchedSeconds < 0 {
+		return WatchSessionResult{}, &InvalidArgument{Field: "watched_seconds"}
+	}
+	userExists, err := s.Repo.UserExists(ctx, input.UserID)
+	if err != nil {
+		return WatchSessionResult{}, err
+	}
+	if !userExists {
+		return WatchSessionResult{}, &NotFound{Resource: "user"}
+	}
+	video, found, err := s.Repo.GetVideo(ctx, input.KnowledgeVideoID)
+	if err != nil {
+		return WatchSessionResult{}, err
+	}
+	if !found {
+		return WatchSessionResult{}, &NotFound{Resource: "knowledge video"}
+	}
+	if video.Status != VideoReady || video.Duration <= 0 {
+		return WatchSessionResult{}, &NotReady{Status: video.Status}
+	}
+	watchedSeconds := input.WatchedSeconds
+	if watchedSeconds > video.Duration {
+		watchedSeconds = video.Duration
+	}
+	now := time.Now()
+	if s.Now != nil {
+		now = s.Now()
+	}
+	aggregate, err := s.Repo.UpsertWatchSession(ctx, WatchSessionReport{
+		UserID: input.UserID, KnowledgePointID: video.KnowledgePointID,
+		KnowledgeVideoID: video.ID, SessionID: input.SessionID,
+		WatchedSeconds: watchedSeconds, UpdatedAt: now,
+	}, video.Duration)
+	if err != nil {
+		return WatchSessionResult{}, err
+	}
+	return WatchSessionResult{
+		SessionID: input.SessionID, SessionWatchedSeconds: aggregate.SessionWatchedSeconds,
+		TotalWatchedSeconds: aggregate.TotalWatchedSeconds, DurationSeconds: video.Duration,
+		ProgressRatio:  math.Min(1, float64(aggregate.TotalWatchedSeconds)/float64(video.Duration)),
+		EffectiveWatch: aggregate.TotalWatchedSeconds*100 >= video.Duration*60,
+	}, nil
 }

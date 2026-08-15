@@ -13,6 +13,8 @@
 
 - [`superpowers/specs/2026-07-13-frontend-console-merge-design.md`](superpowers/specs/2026-07-13-frontend-console-merge-design.md)
 - [`superpowers/plans/2026-07-13-frontend-console-merge-plan.md`](superpowers/plans/2026-07-13-frontend-console-merge-plan.md)
+- [`superpowers/specs/2026-08-04-project-documentation-refresh-design.md`](superpowers/specs/2026-08-04-project-documentation-refresh-design.md)
+- [`superpowers/plans/2026-08-04-project-documentation-refresh.md`](superpowers/plans/2026-08-04-project-documentation-refresh.md)
 
 ## 当前运行文档
 
@@ -25,5 +27,7 @@
 - [RecBole 推荐流水线](../video-service/docs/recbole-recommendation-pipeline.md)
 - [Gorse 可选集成运行手册](../video-service/docs/gorse-recommendation-runbook.md)
 - [Swagger / OpenAPI](../video-service/docs/swagger/swagger.yaml)
+
+`superpowers/specs/` 和 `superpowers/plans/` 下的文件记录设计与实施过程；即使其中的命令或状态与当前代码不同，也不替代上面的当前运行文档。
 
 `video-service/docs/swagger/` 是生成产物目录，请通过注解和生成流程更新，不要直接手改生成文件。

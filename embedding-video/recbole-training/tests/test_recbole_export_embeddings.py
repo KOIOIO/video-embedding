@@ -47,6 +47,17 @@ class RecBoleExportEmbeddingsTest(unittest.TestCase):
         self.assertEqual(item_rows[0]["video_id"], "11")
         self.assertEqual(user_rows[0]["user_id"], "7")
 
+    def test_atomic_fallback_filters_virtual_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "demo.item").write_text("item_id:token,video_id:token\n101,10\nknowledge_video:88,0\n")
+            (root / "demo.user").write_text("user_id:token\n7\n")
+            output = root / "out"
+            export_embeddings.export_from_atomic_files(root, "demo", output, "v1", 4)
+            text = (output / "item_embeddings.csv").read_text()
+            self.assertIn("\n101,", text)
+            self.assertNotIn("knowledge_video:", text)
+
 
 if __name__ == "__main__":
     unittest.main()

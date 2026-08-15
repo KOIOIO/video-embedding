@@ -25,6 +25,9 @@
   - [3.18 AIConfig](#318-aiconfig)
   - [3.19 RecommendationConfig](#319-recommendationconfig)
   - [3.20 GorseConfig](#320-gorseconfig)
+  - [3.21 AuthConfig](#321-authconfig)
+  - [3.22 KnowledgeVideoStorageConfig](#322-knowledgevideostorageconfig)
+  - [3.23 KnowledgeVideoWorkerConfig](#323-knowledgevideoworkerconfig)
 - [4. 环境变量参数](#4-环境变量参数)
 - [5. HTTP API 参数](#5-http-api-参数)
   - [5.1 通用返回结构](#51-通用返回结构)
@@ -34,6 +37,9 @@
   - [5.5 播放与状态接口参数](#55-播放与状态接口参数)
   - [5.6 推荐接口参数](#56-推荐接口参数)
   - [5.7 题库接口参数](#57-题库接口参数)
+  - [5.8 鉴权与管理员会话](#58-鉴权与管理员会话)
+  - [5.9 知识点视频接口](#59-知识点视频接口)
+  - [5.10 管理推荐与内部候选接口](#510-管理推荐与内部候选接口)
 - [6. Worker / 内部默认参数](#6-worker--内部默认参数)
   - [6.1 HTTP 运行时默认参数](#61-http-运行时默认参数)
   - [6.2 转码 worker 默认参数](#62-转码-worker-默认参数)
@@ -41,12 +47,16 @@
   - [6.4 hierarchical 内容分段相关内部参数](#64-hierarchical-内容分段相关内部参数)
   - [6.5 tail alignment 相关内部参数](#65-tail-alignment-相关内部参数)
 - [7. 使用建议](#7-使用建议)
+  - [7.1 如果你是开发者](#71-如果你是开发者)
+  - [7.2 如果你是上游调用方](#72-如果你是上游调用方)
+  - [7.3 如果你在排查 worker 问题](#73-如果你在排查-worker-问题)
   - [7.4 DLQ 查看与重放工具](#74-dlq-查看与重放工具)
-  - [7.5 下游服务化治理](#75-如果你要做下游服务化治理)
+  - [7.5 知识点视频 MinIO 初始化导入工具](#75-知识点视频-minio-初始化导入工具)
+  - [7.6 如果你要做下游服务化治理](#76-如果你要做下游服务化治理)
 
 ## 1. 文档说明
 
-本文档总结当前仓库中，尤其是 `video-service/` 主项目里可见的主要参数，覆盖三类来源：
+本文档总结当前仓库中，尤其是 `video-service/` 主项目里可见的主要参数，覆盖四类来源：
 
 1. 运行配置参数
 2. 环境变量参数
@@ -92,7 +102,7 @@
 1. `configs/video.yml` 用于本地测试，`RustFS.Endpoint = localhost:9000`。
 2. `configs/video_prod.yml` 用于服务器/生产部署，当前使用 COS endpoint。
 3. 对象存储账号不写入 YAML，通过 `.env.local` / `.env.deploy` 中的 `COS_SECRET_ID` / `COS_SECRET_KEY` 或 `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` 注入。
-4. 两个环境默认使用同一个 Bucket：`video-object-storage` 或生产 COS bucket。
+4. 通用视频对象存储 bucket 在本地示例中为 `video-object-storage`，在 HTTP 服务生产/交付示例中为 `video-object-storage`；知识点视频使用独立 bucket，见 3.22。
 
 ### 3.1 顶层配置 Config
 
@@ -102,6 +112,7 @@
 | `Host` | `string` | `localhost` | 历史主机配置字段，当前 HTTP 主服务监听不直接依赖它 |
 | `Port` | `int` | `9090` | 历史端口配置字段，当前 HTTP 主服务监听不直接依赖它 |
 | `HTTP` | `HTTPConfig` | 见下文 | HTTP API 监听、日志、慢请求和 CORS 配置 |
+| `Auth` | `AuthConfig` | 见 3.21 | 管理员 JWT 签名密钥和有效期 |
 | `GRPC` | `GRPCConfig` | 见下文 | gRPC 相关配置，主要兼容历史工程 |
 | `Video` | `VideoConfig` | 见下文 | 本地视频目录配置 |
 | `FFmpeg` | `FFmpegConfig` | 见下文 | 转码、截图、音频提取配置 |
@@ -110,6 +121,8 @@
 | `RedisKeys` | `RedisKeysConfig` | 见下文 | Redis Stream 队列、状态和运行计数 key 配置 |
 | `Postgres` | `PostgresConfig` | 见下文 | PostgreSQL 连接与连接池配置 |
 | `RustFS` | `RustFSConfig` | 见下文 | 对象存储连接配置 |
+| `KnowledgeVideoStorage` | `KnowledgeVideoStorageConfig` | 见 3.22 | 知识点视频独立对象存储、媒体代理和归档限制 |
+| `KnowledgeVideoWorker` | `KnowledgeVideoWorkerConfig` | 见 3.23 | 知识点视频转码 worker 数量与超时 |
 | `Transcode` | `TransConfig` | 见下文 | 转码 worker 配置 |
 | `VectorWorker` | `VectorWorkerConfig` | 见下文 | 向量化 worker 配置 |
 | `VectorStageWorkers` | `VectorStageWorkersConfig` | 见下文 | hierarchical 向量化四阶段 Redis consumer 数配置 |
@@ -232,6 +245,7 @@
 | 参数名 | 类型 | 示例 | 默认值 | 作用 |
 |---|---|---|---|---|
 | `TranscodeQueue` | `string` | `video:transcode:queue` | `video:transcode:queue` | 转码任务 Redis Stream key |
+| `KnowledgeVideoTranscodeQueue` | `string` | `knowledge_video:transcode:stream` | `knowledge_video:transcode:stream` | 知识点视频独立转码队列；当前 `cmd/dlqctl` 不支持该队列 |
 | `VectorizeQueue` | `string` | `video:vectorize:queue` | `video:vectorize:queue` | 向量化任务 Redis Stream key |
 | `VectorPrepareQueue` | `string` | `video:vector:prepare` | `video:vector:prepare` | hierarchical 向量化 prepare 阶段 Redis Stream key |
 | `VectorCoarseQueue` | `string` | `video:vector:coarse` | `video:vector:coarse` | hierarchical 向量化 coarse 阶段 Redis Stream key |
@@ -245,6 +259,8 @@
 | `SegmentReactionUser` | `string` | `segment:reaction:user:` | `segment:reaction:user:` | 用户视频片段反馈状态 key 前缀 |
 | `TranscodeStatus` | `string` | `video:transcode:status:` | `video:transcode:status:` | 转码任务状态 key 前缀 |
 | `RuntimeActiveCounter` | `string` | `video:runtime:active:` | `video:runtime:active:` | 运行中任务计数 key 前缀 |
+| `RandomPlayRecent` | `string` | `video:random_play:recent:` | `video:random_play:recent:` | 每个用户的近期播放去重记录 |
+| `RandomPlayBucket` | `string` | `video:random_play:bucket:` | `video:random_play:bucket:` | 每个用户的预取推荐 bucket |
 
 说明：任务队列的死信流不是独立配置项，而是按 `<queue-key>:dlq` 派生。例如 `TranscodeQueue=video:transcode:queue` 时，死信流为 `video:transcode:queue:dlq`。`cmd/dlqctl` 会复用这些配置值来定位对应 DLQ。
 
@@ -262,11 +278,13 @@
 
 | 参数名 | 类型 | 示例 | 作用 |
 |---|---|---|---|
-| `Endpoint` | `string` | 本地 `localhost:9000`；生产 `10.200.10.201:9001` | 对象存储地址 |
+| `Endpoint` | `string` | 本地 `localhost:9000`；HTTP 服务生产 COS URL | 对象存储地址；交付配置使用 COS，不再使用旧 RustFS 地址 |
 | `AccessKey` | `string` | `""` | AccessKey，生产/本地通过环境变量注入 |
 | `SecretKey` | `string` | `""` | SecretKey，生产/本地通过环境变量注入 |
 | `Bucket` | `string` | `video-object-storage` | 存储桶名称 |
 | `UseSSL` | `bool` | `false` | 是否走 HTTPS |
+| `Region` | `string` | 本地空；生产 `ap-beijing` | S3/COS region |
+| `BucketLookup` | `string` | `auto` / `dns` | Bucket 解析方式 |
 
 ### 3.12 TransConfig
 
@@ -293,8 +311,8 @@
 
 | 参数名 | 类型 | 示例 | 作用 |
 |---|---|---|---|
-| `LLMModel` | `string` | `qwen-plus` | 用于 hierarchical 内容分段的模型 |
-| `LLMTimeoutMinutes` | `int` | `2` | LLM 调用超时时间 |
+| `LLMModel` | `string` | 本地/生产 `qwen3.7-plus` | 用于 hierarchical 内容分段的模型 |
+| `LLMTimeoutMinutes` | `int` | `5` | LLM 调用超时时间；不要使用旧的 2 分钟示例 |
 
 #### 3.13.3 Tail Alignment 参数
 
@@ -312,7 +330,7 @@
 |---|---|---|---|
 | `SegmentWindowSec` | `int` | `30` | 非 hierarchical 下固定窗口长度 |
 | `SegmentStepSec` | `int` | `30` | 非 hierarchical 下窗口步长 |
-| `ASRWorkers` | `int` | `30` | ASR worker 数 |
+| `ASRWorkers` | `int` | `8` | ASR worker 数；运行时还会受代码上限约束 |
 | `CoarseWorkers` | `int` | `60` | coarse worker 相关参数，当前还影响视频级 worker 数 |
 | `EmbedBatch` | `int` | `10` | embedding 批量大小 |
 | `SampleCount` | `int` | `6` | sample 模式采样段数 |
@@ -382,19 +400,55 @@
 
 ### 3.20 GorseConfig
 
-Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时才作为主推荐链路使用；当前两份示例配置会启用 `SyncEnabled`，统一 worker 会立即执行并周期执行 Gorse 同步。同步失败只会记录警告，不会退出 worker；不部署 Gorse 时应关闭 `SyncEnabled`。`WriteBackEnabled` 只在 Gorse 主链路返回候选时才会写回反馈。
+Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时才作为主推荐链路使用；HTTP 服务示例配置会启用 `SyncEnabled`，但交付配置 `deployment/config/video_prod.yml` 关闭同步和回写，并以 RecBole 为线上推荐引擎。根 Compose 运行一个 Gorse 服务而不是集群；本地服务默认 endpoint 为 `localhost:8087`，诊断 override 从宿主机暴露 master HTTP `localhost:8088`。
 
-| 参数名 | 类型 | 默认值 | 作用 |
+| 参数名 | 类型 | 当前示例 / 交付值 | 作用 |
 |---|---|---|---|
-| `Endpoint` | `string` | `http://localhost:8087` | Gorse server 地址 |
+| `Endpoint` | `string` | 本地 `http://localhost:8087`；Compose/交付 `http://gorse:8088` | Gorse server 地址；宿主机诊断 override 为 `http://localhost:8088` |
 | `APIKey` | `string` | 空 | Gorse API key，可由 `GORSE_API_KEY` 覆盖 |
 | `TimeoutSeconds` | `int` | `2` | 调用 Gorse 的超时秒数 |
 | `ShadowMode` | `bool` | `false` | 仅观测候选结果，不切换主链路 |
-| `SyncEnabled` / `SyncIntervalMins` | `bool` / `int` | 当前示例为 `true` / `60` | 是否启动周期数据同步及其间隔 |
-| `WriteBackEnabled` | `bool` | 当前示例为 `true` | 是否将在线反馈写回 Gorse |
+| `SyncEnabled` / `SyncIntervalMins` | `bool` / `int` | HTTP 服务示例 `true` / `60`；交付配置 `false` / `60` | 是否启动周期数据同步及其间隔 |
+| `WriteBackEnabled` | `bool` | HTTP 服务示例 `true`；交付配置 `false` | 是否将在线反馈写回 Gorse |
 | `CandidateLimit` | `int` | `100` | 一次向 Gorse 请求的候选数 |
-| `EnableGate` / `MinFeedbackCount` / `MinRecommendItems` | `bool` / `int` / `int` | 当前示例为 `true` / `20` / `1` | 切换前的数据量与候选数保护条件 |
-| `CleanupEnabled` / `DataRetentionDays` | `bool` / `int` | 当前示例为 `true` / `30` | 为未来同步数据清理预留；当前生产代码未消费这两个字段，不会自动删除数据 |
+| `EnableGate` / `MinFeedbackCount` / `MinRecommendItems` | `bool` / `int` / `int` | HTTP/交付示例均为 `true` / `20` / `1` | 切换前的数据量与候选数保护条件 |
+| `CleanupEnabled` / `DataRetentionDays` | `bool` / `int` | HTTP/交付示例均为 `true` / `30` | 为未来同步数据清理预留；当前生产代码未消费这两个字段，不会自动删除数据 |
+
+### 3.21 AuthConfig
+
+| 参数名 | 类型 | 本地示例 | HTTP 服务生产示例 | 交付回退/说明 |
+|---|---|---|---|---|
+| `JWTSecret` | `string` | 配置文件仅含本地开发回退值 | 配置为空，必须由 `JWT_SECRET` 注入 | `JWT_SECRET` 优先于 YAML；服务启动要求至少 32 个字符 |
+| `JWTExpireHour` | `int` | `8` | `24`（`configs/video_prod.yml`） | `deployment/config/video_prod.yml` 未设置时由代码回退到 `8` 小时 |
+
+管理员登录使用 `POST /api/auth/login`，只接受启用的 `sys_user` 管理员；受保护请求发送 `Authorization: Bearer <access_token>`。本服务没有创建或重置管理员账号的 API，部署前必须通过现有身份/数据库运维流程预置符合条件的 `sys_user` 记录和密码哈希。不要把真实签名密钥或默认密码写入仓库。
+
+### 3.22 KnowledgeVideoStorageConfig
+
+| 参数名 | 类型 | 本地示例 | 生产/交付示例 | 作用 |
+|---|---|---|---|---|
+| `Endpoint` | `string` | `localhost:9000` | COS endpoint（HTTP 服务为 `https://cos.ap-beijing.myqcloud.com`） | 知识点视频对象存储地址 |
+| `AccessKey` / `SecretKey` | `string` | 环境注入 | 环境注入 | 独立对象存储凭证 |
+| `Bucket` | `string` | `knowledge-point-videos` | `knowledge-point-videos` | 知识点视频专用 bucket |
+| `UseSSL` | `bool` | `false` | `true` | 是否使用 HTTPS |
+| `Region` | `string` | 空 | `ap-beijing` | S3/COS region |
+| `BucketLookup` | `string` | `auto` | `dns` | bucket 解析方式 |
+| `MediaRoutePrefix` | `string` | `/knowledge-video-media` | 同左 | HLS 媒体代理前缀 |
+| `TempPath` | `string` | `./storage/tmp/knowledge_video` | 同结构；缺失时使用系统临时目录 | 导入/转码临时目录 |
+| `MaxArchiveBytes` | `int64` | `1073741824` | `1073741824` | ZIP 最大字节数（1 GiB） |
+| `MaxExpandedBytes` | `int64` | `4294967296` | `4294967296` | 解压后总大小上限（4 GiB） |
+| `MaxEntryBytes` | `int64` | `536870912` | `536870912` | 单个归档条目上限（512 MiB） |
+| `MaxEntries` | `int` | `1000` | `1000` | 归档条目数量上限 |
+
+### 3.23 KnowledgeVideoWorkerConfig
+
+| 参数名 | 类型 | 本地/生产默认 | 作用 |
+|---|---|---:|---|
+| `WorkerCount` | `int` | `2` | 知识点视频转码 consumer 数；缺失或小于 1 时回退到 `2` |
+| `TaskTimeoutMinutes` | `int` | `30` | 单个知识点视频转码任务超时分钟数 |
+| `ShutdownTimeoutSec` | `int` | `120` | worker 关闭时等待任务完成的秒数 |
+
+该配置块没有独立的消费阻塞、临时目录保留或 DLQ 管理字段；队列 key 来自 `RedisKeys.KnowledgeVideoTranscodeQueue`。
 
 ## 4. 环境变量参数
 
@@ -403,6 +457,9 @@ Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时�
 | 环境变量 | 来源位置 | 作用 |
 |---|---|---|
 | `HTTP_ADDR` | `internal/http/app/app.go` | 覆盖 HTTP 服务监听地址，默认 `:8081` |
+| `JWT_SECRET` | `internal/config/defaults.go`、`internal/http/app/app.go` | 管理员 JWT 签名密钥；优先于 `Auth.JWTSecret`，至少 32 个字符 |
+| `VIDEO_APP_ENV_FILE` | `internal/config/loader.go` | 指定额外 dotenv 文件；`.env` 先加载，shell 已存在变量不会被文件覆盖 |
+| `REDIS_ADDR` | `internal/config/loader.go` | 覆盖 `Redis.Addr` |
 | `CONFIG_FILE` | `internal/config/loader.go` | 覆盖默认配置文件路径，优先级高于 `VIDEO_CONFIG_FILE` |
 | `VIDEO_CONFIG_FILE` | `internal/config/loader.go` | 覆盖默认配置文件路径 |
 | `POSTGRES_DSN` | `internal/config/loader.go` | 覆盖 `Postgres.DSN` |
@@ -412,6 +469,9 @@ Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时�
 | `RUSTFS_ACCESS_KEY` | `internal/config/loader.go` | 当 COS 变量未设置时覆盖 AccessKey |
 | `RUSTFS_SECRET_KEY` | `internal/config/loader.go` | 当 COS 变量未设置时覆盖 SecretKey |
 | `GORSE_API_KEY` | `internal/config/loader.go` | 覆盖 `Gorse.APIKey` |
+| `GORSE_ENDPOINT` | `internal/config/loader.go` | 覆盖 `Gorse.Endpoint`；本地诊断通常使用 `http://localhost:8088` |
+| `GORSE_SERVER_API_KEY` | `gorse/entrypoint.sh` | 根 Compose 中 Gorse 服务端校验的 API key；必须与 `GORSE_API_KEY` 完全一致 |
+| `GORSE_VERSION` | `docker-compose.yml` | Gorse 镜像插值版本，默认 `0.5.11`；仅由 shell 或 Compose 根 `.env` 提供，服务级 `env_file` 不参与插值 |
 | `DASHSCOPE_API_KEY` | `internal/config/loader.go`、embedding 客户端、vector worker AI client | DashScope / 百炼兼容接口 API Key |
 | `OPENAI_API_KEY` | `internal/config/loader.go`、embedding 客户端、vector worker AI client | OpenAI 兼容接口 API Key 兜底 |
 | `EMBEDDING_API_KEY` | `internal/config/loader.go`、embedding 客户端 | 推荐链路 embedding API Key 兜底 |
@@ -425,6 +485,18 @@ Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时�
 | `UPLOAD_BENCH_BASE_URL` | `tools/upload_bench` | 上传压测工具目标服务地址 |
 | `SOURCE_DSN` | `tools/db_migrate_except_video_tables` | 数据迁移工具源库 DSN |
 | `TARGET_DSN` | `tools/db_migrate_except_video_tables` | 数据迁移工具目标库 DSN |
+| `RECBOLE_TRAINER_ENABLED` | `internal/worker/recboletrainer` | 是否注册训练调度器；默认关闭，独立 trainer 必须设为 `true` |
+| `SOURCE_MINIO_ENDPOINT` | `cmd/knowledgevideo-import/main.go` | 知识点视频初始化导入工具的源 MinIO S3 API 地址，必填 |
+| `SOURCE_MINIO_BUCKET` | `cmd/knowledgevideo-import/main.go` | 源 MinIO bucket，必填 |
+| `SOURCE_MINIO_ACCESS_KEY` | `cmd/knowledgevideo-import/main.go` | 源 MinIO AccessKey，必填 |
+| `SOURCE_MINIO_SECRET_KEY` | `cmd/knowledgevideo-import/main.go` | 源 MinIO SecretKey，必填 |
+| `SOURCE_MINIO_USE_SSL` | `cmd/knowledgevideo-import/main.go` | 源 MinIO 是否走 HTTPS，默认 `false` |
+| `SERVICE_DIR` | `recbole-training/scripts/run_recbole_pipeline.sh` | HTTP 服务工具和配置目录 |
+| `CONFIG_FILE`（RecBole 脚本） | RecBole shell pipeline | 传给导出/导入工具的配置路径；与服务配置选择同名但由脚本显式传递 |
+| `MODEL_VERSION`、`MODEL_NAME`、`RECBOLE_MODEL` | RecBole shell pipeline | 候选版本、线上模型名和模型类 |
+| `DATASET`、`DIM`、`EPOCHS`、`SAMPLE_LIMIT`、`DAYS_BACK` | RecBole shell pipeline | 数据集前缀、embedding 维度、训练轮数、样本上限和回溯天数 |
+| `PYTHON_BIN`、`DATA_ROOT`、`DATA_DIR`、`ARTIFACT_DIR`、`BASELINE_METRICS` | RecBole shell pipeline | Python 可执行文件、数据/产物目录和 baseline 指标文件 |
+| `PUBLISH_GATE_ENABLED` | RecBole shell pipeline | 是否运行发布门禁，默认 `true` |
 
 ### 4.1 `HTTP_ADDR`
 
@@ -464,6 +536,8 @@ Gorse 是可选的外部候选服务。只有 `Recommendation.Engine=gorse` 时�
 - `DIM`、`EPOCHS`、`PYTHON_BIN`：embedding 维度、训练轮数和 Python 解释器；默认 `64`、`20`，解释器优先使用 `.venv/bin/python`。
 - `DATA_ROOT`、`DATA_DIR`、`ARTIFACT_DIR`、`BASELINE_METRICS`：RecBole atomic 文件、训练产物和上一版指标文件的位置。
 - `PUBLISH_GATE_ENABLED`：是否执行 RecBole 发布门禁，默认 `true`。门禁的默认阈值为 `Recall@20 >= 0.01`、`NDCG@20 >= 0.005`，且相对上一版 `NDCG@20` 的降幅不超过 `20%`；如需调整，直接向 `recbole_recommendation.publish_gate` 传入对应命令行参数。
+
+RecBole shell 脚本不消费 `MIN_RECALL_AT_20`、`MIN_NDCG_AT_20`、`MAX_RELATIVE_NDCG_DROP` 或 `ARTIFACT_RETENTION_DAYS`。门禁阈值使用 `--min-recall-at-20`、`--min-ndcg-at-20`、`--max-relative-ndcg-drop`、`--min-positive-rows`、`--min-positive-users` CLI flags，后两项默认均为 `1`。当前 exporter 尚未写出 `positive_rows` / `positive_users` 字段，`publish_gate` 只有在指标文件存在这些字段时才执行对应检查；因此当前流水线对这两个数据量条件是 fail-open，不能把默认值 `1` 理解为已经强制生效。
 
 ### 4.6 对象存储迁移工具参数
 
@@ -543,6 +617,8 @@ go run ./tools/migrate_rustfs_bucket --dry-run=false
 | `error.code` | `string` | 错误码 |
 | `error.message` | `string` | 错误描述 |
 
+业务 API 使用上述 envelope。`/healthz` 和 `/api/healthz` 返回健康状态 JSON，`/swagger/*any` 返回 Swagger 资源，`/videos/*filepath` 与 `/knowledge-video-media/*` 可能返回原始媒体、Range/206 响应；这些入口不是统一业务 envelope。
+
 ### 5.2 健康检查与静态入口
 
 #### `GET /healthz`
@@ -558,6 +634,7 @@ go run ./tools/migrate_rustfs_bucket --dry-run=false
 
 #### `GET /api/system/metrics`
 
+- 鉴权：管理员 JWT
 - 无请求参数
 - 作用：查询系统运行指标
 
@@ -568,6 +645,8 @@ go run ./tools/migrate_rustfs_bucket --dry-run=false
 - 说明：实际媒体代理路由前缀由 `Storage.MediaRoutePrefix` 控制，默认是 `/videos`；如果配置成其他前缀，仍保留 `/videos/*filepath` 兼容路由
 
 ### 5.3 上传相关接口参数
+
+本节所有接口均要求管理员 JWT，并从已验证的管理员身份派生上传者 ID；请求需发送 `Authorization: Bearer <access_token>`。
 
 #### `POST /api/videos`
 
@@ -689,6 +768,12 @@ go run ./tools/migrate_rustfs_bucket --dry-run=false
 
 响应字段：同 `ChunkedUploadData`。
 
+#### `GET /api/videos/archive/batches/:batchId/progress`
+
+- 鉴权：管理员 JWT。
+- 路径参数：`batchId`，正整数；归档处理批次 ID。
+- 返回：`batch_id`、`status`、`total`、`processed`、`succeeded`、`failed`、`skipped`、`errors` 等归档处理进度字段；具体字段以当前 Swagger schema 为准。
+
 #### `POST /api/videos/uploads/:uploadId/complete`
 
 作用：完成普通视频分片上传。服务端会校验所有分片、合并本地文件、上传对象存储、创建视频记录并投递转码任务。
@@ -737,6 +822,8 @@ go run ./tools/migrate_rustfs_bucket --dry-run=false
 | `cover_url` | `string` | 封面访问地址 |
 
 ### 5.4 视频管理接口参数
+
+鉴权边界：`PATCH /api/videos/:id`、`DELETE /api/videos/:id`、`POST /api/videos/:id/publish` 和 `POST /api/videos/:id/recommend` 要求管理员 JWT；本节其余列表、播放和反馈接口保持公开。
 
 #### `GET /api/videos`
 
@@ -957,6 +1044,8 @@ Query 参数：
 
 #### `GET /api/transcode-tasks/:taskId`
 
+- 鉴权：管理员 JWT
+
 路径参数：
 
 | 参数名 | 类型 | 必填 | 作用 |
@@ -1024,6 +1113,140 @@ Query 参数：
 | 参数名 | 类型 | 必填 | 作用 |
 |---|---|---|---|
 | `id` | `uint64` | 是 | 题目 ID |
+
+### 5.8 鉴权与管理员会话
+
+#### `POST /api/auth/login`
+
+- 鉴权：公开登录入口。
+- 请求类型：`application/json`。
+
+| 字段 | 类型 | 必填 | 作用 |
+|---|---|---|---|
+| `username` | `string` | 是 | `sys_user.username` |
+| `password` | `string` | 是 | 管理员密码；仓库不提供默认密码 |
+
+只接受 `user_type=3`、`status=1`、`deleted=0` 的管理员账号。成功返回 `data.access_token`、`data.expires_at` 和脱敏 `data.admin`；后续管理员请求使用 `Authorization: Bearer <access_token>`。本服务不提供管理员创建或密码重置接口，部署方必须先通过现有身份/数据库运维流程预置账号。
+
+#### `GET /api/auth/me`
+
+- 鉴权：管理员 JWT。
+- 无请求参数。
+- 返回当前管理员的 `id`、`username`、`real_name`；账号失效或 token 过期返回 `401`。
+
+### 5.9 知识点视频接口
+
+#### `POST /api/admin/knowledge-videos/batches`
+
+- 鉴权：管理员 JWT；上传者 ID 从 token 中取得。
+- 请求类型：`multipart/form-data`。
+
+| 字段 | 类型 | 必填 | 作用 |
+|---|---|---|---|
+| `archive` | `file` | 是 | ZIP 视频归档 |
+| `mapping` | `file` | 是 | XLSX 知识点映射 |
+
+XLSX/ZIP 契约：
+
+1. 读取 XLSX 的第一个 worksheet；第一行必须严格为 `id`、`name`、`video_name` 三列，不能有第四列，且至少有一行数据。
+2. `id` 必须是已存在的正整数知识点 ID，`name` 必须与知识点字典名称完全一致；同一个知识点可以有多行视频。
+3. `video_name` 必须在表内唯一，并按 basename 与 ZIP 中恰好一个视频文件匹配。ZIP 可以包含目录，但重复 basename、映射缺失视频或未被映射引用的额外视频都会拒绝整个批次。
+4. 支持 `.mp4`、`.mov`、`.mkv`、`.avi`、`.webm`、`.m4v`；路径穿越、绝对路径、符号链接和其他扩展名会被拒绝。`__MACOSX`、`.DS_Store`、`._*` 元数据会被忽略。
+
+成功返回 `202`，数据含 `batch_id`、`total_count`、`status`、`progress_url`。归档大小、解压总量、单条目大小和条目数受 `KnowledgeVideoStorage` 限制。
+
+#### `GET /api/admin/knowledge-videos/batches/:batchId`
+
+- 鉴权：管理员 JWT。
+- 路径参数：`batchId` 正整数。
+- 返回：`batch_id`、`total_count`、`ready_count`、`failed_count`、`status`、`videos[]`；每个视频含知识点、文件名、时长、状态和可选错误信息。
+
+#### `GET /api/knowledge-videos/tree`
+
+- 鉴权：公开。
+- 无请求参数。
+- 返回 `nodes[]` 树结构；节点含 `id`、`parent_id`、`name`、`children` 和关联 `videos`。
+
+#### `GET /api/knowledge-points/:knowledgePointId/video`
+#### `GET /api/knowledge-points/:knowledgePointId/videos`
+
+- 鉴权：公开；前者是单数兼容路径，后者是标准复数路径。
+- 路径参数：`knowledgePointId` 正整数。
+- 返回 `knowledge_point_id`、`knowledge_point_name`、`videos[]`；视频项含 `knowledge_video_id`、源文件名、显示名、时长和 `playback_url`。兼容响应可能同时提供首个视频的 `video_id`、`video_name`、`duration`、`playback_url`。
+
+#### `POST /api/knowledge-videos/:knowledgeVideoId/playbacks`
+
+- 鉴权：公开；用于记录一次播放开始/播放记录。
+- 路径参数：`knowledgeVideoId` 正整数。
+- JSON body：`user_id`（`uint64`，必填且大于 0）。
+- 成功返回空 `data` envelope；重复调用应按业务记录语义处理。
+
+#### `PUT /api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId`
+
+- 鉴权：公开；由播放器按会话重试上报。
+- 路径参数：`knowledgeVideoId` 正整数；`sessionId` 由客户端为一次播放会话生成，必须匹配 `^[A-Za-z0-9_-]{16,64}$`，其幂等范围为同一个 `(user_id, knowledge_video_id, session_id)`。
+- JSON body：`user_id`（必填且大于 0）、`watched_seconds`（必填，当前 session 的绝对观看秒数，不能为负数）。同一 session 重试只保留较大值；不同 session 的最大值按用户和视频求和，服务端把单次值与汇总值都封顶到视频时长。客户端不应发送增量值，并应为新的实际播放会话生成新的 `sessionId`。
+- 返回 `session_id`、`session_watched_seconds`、`total_watched_seconds`、`duration_seconds`、`progress_ratio`、`effective_watch`。累计观看达到视频时长的 `60%` 时 `effective_watch=true`，该信号只进入 RecBole 训练期虚拟 item，不成为在线候选。
+
+安全边界：上述播放记录和观看会话接口当前不使用 JWT，`user_id` 由调用方提供，服务只在观看会话接口确认该用户存在，不校验调用方是否拥有该身份。若流量来自不可信客户端，必须在上游网关/业务服务补充身份绑定、限流和防刷；否则任意有效用户 ID 都可能被冒用并污染 RecBole 训练信号。
+
+#### `GET /knowledge-video-media/hls/:videoId/*filepath`
+
+- 鉴权：公开媒体代理。
+- 路径参数：`videoId` 和 `filepath`。
+- 返回 HLS/媒体原始响应，可能支持 Range/206，不使用业务 JSON envelope。
+
+### 5.10 管理推荐与内部候选接口
+
+以下 `/api/admin/recommendation/*` 路径全部要求管理员 JWT；响应使用成功 envelope，错误使用通用错误结构。
+
+#### `GET /api/admin/recommendation/overview`
+
+- 无参数；返回当前引擎、Gorse/RecBole 状态和 Redis random-play 状态摘要。
+
+#### `GET /api/admin/recommendation/diagnostics`
+
+- Query：`days`（可选，默认 `14`）、`limit`（可选，最近请求数量）。返回健康检查、数据新鲜度、近期请求、策略效果和任务状态。
+
+#### `GET /api/admin/recommendation/datasources`
+
+- 无参数；返回视频/片段/曝光/观看/reaction/RecBole 数据源计数和比例。
+
+#### `GET /api/admin/recommendation/effects`
+
+- Query：`days`（可选，默认 `14`）；返回按日及按策略的曝光、观看、观看率、平均排名和平均分。
+
+#### `GET /api/admin/recommendation/recbole/performance`
+
+- Query：`metric`、`begin`、`end` 均必填；`begin/end` 使用 RFC3339，`metric` 为性能指标名（如 `Recall@20`、`NDCG@20`）。
+- 返回可用指标列表和按模型版本/时间的点序列。
+
+#### `GET /api/admin/recommendation/trace/random-play`
+
+- Query：`user_id` 必填且为正整数，`limit` 可选。
+- 返回随机播放链路阶段、候选 item、策略、模型版本和过滤原因。
+
+#### `POST /api/admin/recommendation/trace/by-question`
+
+- JSON body 与 `POST /api/recommendations/by-question` 的 `RecommendByQuestionRequest` 相同；返回题目推荐链路 trace。
+
+#### `GET /api/admin/recommendation/redis-state`
+
+- Query：`user_id` 必填且为正整数；返回该用户 random-play bucket/recent 的 TTL、数量、上限和片段 ID。
+
+#### `GET /api/admin/recommendation/preview/random-play`
+
+- Query：`user_id` 必填且为正整数，`limit` 可选；返回不写入曝光/推荐记录的预览候选列表。
+
+#### `POST /api/admin/recommendation/preview/by-question`
+
+- JSON body 与 `RecommendByQuestionRequest` 相同；返回 `preview_only=true` 的候选列表，不作为正常业务曝光。
+
+#### `GET /api/internal/recommendations/external/recbole`
+
+- 鉴权：应用层当前没有 JWT 或 API key 校验。该路径只供 Gorse external script 或受控内部调用，部署时必须通过反向代理 ACL、网络策略或防火墙限制访问；不是公开 Java/浏览器契约，路径中的 `internal` 本身不是安全边界。
+- Query：`user_id` 必填且为正整数，`n` 可选，默认 `100`，最大 `500`。
+- 成功返回普通数字 `video_segment_id` 数组（非业务 envelope），供 Gorse external script 使用；知识点视频虚拟 item 不会出现在列表。
 
 ## 6. Worker / 内部默认参数
 
@@ -1227,6 +1450,8 @@ Query 参数：
 | `video-reaction` | `RedisKeys.VideoReactionQueue` |
 | `segment-reaction` | `RedisKeys.SegmentReactionQueue` |
 
+知识点视频转码的终态失败会写入 `RedisKeys.KnowledgeVideoTranscodeQueue + ":dlq"`（默认 `knowledge_video:transcode:stream:dlq`），但当前 `cmd/dlqctl` 不包含该队列，`--queue all` 也不会查看或重放它。批次接口会显示失败状态和错误；仓库当前没有受支持的知识点视频 DLQ 恢复工具或 runbook。生产恢复必须由服务负责人同时核对并修复持久化失败状态、重试计数和 Redis payload；单纯把原 payload 重新插入队列会再次被判定为终态失败，不能直接套用下方通用命令。
+
 常用命令：
 
 ```bash
@@ -1248,7 +1473,67 @@ go run ./cmd/dlqctl replay --queue vector-coarse --limit 10 --keep-dlq
 3. 对明确可恢复的任务按 id 重放，谨慎使用 `--queue all --limit` 批量重放。
 4. 视频损坏、对象 key 不存在、参数非法等永久失败任务不应直接重放。
 
-### 7.5 如果你要做下游服务化治理
+### 7.5 知识点视频 MinIO 初始化导入工具
+
+文件：
+
+- `cmd/knowledgevideo-import/main.go`
+- `cmd/knowledgevideo-import/bulk.go`
+
+`cmd/knowledgevideo-import` 是运维初始化工具：直接扫描源 MinIO 前缀，跳过 HTTP、ZIP 和浏览器鉴权，把源对象复制到知识视频对象存储并创建批次/视频记录，再投递转码任务。目标 PostgreSQL、Redis 和知识视频对象存储继续使用项目配置；源 MinIO 只通过 `SOURCE_MINIO_*` 环境变量传入。
+
+XLSX 映射契约与 HTTP 批次接口一致：第一行必须严格为 `id`、`name`、`video_name` 三列表头；`video_name` 可以是源前缀下唯一的 basename，也可以是相对对象路径。数据库知识点名称是最终依据，`父级 / 叶子名称` 形式会在叶子名称精确匹配时自动规范化。同一个源对象可被多行引用并挂到多个知识点，每个唯一对象只流式复制一次。
+
+#### 单批次模式 CLI 参数
+
+| 参数 | 必填 | 作用 |
+|---|---|---|
+| `--mapping <path>` | 是 | XLSX 映射文件路径 |
+| `--source-prefix <prefix>` | 是 | 允许的源 MinIO 对象前缀 |
+| `--batch-key <key>` | 是 | 幂等 key；相同 key 已创建批次时直接跳过，格式 `minio:<key>` 写入 `zip_file_name` |
+| `--upload-user-id <id>` | 是 | 批次归属用户 ID，正整数 |
+| `--dry-run` | 否 | 只校验和统计（`validated rows / knowledge_points / unique_objects / bytes`），不写入 |
+| `--list-only` | 否 | 只列出源前缀下的对象和字节数，不访问数据库 |
+| `--inspect-object <key>` | 否 | 下载并打印单个 XLSX 的原始表头、解析行数和校验问题 |
+
+校验通过后输出形如 `validated rows=N knowledge_points=N unique_objects=N ...`，正式执行时创建 `direct-import/<batch_id>/<hash>-<basename>` 对象、`manifests/<batch_id>/mapping.xlsx` 清单，并把任务写入 `RedisKeys.KnowledgeVideoTranscodeQueue`。
+
+#### 批量模式 CLI 参数
+
+| 参数 | 必填 | 作用 |
+|---|---|---|
+| `--all-prefix <prefix>` | 是（该模式下） | 处理前缀下所有 `batch-*.xlsx` + `batch-*.zip` 批次 |
+| `--batch-key <key>` | 是 | 幂等 key，逐批以 `minio:<key>:<batch-name>` 去重 |
+| `--upload-user-id <id>` | 是 | 批次归属用户 ID |
+| `--report-dir <dir>` | 否 | 报告目录；默认系统临时目录下的 `knowledge-video-import-<batch-key>` |
+| `--continue-on-error` | 否 | 单个批次失败后是否继续，默认 `true` |
+
+批量报告文件：
+
+| 文件 | 内容 |
+|---|---|
+| `summary.json` | 全部批次结果（`batch`、`status`、`rows`、`unique_objects`、`skipped_empty_rows`、`error`） |
+| `valid-batches.csv` | `imported` / `skipped` / `dry-run` / `skipped-empty` 批次 |
+| `invalid-batches.csv` | `failed` / `invalid` 批次及错误详情 |
+
+常用失败模式：表头不精确（`row=1 field=id: header must be exactly id` 等三条）导致整批失败；数据行 `video_name` 为空（`row=N field=video_name: video name is required`）导致整批失败。报告与批次记录不会自动恢复，修正映射后重新执行（幂等 key 会阻止已创建批次重复入库）。
+
+常用命令：
+
+```bash
+cd video-service
+SOURCE_MINIO_ENDPOINT=http://minio.example:9000 \
+SOURCE_MINIO_BUCKET=source-bucket \
+SOURCE_MINIO_ACCESS_KEY=... \
+SOURCE_MINIO_SECRET_KEY=... \
+go run ./cmd/knowledgevideo-import \
+  --all-prefix 'batch_imports/2026-08' \
+  --upload-user-id 1 \
+  --batch-key bulk-import-202608 \
+  --report-dir /private/tmp/knowledge-video-import-report
+```
+
+### 7.6 如果你要做下游服务化治理
 
 建议补充关注：
 

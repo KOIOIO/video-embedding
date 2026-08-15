@@ -28,6 +28,7 @@ video-service/
 ├── cmd/
 │   ├── dlqctl/                  # Redis Stream 死信队列查看与重放工具
 │   ├── httpapi/                 # HTTP 服务入口
+│   ├── knowledgevideo-import/   # MinIO 知识点视频初始化导入工具
 │   ├── recboletrainer/          # RecBole 训练调度入口
 │   └── worker/                  # 统一 worker 入口
 ├── configs/                     # HTTP 服务配置
@@ -262,11 +263,13 @@ go run ./cmd/httpapi
 HTTP_ADDR=:8081 go run ./cmd/httpapi
 ```
 
-HTTP API 使用配置文件中的 `Auth.JWTSecret`，也可在 `.env.local` / `.env.deploy` 或当前环境中设置不少于 32 个字符的 `JWT_SECRET`；环境变量优先覆盖 YAML。`configs/video.yml` 提供仅限本地开发的回退密钥，生产环境必须通过 `.env.deploy` 或部署环境设置独立随机密钥。JWT 默认有效期由 `Auth.JWTExpireHour` 控制，本地为 8 小时；生产示例配置为 24 小时。
+HTTP API 使用配置文件中的 `Auth.JWTSecret`，也可在 `.env.local` / `.env.deploy` 或当前环境中设置不少于 32 个字符的 `JWT_SECRET`；环境变量优先覆盖 YAML。`configs/video.yml` 提供仅限本地开发的回退密钥，生产环境必须通过 `.env.deploy` 或部署环境设置独立随机密钥。JWT 默认有效期由 `Auth.JWTExpireHour` 控制；本地配置显式为 8 小时，HTTP 服务的 `configs/video_prod.yml` 示例显式为 24 小时，而 `deployment/config/video_prod.yml` 未设置该字段时会回退到代码默认的 8 小时。
 
-管理员通过 `POST /api/auth/login` 使用 `sys_user.username/password` 登录。服务只接受 `user_type = 3`、`status = 1`、`deleted = 0` 的管理员账号，并在每次受保护请求中重新校验账号状态。上传、修改、删除、封面、发布、人工推荐、转码/系统监控和 `/api/admin/**` 需要 Bearer JWT；Swagger 页面和文档可直接访问，但其中的管理 API 仍需要在 Swagger 的 `Authorize` 中填写 JWT；播放、推荐、观看记录和互动接口保持公开。
+管理员通过 `POST /api/auth/login` 使用 `sys_user.username/password` 登录。服务只接受 `user_type = 3`、`status = 1`、`deleted = 0` 的管理员账号，并在每次受保护请求中重新校验账号状态。上传、修改、删除、封面、发布、人工推荐、转码/系统监控和 `/api/admin/**` 需要 Bearer JWT；Swagger 页面和文档可直接访问，但其中的管理 API 仍需要在 Swagger 的 `Authorize` 中填写 JWT；播放、推荐、观看记录和互动接口保持公开。本服务没有创建或重置管理员账号的 API，部署前必须通过现有身份/数据库运维流程预置 `sys_user` 管理员和密码哈希。
 
 普通视频、压缩包、分片上传和知识点视频导入的上传者 ID 由 JWT 管理员 ID 决定，不再接收客户端上传者字段。观看、推荐、点赞等公开接口中的业务 `user_id` 保持现有含义和协议。
+
+知识点视频的播放记录和观看会话接口当前不使用 JWT，`user_id` 由调用方提供；观看会话只确认该用户存在，不验证调用方是否拥有该身份。若请求来自不可信客户端，应在上游网关或业务服务补充身份绑定、限流和防刷，否则可能冒用用户并污染 RecBole 训练信号。
 
 ### 启动 Worker
 
@@ -287,10 +290,10 @@ VIDEO_APP_ENV_FILE=.env.local go run ./cmd/worker
 本地如需验证 RecBole 定时训练入口，可以单独启动：
 
 ```bash
-CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
+RECBOLE_TRAINER_ENABLED=true CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 ```
 
-该入口只负责训练调度，不启动 HTTP 服务、转码 worker 或向量化 worker。训练调度会触发 `../recbole-training/scripts/run_recbole_pipeline.sh`。
+`RECBOLE_TRAINER_ENABLED` 默认是 `false`；没有显式设为 `true` 时进程会启动但不会注册调度器。该入口只负责训练调度，不启动 HTTP 服务、转码 worker 或向量化 worker。训练调度会触发 `../recbole-training/scripts/run_recbole_pipeline.sh`。
 
 ## Java 调用方式
 
@@ -324,40 +327,62 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 
 ### 推荐给 Java 的 REST 接口
 
+接口边界如下：
+
+- **公开接口**：健康检查、Swagger、播放/媒体代理、推荐查询、观看记录、reaction、题库查询和知识点视频播放/观看上报。
+- **管理员 JWT**：上传、分片/归档处理、元数据与发布/推荐状态修改、转码状态、系统指标、知识点视频导入、`/api/admin/**` 以及下表标注的管理接口。先调用 `POST /api/auth/login`，再在请求中发送 `Authorization: Bearer <access_token>`。
+- **内部用途但应用层无鉴权**：`/api/internal/recommendations/external/recbole` 只供 Gorse external script 或受控内部调用，但当前没有 JWT/API key 校验。部署时必须通过反向代理 ACL、网络策略或防火墙限制访问，不能把路径中的 `internal` 当作安全边界，也不是浏览器或普通 Java 客户端的公开契约。
+
+表中未重复标注的路径按以上路由分组规则解释；Swagger 页面本身可公开访问，但其中的管理员 API 仍需要 JWT。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| `POST` | `/api/auth/login` | 管理员登录，公开；返回短期 JWT |
+| `GET` | `/api/auth/me` | 当前管理员资料，管理员 JWT |
 | `GET` | `/healthz` | 健康检查 |
 | `GET` | `/api/healthz` | API 健康检查 |
-| `GET` | `/api/system/metrics` | 查询系统运行指标 |
+| `GET` | `/api/system/metrics` | 查询系统运行指标，管理员 JWT |
 | `GET` | `/api/knowledge-videos/tree` | 查询知识点树及关联视频状态 |
-| `POST` | `/api/admin/knowledge-videos/batches` | 上传 ZIP 与 XLSX，创建知识点视频导入批次 |
-| `GET` | `/api/admin/knowledge-videos/batches/:batchId` | 查询知识点视频导入与转码进度 |
+| `POST` | `/api/admin/knowledge-videos/batches` | 上传 ZIP 与 XLSX，创建知识点视频导入批次，管理员 JWT |
+| `GET` | `/api/admin/knowledge-videos/batches/:batchId` | 查询知识点视频导入与转码进度，管理员 JWT |
+| `GET` | `/api/knowledge-points/:knowledgePointId/video` | 知识点单视频兼容查询，公开 |
 | `GET` | `/api/knowledge-points/:knowledgePointId/videos` | 获取知识点下全部可播放视频 |
 | `POST` | `/api/knowledge-videos/:knowledgeVideoId/playbacks` | 记录知识点视频播放 |
-| `GET` | `/api/admin/recommendation/recbole/performance` | 查询 RecBole Recall@20、NDCG@20、Hit@20、Precision@20 与模型版本时间序列 |
-| `POST` | `/api/videos` | 上传视频 |
-| `POST` | `/api/videos/archive` | 上传归档视频 |
-| `POST` | `/api/videos/uploads` | 创建普通视频分片上传会话 |
-| `GET` | `/api/videos/uploads/:uploadId` | 查询分片上传状态 |
-| `PUT` | `/api/videos/uploads/:uploadId/chunks/:chunkIndex` | 上传一个分片 |
-| `POST` | `/api/videos/uploads/:uploadId/complete` | 完成普通视频分片上传 |
-| `POST` | `/api/videos/archive/uploads` | 创建 ZIP 批量分片上传会话 |
-| `POST` | `/api/videos/archive/uploads/:uploadId/complete` | 完成 ZIP 批量分片上传 |
+| `PUT` | `/api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId` | 幂等上报绝对观看秒数，公开；累计达到视频时长 60% 时形成有效观看信号 |
+| `GET` | `/api/admin/recommendation/overview` | 推荐总览，管理员 JWT |
+| `GET` | `/api/admin/recommendation/diagnostics` | 推荐诊断，管理员 JWT |
+| `GET` | `/api/admin/recommendation/datasources` | 推荐数据源统计，管理员 JWT |
+| `GET` | `/api/admin/recommendation/effects` | 推荐效果指标，管理员 JWT |
+| `GET` | `/api/admin/recommendation/recbole/performance` | 查询 RecBole Recall@20、NDCG@20、Hit@20、Precision@20 与模型版本时间序列，管理员 JWT |
+| `GET` | `/api/admin/recommendation/trace/random-play` | 追踪随机播放推荐，管理员 JWT |
+| `POST` | `/api/admin/recommendation/trace/by-question` | 追踪题目推荐，管理员 JWT |
+| `GET` | `/api/admin/recommendation/redis-state` | 查询推荐 Redis 状态，管理员 JWT |
+| `GET` | `/api/admin/recommendation/preview/random-play` | 预览随机播放候选，管理员 JWT |
+| `POST` | `/api/admin/recommendation/preview/by-question` | 预览题目推荐候选，管理员 JWT |
+| `POST` | `/api/videos` | 上传视频，管理员 JWT |
+| `POST` | `/api/videos/archive` | 上传归档视频，管理员 JWT |
+| `GET` | `/api/videos/archive/batches/:batchId/progress` | 查询归档处理进度，管理员 JWT |
+| `POST` | `/api/videos/uploads` | 创建普通视频分片上传会话，管理员 JWT |
+| `GET` | `/api/videos/uploads/:uploadId` | 查询分片上传状态，管理员 JWT |
+| `PUT` | `/api/videos/uploads/:uploadId/chunks/:chunkIndex` | 上传一个分片，管理员 JWT |
+| `POST` | `/api/videos/uploads/:uploadId/complete` | 完成普通视频分片上传，管理员 JWT |
+| `POST` | `/api/videos/archive/uploads` | 创建 ZIP 批量分片上传会话，管理员 JWT |
+| `POST` | `/api/videos/archive/uploads/:uploadId/complete` | 完成 ZIP 批量分片上传，管理员 JWT |
 | `GET` | `/api/videos` | 获取视频列表 |
-| `PATCH` | `/api/videos/:id` | 更新视频标题和描述 |
-| `DELETE` | `/api/videos/:id` | 删除视频 |
-| `POST` | `/api/videos/:id/cover` | 上传封面 |
+| `PATCH` | `/api/videos/:id` | 更新视频标题和描述，管理员 JWT |
+| `DELETE` | `/api/videos/:id` | 删除视频，管理员 JWT |
+| `POST` | `/api/videos/:id/cover` | 上传封面，管理员 JWT |
 | `GET` | `/api/videos/:id/play` | 获取播放地址 |
 | `GET` | `/api/videos/:id/similar` | 获取相似视频 |
 | `GET` | `/api/videos/:id/view-count` | 获取观看次数 |
 | `POST` | `/api/videos/:id/reactions` | 提交视频反馈 |
 | `GET` | `/api/videos/:id/reaction-counts` | 获取视频反馈计数 |
-| `GET` | `/api/video-segments/random-play` | 刷新播放片段；带 `user_id` 时按 `Recommendation.Engine` 选择主引擎，当前示例配置默认使用 RecBole，候选不足时随机兜底 |
+| `GET` | `/api/video-segments/random-play` | 刷新播放片段；带 `user_id` 时按 `Recommendation.Engine` 选择主引擎，当前示例配置默认使用 RecBole，候选不足时随机兜底；省略 `user_id` 时兼容回退到用户 `6` |
 | `POST` | `/api/video-segments/:id/reactions` | 提交视频片段反馈 |
 | `GET` | `/api/video-segments/:id/reaction-counts` | 获取视频片段反馈计数 |
-| `POST` | `/api/videos/:id/publish` | 设置发布状态 |
-| `POST` | `/api/videos/:id/recommend` | 设置推荐状态 |
-| `GET` | `/api/transcode-tasks/:taskId` | 查询转码任务状态 |
+| `POST` | `/api/videos/:id/publish` | 设置发布状态，管理员 JWT |
+| `POST` | `/api/videos/:id/recommend` | 设置推荐状态，管理员 JWT |
+| `GET` | `/api/transcode-tasks/:taskId` | 查询转码任务状态，管理员 JWT |
 | `POST` | `/api/recommendations/by-question` | 根据题目推荐视频片段 |
 | `GET` | `/api/recommendations` | 查询推荐记录 |
 | `POST` | `/api/watch-records` | 上报观看记录 |
@@ -365,6 +390,7 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 | `GET` | `/api/questions/:id` | 查询题目详情 |
 | `GET` | `/videos/*filepath` | 代理访问对象存储中的视频资源，默认路径 |
 | `GET` | `/knowledge-video-media/hls/:videoId/*filepath` | 代理知识点视频 HLS 资源，默认路径 |
+| `GET` | `/api/internal/recommendations/external/recbole` | Gorse external 候选回调；应用层无鉴权，必须由网络边界限制为内部访问 |
 
 对象存储代理路由由 `Storage.MediaRoutePrefix` 控制，默认是 `/videos`。如果配置成其他前缀，服务仍保留 `/videos/*filepath` 兼容路由。
 
@@ -439,6 +465,56 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 
 旧的 `POST /api/videos/archive` 通用视频 ZIP multipart 接口仍保留，但后端会先把 ZIP 落盘再流式解包，不再把整个 ZIP 一次性读入内存。新接入方如果需要断点续传，应优先使用通用视频 ZIP 分片上传接口。知识点视频的 ZIP + XLSX 导入当前通过 `POST /api/admin/knowledge-videos/batches` 完成，不复用这组分片接口。
 
+### 知识点视频导入文件约定
+
+`POST /api/admin/knowledge-videos/batches` 的 `archive` 必须是 ZIP，`mapping` 必须是 XLSX。映射表读取第一个 worksheet，第一行必须严格为三列 `id`、`name`、`video_name`，不能有第四列，且至少有一行数据。`id` 必须是已存在的正整数知识点 ID，`name` 必须与字典名称完全一致；同一知识点可以有多行视频。
+
+`video_name` 在表内必须唯一，并按 basename 与 ZIP 中恰好一个视频文件匹配。ZIP 可包含目录，但重复 basename、映射缺失视频或未被映射引用的额外视频会拒绝整个批次。支持 `.mp4`、`.mov`、`.mkv`、`.avi`、`.webm`、`.m4v`；路径穿越、绝对路径、符号链接和其他扩展名会被拒绝，`__MACOSX`、`.DS_Store`、`._*` 元数据会被忽略。大小和条目限制见 `KnowledgeVideoStorage`。
+
+### MinIO 知识点视频初始化导入
+
+运维初始化可使用 `cmd/knowledgevideo-import`，直接扫描源 MinIO 前缀，不经过 HTTP、ZIP 或浏览器鉴权。XLSX 仍必须严格使用 `id`、`name`、`video_name` 三列表头；`video_name` 可以是前缀下唯一的 basename，也可以是相对对象路径。数据库知识点名称是最终依据，类似 `父级 / 叶子名称` 的输入会在叶子名称精确匹配时自动规范化。
+
+该命令允许同一个源对象出现在多行并挂到多个知识点。每个唯一源对象只会流式复制一次到知识视频对象存储；每行仍创建独立的视频 ID、HLS 前缀和转码任务。现有 HTTP 导入接口的唯一文件名规则不变。
+
+先执行 dry-run：
+
+```bash
+SOURCE_MINIO_ENDPOINT=http://minio.example:9000 \
+SOURCE_MINIO_BUCKET=source-bucket \
+SOURCE_MINIO_ACCESS_KEY=... \
+SOURCE_MINIO_SECRET_KEY=... \
+go run ./cmd/knowledgevideo-import \
+  --mapping /path/to/mapping.xlsx \
+  --source-prefix '_video/xlsx视频' \
+  --upload-user-id 1 \
+  --batch-key initial-import-001 \
+  --dry-run
+```
+
+确认输出后去掉 `--dry-run` 正式执行。PostgreSQL、Redis 和知识视频目标对象存储继续使用项目配置及现有环境变量；源 MinIO 凭据只通过 `SOURCE_MINIO_*` 环境变量传入，不能写入仓库或命令输出。`--batch-key` 用于幂等：相同 key 已创建批次时不会重复入库。
+
+批量场景（源桶按 `batch-*` 组织 XLSX + ZIP）可用 `--all-prefix` 一次扫描整段前缀并逐批处理：
+
+```bash
+SOURCE_MINIO_ENDPOINT=... SOURCE_MINIO_BUCKET=... \
+SOURCE_MINIO_ACCESS_KEY=... SOURCE_MINIO_SECRET_KEY=... \
+go run ./cmd/knowledgevideo-import \
+  --all-prefix 'batch_imports/2026-08' \
+  --upload-user-id 1 \
+  --batch-key bulk-import-202608 \
+  --report-dir /private/tmp/knowledge-video-import-report
+```
+
+- `--all-prefix` 会为前缀下每个同时存在 `batch-*.xlsx` 与 `batch-*.zip` 的批次执行导入；只有 XLSX 或只有 ZIP 的批次记为 `invalid` 并跳过。
+- `--report-dir`（不传时默认为系统临时目录下的 `knowledge-video-import-<batch-key>`）会写出 `summary.json`、`valid-batches.csv` 和 `invalid-batches.csv`，后者含 `batch`、`status`、`rows`、`unique_objects`、`skipped_empty_rows`、`error` 列，用于核对失败原因。
+- `--continue-on-error` 默认 `true`，单个批次失败不中断后续批次；改成 `false` 可在首个失败批次处停止。
+- 单批次模式下 `--list-only` 只列源对象不碰数据库，`--inspect-object <key>` 可下载并打印单个 XLSX 的表头与校验问题，适合先排查映射文件格式。
+
+该命令对映射文件的校验与 HTTP 批次接口一致：表头必须严格为 `id`、`name`、`video_name` 三列；`id` 必须存在、`name` 必须与知识点字典精确匹配（`父级 / 叶子名称` 形式会自动按叶子名称规范化）。批量报告中的常见失败原因是表头不精确（`header must be exactly ...`）和数据行缺少 `video_name`（`video name is required`）。
+
+观看会话的 `sessionId` 由客户端生成，必须匹配 `^[A-Za-z0-9_-]{16,64}$`，幂等范围是 `(user_id, knowledge_video_id, session_id)`。同一 session 重试只保留较大观看秒数，不发送增量；不同 session 按用户和视频求和，服务端把单次值与汇总值封顶到视频时长。达到视频时长 60% 的 `effective_watch` 只进入 RecBole 训练期虚拟 item，不会成为在线候选。
+
 ### Redis Stream 队列语义
 
 当前转码和向量化任务都走 Redis Streams，下面是默认 key；实际值可通过 `RedisKeys` 配置覆盖：
@@ -462,6 +538,8 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 - 可重试失败会重新入队并 ACK 原消息。
 - 终态失败会写入 `:dlq` 死信流并 ACK 原消息。
 
+知识点视频终态失败会写入 `knowledge_video:transcode:stream:dlq`，但当前 `cmd/dlqctl` 不包含该队列，`--queue all` 也不会查看或重放它。批次接口会显示失败状态和错误；仓库当前没有受支持的知识点视频 DLQ 恢复工具或 runbook。生产恢复必须同时处理持久化失败状态、重试计数和 Redis payload；单纯重新插入原 payload 会再次被判定为终态失败。
+
 ### 向量化链路现状
 
 向量化 worker 当前支持 `hierarchical` 模式。顶层 `video:vectorize:queue` 仍是上传链路的入口；当模式为 `hierarchical` 时，worker 会把任务转交给四个 Redis Stream 阶段队列：
@@ -475,10 +553,23 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 
 ## 示例请求
 
+受保护请求先登录并保存 access token：
+
+```bash
+ACCESS_TOKEN=$(curl -sS -X POST "http://localhost:8081/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"<admin-username>","password":"<admin-password>"}' \
+  | jq -r '.data.access_token // .data.token')
+test -n "${ACCESS_TOKEN}" && test "${ACCESS_TOKEN}" != "null"
+```
+
+示例中的 `<admin-username>` 和 `<admin-password>` 必须来自已配置且启用的 `sys_user` 管理员账号；仓库不提供默认密码。
+
 ### 上传视频
 
 ```bash
 curl -X POST "http://localhost:8081/api/videos" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F "file=@demo.mp4" \
   -F "title=示例视频" \
   -F "description=用于联调"
@@ -488,6 +579,7 @@ curl -X POST "http://localhost:8081/api/videos" \
 
 ```bash
 curl -X POST "http://localhost:8081/api/videos/uploads" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "file_name": "demo.mp4",
@@ -500,17 +592,21 @@ curl -X POST "http://localhost:8081/api/videos/uploads" \
   }'
 
 curl -X PUT "http://localhost:8081/api/videos/uploads/{uploadId}/chunks/0" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   --data-binary "@demo.part0"
 
-curl -X GET "http://localhost:8081/api/videos/uploads/{uploadId}"
+curl -X GET "http://localhost:8081/api/videos/uploads/{uploadId}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 
-curl -X POST "http://localhost:8081/api/videos/uploads/{uploadId}/complete"
+curl -X POST "http://localhost:8081/api/videos/uploads/{uploadId}/complete" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ### 分片上传 ZIP 批量导入
 
 ```bash
 curl -X POST "http://localhost:8081/api/videos/archive/uploads" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "file_name": "lessons.zip",
@@ -522,15 +618,18 @@ curl -X POST "http://localhost:8081/api/videos/archive/uploads" \
   }'
 
 curl -X PUT "http://localhost:8081/api/videos/uploads/{uploadId}/chunks/0" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   --data-binary "@lessons.part0"
 
-curl -X POST "http://localhost:8081/api/videos/archive/uploads/{uploadId}/complete"
+curl -X POST "http://localhost:8081/api/videos/archive/uploads/{uploadId}/complete" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ### 查询转码状态
 
 ```bash
-curl "http://localhost:8081/api/transcode-tasks/{taskId}"
+curl "http://localhost:8081/api/transcode-tasks/{taskId}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ### 获取播放地址
@@ -603,7 +702,9 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 - `configs/video_prod.yml` 面向生产/服务器部署，当前连接腾讯云 COS：`https://video-object-storage.cos.ap-beijing.myqcloud.com`，地域为 `ap-beijing`，Bucket 为 `video-object-storage`。
 - 对象存储底层仍走 S3 兼容协议和 MinIO SDK；生产配置使用 `Region: "ap-beijing"` 与 `BucketLookup: "dns"`，代码会兼容 COS bucket 域名并在内部归一化为服务 endpoint。
 - 密钥、密码和 DSN 不写入 YAML。复制根目录 `.env.local.example` 或 `.env.deploy.example` 后，在私有 `.env.local` / `.env.deploy` 中填写。
-- `POSTGRES_DSN`、`REDIS_ADDR`、`REDIS_PASSWORD`、`COS_SECRET_ID` / `COS_SECRET_KEY`、`RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`、`GORSE_API_KEY` 和 AI API key 会覆盖配置文件中的对应字段。
+- `POSTGRES_DSN`、`REDIS_ADDR`、`REDIS_PASSWORD`、`COS_SECRET_ID` / `COS_SECRET_KEY`、`RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`、`GORSE_API_KEY` 和 AI API key 会覆盖配置文件中的对应字段。根 Compose 的 `GORSE_API_KEY` 必须与 `GORSE_SERVER_API_KEY` 完全一致。Gorse 镜像默认固定为 `0.5.11`；版本覆盖只能由 shell 或 Compose 根 `.env` 提供，服务级 `.env.local` / `.env.deploy` 不参与镜像标签插值。
+
+Gorse endpoint 需按运行位置区分：本地服务配置和代码默认值使用 `http://localhost:8087`；根 Compose 的 Gorse master HTTP 是容器内 `8088`，叠加 `docker-compose.gorse.yml` 后才从宿主机暴露为 `http://localhost:8088`。交付配置中的 API/worker 与 Gorse 在同一网络时使用 `http://gorse:8088`。宿主机调用诊断 Compose 服务时设置 `GORSE_ENDPOINT=http://localhost:8088`，不要把 `8087` 和 `8088` 当作同一个默认端口。
 
 ### 环境变量覆盖
 
@@ -622,6 +723,9 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 | `RUSTFS_ACCESS_KEY` | 对象存储 AccessKey，COS 变量未设置时使用 |
 | `RUSTFS_SECRET_KEY` | 对象存储 SecretKey，COS 变量未设置时使用 |
 | `GORSE_API_KEY` | Go 服务调用 Gorse server 的 API Key |
+| `GORSE_SERVER_API_KEY` | 根 Compose 中 Gorse server 校验的 API Key，必须与 `GORSE_API_KEY` 相同 |
+| `GORSE_VERSION` | 根 Compose 使用的 Gorse 镜像版本，默认 `0.5.11`；由 shell 或 Compose 根 `.env` 提供，不从服务 `env_file` 读取 |
+| `GORSE_ENDPOINT` | 覆盖 Gorse server HTTP endpoint；本地诊断 Compose 通常为 `http://localhost:8088` |
 | `DASHSCOPE_API_KEY` | DashScope / 百炼兼容接口 API Key，供推荐 embedding 和向量化 worker 使用 |
 | `OPENAI_API_KEY` | OpenAI 兼容接口 API Key 兜底 |
 | `EMBEDDING_API_KEY` | 推荐链路 embedding 客户端 API Key 兜底 |
@@ -635,14 +739,22 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 | `UPLOAD_BENCH_BASE_URL` | `tools/upload_bench` 压测工具的目标服务地址 |
 | `SOURCE_DSN` | 数据迁移工具源库 DSN |
 | `TARGET_DSN` | 数据迁移工具目标库 DSN |
-| `MODEL_VERSION` | RecBole 训练流水线本次模型版本，默认按时间生成 |
-| `RECBOLE_MODEL` | RecBole 模型名，默认 `BPR` |
+| `SERVICE_DIR`、`CONFIG_FILE` | RecBole Go 工具目录和配置文件路径 |
+| `MODEL_VERSION`、`MODEL_NAME` | RecBole 候选版本和线上模型名 |
+| `RECBOLE_MODEL`、`DATASET` | RecBole 模型名和 atomic 文件前缀 |
+| `DIM`、`EPOCHS` | RecBole embedding 维度和训练轮数 |
 | `SAMPLE_LIMIT`、`DAYS_BACK` | RecBole atomic 交互数据导出数量和回看窗口 |
-| `EPOCHS`、`DIM` | RecBole 训练轮数和 embedding 维度 |
+| `PYTHON_BIN` | RecBole 训练/门禁使用的 Python 可执行文件 |
+| `DATA_ROOT`、`DATA_DIR`、`ARTIFACT_DIR` | RecBole 数据和候选产物目录 |
+| `BASELINE_METRICS` | 训练前导出的 active 模型指标文件 |
 | `PUBLISH_GATE_ENABLED` | 是否启用 RecBole 发布门禁，默认 `true` |
-| `MIN_RECALL_AT_20`、`MIN_NDCG_AT_20` | RecBole 发布门禁的最低离线指标 |
-| `MAX_RELATIVE_NDCG_DROP` | 新模型相对上一版 active `NDCG@20` 允许下降的最大幅度 |
-| `ARTIFACT_RETENTION_DAYS` | RecBole 训练产物保留天数，默认 `7` |
+| `SOURCE_MINIO_ENDPOINT` | `cmd/knowledgevideo-import` 源 MinIO S3 API 地址，必填 |
+| `SOURCE_MINIO_BUCKET` | `cmd/knowledgevideo-import` 源 MinIO bucket，必填 |
+| `SOURCE_MINIO_ACCESS_KEY` | `cmd/knowledgevideo-import` 源 MinIO AccessKey，必填 |
+| `SOURCE_MINIO_SECRET_KEY` | `cmd/knowledgevideo-import` 源 MinIO SecretKey，必填 |
+| `SOURCE_MINIO_USE_SSL` | `cmd/knowledgevideo-import` 源 MinIO 是否走 HTTPS，默认 `false` |
+
+RecBole 门禁阈值通过 Python CLI flags（例如 `--min-recall-at-20`、`--min-ndcg-at-20`、`--max-relative-ndcg-drop`）传入，不是以下环境变量：`MIN_RECALL_AT_20`、`MIN_NDCG_AT_20`、`MAX_RELATIVE_NDCG_DROP`、`ARTIFACT_RETENTION_DAYS`。
 
 生产环境建议把敏感值放到环境变量或密钥管理系统中，不要把真实 API Key、数据库密码、对象存储密钥提交到仓库。
 
@@ -656,7 +768,7 @@ curl -X POST "http://localhost:8081/api/watch-records" \
 - `Redis`：`Addr`、`Password`、`DB`。
 - `RedisKeys`：转码队列、向量化队列、四阶段向量化队列、反馈队列、运行计数、DLQ 对应 key。
 - `KnowledgeVideoStorage`：独立对象存储 endpoint、Bucket、对象前缀、媒体代理前缀和临时目录。
-- `KnowledgeVideoWorker`：知识点视频任务超时、消费阻塞时间和临时目录保留策略。
+- `KnowledgeVideoWorker`：`WorkerCount`、`TaskTimeoutMinutes`、`ShutdownTimeoutSec`；它没有独立的消费阻塞或临时目录保留字段。
 - `Postgres`：`DSN` 和连接池参数。
 - `RustFS`：`Endpoint`、`Bucket`、`UseSSL`、`Region`、`BucketLookup`、`AccessKey`、`SecretKey`。
 - `FFmpeg`：`UseDocker`、`DockerImage`、`HLS`、`Fast`、`Cover`、`Audio`。
@@ -770,18 +882,9 @@ segment-reaction
 
 注意：DLQ 里可能包含视频损坏、对象 key 不存在、参数非法等永久失败任务。不要在未确认原因前直接 `--queue all --limit` 批量重放。
 
-Docker 部署时，当前运行容器里不一定有 `go` 命令，也不一定内置 `dlqctl` 二进制。若需要在线上容器内直接执行 DLQ 重放，应在部署脚本中额外编译：
+Docker 部署镜像不包含 `dlqctl`，也不保证包含 Go 工具链；README 中不提供 `docker exec` 假设容器名或临时编译命令。请在可访问同一 Redis 的运维主机上，从源码目录运行上面的 `go run ./cmd/dlqctl ...`，或在交付流程中单独构建并分发经过审计的 `dlqctl` 二进制。
 
-```bash
-go build -o /tmp/dlqctl ./cmd/dlqctl
-```
-
-然后执行：
-
-```bash
-docker exec -it video-embedding /tmp/dlqctl list --queue all --limit 20
-docker exec -it video-embedding /tmp/dlqctl replay --queue vector-refine --id <dlq-message-id>
-```
+`dlqctl` 当前只支持上面列出的 8 个通用/反馈队列，不检查或重放独立的知识点视频转码队列 `KnowledgeVideoTranscodeQueue`；该队列目前没有仓库内受支持的恢复工具，任何人工处理都必须同时修正持久化失败状态和重试计数。
 
 线上重放前要先确认失败原因已经解除，例如 DashScope 付费/额度问题已经处理，否则任务会再次进入 DLQ。
 
@@ -818,7 +921,7 @@ curl http://localhost:8081/healthz
 
 ## 返回格式说明
 
-该 HTTP 项目返回的是统一 JSON 结构，整体上分为成功和失败两类：
+业务 HTTP API 返回统一 JSON 结构，整体上分为成功和失败两类：
 
 - 成功响应包含 `success` 和 `data`。
 - 失败响应包含 `success` 和 `error`。
@@ -835,7 +938,9 @@ Java 侧建议封装统一响应体：
 - `data.degraded`
 - `data.message`
 
-具体字段定义可直接查看：
+健康检查（`/healthz`、`/api/healthz`）、Swagger 资源（`/swagger/*any`）和媒体代理（`/videos/*filepath`、`/knowledge-video-media/*`）是例外：它们可能返回简单状态 JSON、Swagger 文档或原始媒体/Range 响应，不要强行按业务 envelope 解码。
+
+具体业务字段定义可直接查看：
 
 - `docs/swagger/swagger.yaml`
 - `http://{host}:{port}/swagger/index.html`
@@ -975,7 +1080,7 @@ Java 新接入建议统一只用下面这套路径风格：
 
 这样可以隔离 HTTP 请求与耗时任务，隔离在线推荐与离线训练，并便于独立扩缩容。
 
-根目录 `docker-compose.yml` 以独立 `api`、`worker`、`recbole_trainer`、`frontend` 和 Gorse 集群部署。API、worker 与训练调度可分别重启和扩缩容；前端为构建后的 Nginx 静态服务。生产镜像内置 FFmpeg，`configs/video_prod.yml` 使用原生模式，不挂载宿主 Docker socket。
+根目录 `docker-compose.yml` 以独立 `api`、`worker`、`recbole_trainer`、`frontend` 和一个 Gorse 服务部署。API、worker 与训练调度可分别重启和扩缩容；前端为构建后的 Nginx 静态服务。生产镜像内置 FFmpeg，`configs/video_prod.yml` 使用原生模式，不挂载宿主 Docker socket。需要从宿主机诊断 Gorse 端口时，再叠加 `docker-compose.gorse.yml`。
 
 根 Compose 用于源码构建和联调。正式服务器交付请使用 `../deployment/` 下的 standalone、cloud 或 intranet 拓扑，并先阅读 `../deployment/DEPLOYMENT.md`。
 
@@ -984,6 +1089,7 @@ Java 新接入建议统一只用下面这套路径风格：
 - `cmd/httpapi/main.go`
 - `cmd/worker/main.go`
 - `cmd/recboletrainer/main.go`
+- `cmd/knowledgevideo-import/main.go`
 - `internal/http/router/router.go`
 - `internal/http/handler/`
 - `internal/http/app/app.go`

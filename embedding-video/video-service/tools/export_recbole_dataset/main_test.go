@@ -218,3 +218,45 @@ func TestBuildInteractionRowsKeepsHigherValueEventPerUserAndSegment(t *testing.T
 		t.Fatalf("rows[1] = %+v, want user 7 segment 102", rows[1])
 	}
 }
+
+func TestBuildKnowledgeWatchRowsIncludesOnlyEffectiveAggregates(t *testing.T) {
+	rows, stats := buildKnowledgeWatchRows([]knowledgeWatchSession{
+		{UserID: 7, KnowledgeVideoID: 88, SessionID: "a", Duration: 100, WatchedSeconds: 20, UpdatedAt: time.Unix(100, 0)},
+		{UserID: 7, KnowledgeVideoID: 88, SessionID: "b", Duration: 100, WatchedSeconds: 40, UpdatedAt: time.Unix(200, 0)},
+		{UserID: 8, KnowledgeVideoID: 99, Duration: 1000, WatchedSeconds: 599, UpdatedAt: time.Unix(300, 0)},
+	})
+	if len(rows) != 1 || rows[0].ItemID != "knowledge_video:88" || rows[0].Source != "knowledge_video_watch" {
+		t.Fatalf("rows = %+v", rows)
+	}
+	if stats.SessionRows != 3 || stats.EffectiveAggregates != 1 || stats.ShortAggregates != 1 || stats.EffectiveUsers != 1 || stats.EffectiveVideos != 1 {
+		t.Fatalf("stats = %+v", stats)
+	}
+}
+
+func TestBenchmarkSplitKeepsVirtualItemsInTrainOnly(t *testing.T) {
+	rows := []interactionRow{
+		{UserID: 7, ItemID: "101", Timestamp: 100},
+		{UserID: 7, ItemID: "102", Timestamp: 200},
+		{UserID: 7, ItemID: "knowledge_video:88", Timestamp: 250},
+		{UserID: 7, ItemID: "103", Timestamp: 300},
+	}
+	train, valid, test := benchmarkSplit(rows)
+	if !containsInteractionItem(train, "knowledge_video:88") {
+		t.Fatalf("train = %+v", train)
+	}
+	if containsInteractionItem(valid, "knowledge_video:88") || containsInteractionItem(test, "knowledge_video:88") {
+		t.Fatalf("virtual item leaked: valid=%+v test=%+v", valid, test)
+	}
+	if !containsInteractionItem(valid, "102") || !containsInteractionItem(test, "103") {
+		t.Fatalf("normal split invalid: train=%+v valid=%+v test=%+v", train, valid, test)
+	}
+}
+
+func containsInteractionItem(rows []interactionRow, itemID string) bool {
+	for _, row := range rows {
+		if row.ItemID == itemID {
+			return true
+		}
+	}
+	return false
+}

@@ -11,6 +11,20 @@ import (
 
 const schemaMigrationAdvisoryLockID int64 = 2026062301
 
+var autoMigrateModels = []any{
+	&model.EduVideoResource{},
+	&model.EduVideoUserReaction{},
+	&model.EduUserReaction{},
+	&model.EduVideoSegment{},
+	&model.EduVideoVectorStage{},
+	&model.EduUserVideoRecommend{},
+	&model.EduUserVideoProfile{},
+	&model.EduRecommendExposure{},
+	&model.EduKnowledgeVideoBatch{},
+	&model.EduKnowledgeVideo{},
+	&model.EduKnowledgeVideoPlayRecord{},
+}
+
 // EnsureSchema serializes startup DDL across HTTP and worker processes.
 func EnsureSchema(db *gorm.DB) error {
 	if db == nil {
@@ -26,7 +40,10 @@ func EnsureSchema(db *gorm.DB) error {
 		if err := EnsureRecSysSchema(tx); err != nil {
 			return err
 		}
-		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduKnowledgeVideoBatch{}, &model.EduKnowledgeVideo{}, &model.EduKnowledgeVideoPlayRecord{}); err != nil {
+		if err := tx.AutoMigrate(autoMigrateModels...); err != nil {
+			return err
+		}
+		if err := EnsureSchemaComments(tx); err != nil {
 			return err
 		}
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
@@ -58,6 +75,7 @@ func ensureKnowledgeVideoIndexes(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_video_play_record_user_create_time ON edu_knowledge_video_play_record(user_id, create_time);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_video_play_record_knowledge_point_create_time ON edu_knowledge_video_play_record(knowledge_point_id, create_time);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_video_play_record_knowledge_video_create_time ON edu_knowledge_video_play_record(knowledge_video_id, create_time);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uk_knowledge_video_play_session ON edu_knowledge_video_play_record(user_id, knowledge_video_id, session_id) WHERE session_id IS NOT NULL AND session_id <> '';`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {
 			return err
