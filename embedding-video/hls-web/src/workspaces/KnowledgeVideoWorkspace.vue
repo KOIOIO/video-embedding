@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import HlsPlayer from '../components/HlsPlayer.vue'
-import { fetchKnowledgeTree, pollKnowledgeVideoBatch, recordKnowledgePlayback, resolveKnowledgePlayback, uploadKnowledgeVideoBatch } from '../knowledgeVideo/api.js'
+import { fetchKnowledgeTree, pollKnowledgeVideoBatch, recordKnowledgePlayback, reportKnowledgeWatchSession, resolveKnowledgePlayback, uploadKnowledgeVideoBatch } from '../knowledgeVideo/api.js'
+import { createWatchSession } from '../knowledgeVideo/watchSession.js'
 import '../knowledgeVideo/knowledgeVideo.css'
 
 const archive = ref(null)
@@ -22,6 +23,7 @@ const playback = ref(null)
 const playbackLoading = ref(false)
 const playbackError = ref('')
 const recordedVideoIds = new Set()
+const watchSessions = new Map()
 let disposed = false
 
 const statusOptions = [
@@ -94,8 +96,27 @@ async function selectNode(node) {
   playback.value = null
   playbackError.value = ''
   recordedVideoIds.clear()
+  watchSessions.clear()
   playbackLoading.value = true
   try { playback.value = await resolveKnowledgePlayback(node.id) } catch (error) { playbackError.value = error.message } finally { playbackLoading.value = false }
+}
+
+function getWatchSession(knowledgeVideoId) {
+  if (!watchSessions.has(knowledgeVideoId)) {
+    watchSessions.set(knowledgeVideoId, createWatchSession({
+      knowledgeVideoId,
+      userId: playbackUserId,
+      report: ({ knowledgeVideoId: id, sessionId, userId, watchedSeconds, keepalive }) => reportKnowledgeWatchSession(id, sessionId, userId, watchedSeconds, { keepalive }),
+    }))
+  }
+  return watchSessions.get(knowledgeVideoId)
+}
+
+function reportWatchProgress(knowledgeVideoId, event) {
+  const session = getWatchSession(knowledgeVideoId)
+  void session.flush(event?.watchedSec, { keepalive: Boolean(event?.keepalive) }).catch((error) => {
+    console.error('knowledge video watch progress failed', error)
+  })
 }
 
 function recordPlayback(knowledgeVideoId) {
@@ -150,7 +171,7 @@ onBeforeUnmount(() => { disposed = true })
           <div v-if="playbackLoading" class="kv-player-empty">正在获取播放地址...</div>
           <div v-else-if="playback?.videos?.length" class="kv-player-grid">
             <div v-for="video in playback.videos" :key="video.knowledge_video_id" class="kv-player-window">
-              <HlsPlayer :src="video.playback_url" :title="video.display_name || video.source_file_name || selectedNode.name" :autoplay="false" @play="recordPlayback(video.knowledge_video_id)" />
+              <HlsPlayer :src="video.playback_url" :title="video.display_name || video.source_file_name || selectedNode.name" :autoplay="false" @play="recordPlayback(video.knowledge_video_id)" @watch-progress="reportWatchProgress(video.knowledge_video_id, $event)" />
             </div>
           </div>
           <div v-else class="kv-player-empty"><p>{{ playbackError || (selectedNode ? '暂无可播放视频' : '从列表选择一个知识点') }}</p></div>

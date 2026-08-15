@@ -56,6 +56,18 @@ mkdir -p "${DATA_DIR}" "${ARTIFACT_DIR}"
     --days-back "${DAYS_BACK}"
 )
 
+for split in train valid test; do
+  split_file="${DATA_DIR}/${DATASET}.${split}.inter"
+  if [[ ! -f "${split_file}" ]]; then
+    echo "missing benchmark split: ${split_file}" >&2
+    exit 1
+  fi
+done
+if grep -q "knowledge_video:" "${DATA_DIR}/${DATASET}.valid.inter" "${DATA_DIR}/${DATASET}.test.inter"; then
+  echo "virtual item leaked into validation/test targets" >&2
+  exit 1
+fi
+
 (
   cd "${SERVICE_DIR}"
   "${EXPORT_METRICS_COMMAND[@]}" \
@@ -83,6 +95,16 @@ if [[ "${PUBLISH_GATE_ENABLED}" == "true" ]]; then
       --metrics "${ARTIFACT_DIR}/metrics.json" \
       --baseline "${BASELINE_METRICS}"
   )
+fi
+
+ITEM_EMBEDDINGS="${ARTIFACT_DIR}/item_embeddings.csv"
+if [[ ! -s "${ITEM_EMBEDDINGS}" ]]; then
+  echo "missing item embeddings: ${ITEM_EMBEDDINGS}" >&2
+  exit 1
+fi
+if ! awk -F, 'NR == 1 { next } $1 !~ /^[1-9][0-9]*$/ { exit 1 }' "${ITEM_EMBEDDINGS}"; then
+  echo "item embeddings contain a nonnumeric or virtual item id" >&2
+  exit 1
 fi
 
 (

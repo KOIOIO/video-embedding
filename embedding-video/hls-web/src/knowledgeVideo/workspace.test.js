@@ -37,6 +37,18 @@ describe('knowledge video workspace', () => {
     expect(player).toContain("emit('play')")
   })
 
+  it('reports active wall-clock watch sessions every fifteen seconds', () => {
+    const source = readFileSync(workspacePath, 'utf8')
+    const player = readFileSync(playerPath, 'utf8')
+    expect(source).toContain('createWatchSession')
+    expect(source).toContain('reportKnowledgeWatchSession')
+    expect(source).toContain('@watch-progress="reportWatchProgress(video.knowledge_video_id, $event)"')
+    expect(player).toContain('watchHeartbeatInterval')
+    expect(player).toContain('15_000')
+    expect(player).toContain('watchedSnapshotMs')
+    expect(player).toContain('keepalive')
+  })
+
   it('collapses the upload-first layout on narrow screens', () => {
     const css = readFileSync(cssPath, 'utf8')
     expect(css).toMatch(/@media\s*\(max-width:\s*900px\)/)

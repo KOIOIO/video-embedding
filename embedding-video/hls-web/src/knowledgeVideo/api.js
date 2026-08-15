@@ -93,5 +93,14 @@ export function recordKnowledgePlayback(knowledgeVideoId, userId, options = {}) 
     body: JSON.stringify({ user_id: userId }),
   })
 }
+
+export function reportKnowledgeWatchSession(knowledgeVideoId, sessionId, userId, watchedSeconds, options = {}) {
+  return requestJson(`${API_BASE}/knowledge-videos/${encodeURIComponent(String(knowledgeVideoId))}/watch-sessions/${encodeURIComponent(String(sessionId))}`, {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    body: JSON.stringify({ user_id: userId, watched_seconds: watchedSeconds }),
+  })
+}
 import { apiFetch } from '../auth/api.js'
 import { readAuthSession } from '../auth/session.js'

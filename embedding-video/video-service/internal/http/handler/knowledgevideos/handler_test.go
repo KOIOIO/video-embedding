@@ -109,6 +109,24 @@ func TestKnowledgeVideoRecordPlaybackMapsInvalidAndNotReady(t *testing.T) {
 	}
 }
 
+func TestKnowledgeVideoWatchSessionReturnsServerAggregate(t *testing.T) {
+	stub := &handlerServiceStub{watchResult: knowledgevideo.WatchSessionResult{
+		SessionID: "session-00000001", SessionWatchedSeconds: 40, TotalWatchedSeconds: 60,
+		DurationSeconds: 100, ProgressRatio: 0.6, EffectiveWatch: true,
+	}}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/knowledge-videos/88/watch-sessions/session-00000001", strings.NewReader(`{"user_id":7,"watched_seconds":40}`))
+	req.Header.Set("Content-Type", "application/json")
+	testRouter(stub).ServeHTTP(w, req)
+	body := w.Body.String()
+	if w.Code != http.StatusOK || !contains(body, `"session_watched_seconds":40`) || !contains(body, `"total_watched_seconds":60`) || !contains(body, `"progress_ratio":0.6`) || !contains(body, `"effective_watch":true`) {
+		t.Fatalf("status=%d body=%s", w.Code, body)
+	}
+	if stub.watchInput.UserID != 7 || stub.watchInput.KnowledgeVideoID != 88 || stub.watchInput.SessionID != "session-00000001" || stub.watchInput.WatchedSeconds != 40 {
+		t.Fatalf("input=%+v", stub.watchInput)
+	}
+}
+
 func TestKnowledgeVideoTreeReturnsAllVideosAndCompatibilityVideo(t *testing.T) {
 	videos := []knowledgevideo.KnowledgeTreeVideo{{ID: 88, Status: knowledgevideo.VideoReady}, {ID: 89, Status: knowledgevideo.VideoPending}}
 	stub := &handlerServiceStub{tree: []knowledgevideo.KnowledgeTreeNode{{ID: 1, Name: "函数", Children: []knowledgevideo.KnowledgeTreeNode{{ID: 9, ParentID: 1, Name: "一次函数", Videos: videos, Video: &videos[0]}}}}}
@@ -128,6 +146,7 @@ func testRouter(service Service) *gin.Engine {
 	r.GET("/api/knowledge-points/:knowledgePointId/video", h.Playback)
 	r.GET("/api/knowledge-points/:knowledgePointId/videos", h.Playback)
 	r.POST("/api/knowledge-videos/:knowledgeVideoId/playbacks", h.RecordPlayback)
+	r.PUT("/api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId", h.ReportWatchSession)
 	return r
 }
 
@@ -140,6 +159,9 @@ type handlerServiceStub struct {
 	recordVideoID        uint64
 	recordErr            error
 	tree                 []knowledgevideo.KnowledgeTreeNode
+	watchInput           knowledgevideo.WatchSessionInput
+	watchResult          knowledgevideo.WatchSessionResult
+	watchErr             error
 }
 
 func (s *handlerServiceStub) Import(_ context.Context, input knowledgevideo.ImportInput) (knowledgevideo.ImportResult, error) {
@@ -159,6 +181,11 @@ func (s *handlerServiceStub) RecordPlayback(_ context.Context, userID, knowledge
 }
 func (s *handlerServiceStub) ListTree(context.Context) ([]knowledgevideo.KnowledgeTreeNode, error) {
 	return s.tree, nil
+}
+
+func (s *handlerServiceStub) ReportWatchSession(_ context.Context, input knowledgevideo.WatchSessionInput) (knowledgevideo.WatchSessionResult, error) {
+	s.watchInput = input
+	return s.watchResult, s.watchErr
 }
 
 func contains(value, part string) bool { return strings.Contains(value, part) }

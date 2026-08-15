@@ -7,6 +7,7 @@ from pathlib import Path
 from . import config as config_builder
 from . import export_embeddings
 from . import metrics as metrics_io
+from .virtual_items import install_full_sort_mask
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,14 +40,26 @@ def allow_trusted_torch_checkpoint_loads() -> None:
 def run_recbole_training(args: argparse.Namespace, cfg: dict) -> dict:
     allow_trusted_torch_checkpoint_loads()
     try:
-        from recbole.quick_start import run_recbole
+        from recbole.config import Config
+        from recbole.data import create_dataset, data_preparation
+        from recbole.utils import get_model, get_trainer, init_seed
     except ImportError as exc:
         raise RuntimeError("RecBole is not installed; install requirements.txt in recbole-training") from exc
 
     original_argv = sys.argv
     try:
         sys.argv = [original_argv[0]]
-        result = run_recbole(model=args.model, dataset=args.dataset, config_dict=cfg)
+        config = Config(model=args.model, dataset=args.dataset, config_dict=cfg)
+        init_seed(config["seed"], config["reproducibility"])
+        dataset = create_dataset(config)
+        train_data, valid_data, test_data = data_preparation(config, dataset)
+        model = get_model(config["model"])(config, train_data.dataset).to(config["device"])
+        install_full_sort_mask(model, dataset)
+        trainer = get_trainer(config["MODEL_TYPE"], config["model"])(config, model)
+        _, best_valid_result = trainer.fit(train_data, valid_data, saved=True, show_progress=False)
+        result = dict(trainer.evaluate(test_data, load_best_model=True, show_progress=False))
+        result.update(best_valid_result or {})
+        result["model_file"] = trainer.saved_model_file
     finally:
         sys.argv = original_argv
     if isinstance(result, dict):
@@ -68,6 +81,12 @@ def train_and_export(args: argparse.Namespace) -> None:
         normalized["Recall@20"] = float(raw_metrics.get("recall@20", raw_metrics.get("Recall@20", 0.0)))
     if "NDCG@20" not in normalized:
         normalized["NDCG@20"] = float(raw_metrics.get("ndcg@20", raw_metrics.get("NDCG@20", 0.0)))
+    stats_path = Path(args.dataset_dir) / f"{args.dataset}.export_stats.json"
+    normalized = metrics_io.merge_export_stats(normalized, stats_path)
+    items, _ = export_embeddings.read_atomic_ids(args.dataset_dir, args.dataset)
+    normalized["filtered_virtual_item_embeddings"] = sum(
+        1 for item_id, _ in items if not export_embeddings.usable_token(item_id)
+    )
     metrics_io.write_metrics(output / "metrics.json", normalized)
 
     checkpoint = checkpoint_from_result(raw_metrics) or latest_checkpoint(Path(cfg["checkpoint_dir"]))

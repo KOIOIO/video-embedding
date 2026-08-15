@@ -32,3 +32,7 @@ func (s *Service) ListPlayback(ctx context.Context, knowledgePointID uint64) (Pl
 func (s *Service) RecordPlayback(ctx context.Context, userID, knowledgeVideoID uint64) error {
 	return s.Playback.Record(ctx, userID, knowledgeVideoID)
 }
+
+func (s *Service) ReportWatchSession(ctx context.Context, input WatchSessionInput) (WatchSessionResult, error) {
+	return s.Playback.ReportWatchSession(ctx, input)
+}

@@ -206,9 +206,26 @@ func (s *RustFS) DownloadToFile(ctx context.Context, objectKey string, filePath 
 
 // ObjectInfo 描述对象的最小元信息集合。
 type ObjectInfo struct {
+	Key         string
 	Size        int64
 	ContentType string
 	ETag        string
+}
+
+// ListPrefix lists objects below prefix without downloading their contents.
+func (s *RustFS) ListPrefix(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+	prefix = strings.Trim(cleanKey(prefix), "/")
+	if prefix != "" {
+		prefix += "/"
+	}
+	objects := make([]ObjectInfo, 0)
+	for object := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+		if object.Err != nil {
+			return nil, object.Err
+		}
+		objects = append(objects, ObjectInfo{Key: object.Key, Size: object.Size, ETag: object.ETag})
+	}
+	return objects, nil
 }
 
 // Stat 读取对象元信息。
@@ -218,6 +235,7 @@ func (s *RustFS) Stat(ctx context.Context, objectKey string) (ObjectInfo, error)
 		return ObjectInfo{}, err
 	}
 	return ObjectInfo{
+		Key:         cleanKey(objectKey),
 		Size:        st.Size,
 		ContentType: st.ContentType,
 		ETag:        st.ETag,

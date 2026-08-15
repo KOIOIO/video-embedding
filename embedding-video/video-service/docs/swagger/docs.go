@@ -943,6 +943,77 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/knowledge-videos/{knowledgeVideoId}/watch-sessions/{sessionId}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识点视频"
+                ],
+                "summary": "上报知识点视频观看会话",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Knowledge video ID",
+                        "name": "knowledgeVideoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Playback session ID",
+                        "name": "sessionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Absolute watched seconds",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoWatchSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.KnowledgeVideoWatchSessionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/questions": {
             "get": {
                 "produces": [
@@ -3017,6 +3088,51 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.KnowledgeVideoWatchSessionData": {
+            "type": "object",
+            "properties": {
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "effective_watch": {
+                    "type": "boolean"
+                },
+                "progress_ratio": {
+                    "type": "number"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "session_watched_seconds": {
+                    "type": "integer"
+                },
+                "total_watched_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.KnowledgeVideoWatchSessionRequest": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "integer"
+                },
+                "watched_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.KnowledgeVideoWatchSessionResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/dto.KnowledgeVideoWatchSessionData"
                 },
                 "success": {
                     "type": "boolean"

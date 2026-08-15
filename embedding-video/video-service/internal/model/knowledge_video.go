@@ -41,11 +41,14 @@ type EduKnowledgeVideo struct {
 func (EduKnowledgeVideo) TableName() string { return "edu_knowledge_video" }
 
 type EduKnowledgeVideoPlayRecord struct {
-	ID               uint64    `gorm:"primaryKey;column:id" json:"id"`
-	UserID           uint64    `gorm:"column:user_id;not null" json:"user_id"`
-	KnowledgePointID uint64    `gorm:"column:knowledge_point_id;not null" json:"knowledge_point_id"`
-	KnowledgeVideoID uint64    `gorm:"column:knowledge_video_id;not null" json:"knowledge_video_id"`
-	CreateTime       time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	ID               uint64     `gorm:"primaryKey;column:id" json:"id"`
+	UserID           uint64     `gorm:"column:user_id;not null" json:"user_id"`
+	KnowledgePointID uint64     `gorm:"column:knowledge_point_id;not null" json:"knowledge_point_id"`
+	KnowledgeVideoID uint64     `gorm:"column:knowledge_video_id;not null" json:"knowledge_video_id"`
+	SessionID        string     `gorm:"column:session_id;size:64" json:"session_id"`
+	WatchDuration    int        `gorm:"column:watch_duration;not null;default:0" json:"watch_duration"`
+	CreateTime       time.Time  `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime       *time.Time `gorm:"column:update_time" json:"update_time"`
 }
 
 func (EduKnowledgeVideoPlayRecord) TableName() string { return "edu_knowledge_video_play_record" }
