@@ -9,7 +9,8 @@
 - `video-service/`：推荐部署的 Go HTTP 视频服务，提供上传、转码、播放、推荐、观看记录、题库查询和异步 worker。
 - `recbole-training/`：RecBole 推荐离线训练代码、atomic 数据流水线和模型产物目录。
 - `hls-web/`：Vue 3 + Vite 联调控制台，包含视频调试、推荐诊断和知识点视频三个工作区。
-- `video-embedding/`：历史 Go 后端工程，当前不作为后续 Java 对接入口。
+- `legacy-video/`：历史 Go 后端工程，当前不作为后续 Java 对接入口。
+- `two-tower-training/`：历史双塔训练代码，已归档，仅保留迁移参考。
 - `docs/`：仓库级设计文档、演示文稿等材料。
 - `deployment/`：服务器交付包，包含 standalone、cloud、intranet 三种部署拓扑及打包、校验脚本。
 
@@ -39,12 +40,21 @@
 ├── AGENTS.md                        # AI agent 行为准则
 ├── docker-compose.yml               # 根目录便捷部署编排
 ├── docker-compose.local.yml         # 复用本地 Postgres/Redis/MinIO 的覆盖配置
+├── docker-compose.gorse.yml         # 暴露 Gorse 诊断端口的覆盖配置
+├── docker-compose.cloud.yml         # 叠加在生产栈上的端口暴露覆盖
+├── docker-compose.migrated.yml      # 隔离本地数据栈(Postgres/Redis/MinIO)
+├── docker-compose.recbole.yml       # 历史 RecBole 编排(保留兼容，勿作新入口)
+├── .env.local.example               # 本地环境变量模板
+├── .env.deploy.example              # 部署环境变量模板
+├── .env.migrated.example            # 隔离本地栈环境模板
 ├── deployment/                      # 服务器部署包、拓扑和运维脚本
+├── scripts/                         # 隔离本地栈、数据迁移与仓库校验脚本
 ├── video-vectorization-cost-report.md
 ├── docs/                            # 仓库级设计文档、演示文稿等
 ├── video-service/      # 推荐部署的 HTTP 后端，供 Java 调用
 ├── recbole-training/                # RecBole 推荐训练代码、数据与模型产物
-├── video-embedding/           # 历史 Go 后端主工程
+├── two-tower-training/              # 历史双塔训练代码(已归档)
+├── legacy-video/                    # 历史 Go 后端主工程
 └── hls-web/                         # Vue 3 + Vite 前端调试工程
 ```
 
@@ -55,7 +65,7 @@
 - English parameter reference: [`PROJECT_PARAMETERS_EN.md`](PROJECT_PARAMETERS_EN.md)
 - RecBole 训练说明：[`recbole-training/README.md`](recbole-training/README.md)
 - 前端调试工程说明：[`hls-web/README.md`](hls-web/README.md)
-- 历史后端工程说明：[`video-embedding/README.md`](video-embedding/README.md)
+- 历史后端工程说明：[`legacy-video/README.md`](legacy-video/README.md)
 - 仓库级文档说明：[`docs/README.md`](docs/README.md)
 - 接口契约：[`video-service/docs/swagger/swagger.yaml`](video-service/docs/swagger/swagger.yaml)
 - RecBole 算法交接：[`recbole-training/ALGORITHM_HANDOFF.md`](recbole-training/ALGORITHM_HANDOFF.md)
@@ -122,6 +132,20 @@ Gorse 使用主 PostgreSQL 实例中的独立 schema 保存数据和缓存，向
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 ```
 
+## 隔离本地栈
+
+`docker-compose.migrated.yml` 提供一套独立的本地依赖栈(PostgreSQL + pgvector `15432`、Redis `16379`、MinIO `19000`)，适合本地调试且不影响其他环境：
+
+```bash
+./scripts/init-migrated-env.sh
+docker compose -f docker-compose.migrated.yml up -d
+./scripts/run-migrated-local.sh api       # HTTP API，默认 http://127.0.0.1:18083
+./scripts/run-migrated-local.sh worker    # 转码/向量化 worker
+./scripts/run-migrated-local.sh frontend  # 前端，默认 http://127.0.0.1:15173
+```
+
+需要把历史库数据迁入隔离栈时，编辑 `.env.migrated.local` 的 `MIGRATION_SOURCE_*` 后运行 `./scripts/migrate-local-data.sh`。仓库命名与安全校验用 `./scripts/validate-repository.sh`。
+
 ## 服务器部署包
 
 `deployment/` 是当前服务器交付入口，不依赖根 Compose。它提供：
@@ -146,4 +170,5 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 
 - `video-service/` 是当前推荐对接入口；新集成应优先使用标准 REST 路径，不要继续依赖历史兼容路径。
 - 根目录 compose 更偏便捷部署和联调形态，不等同于完整生产编排。
-- `video-embedding/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。
+- `legacy-video/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。
+- `two-tower-training/` 已归档，当前推荐引擎为 RecBole；不要用旧双塔脚本生成新模型版本。
