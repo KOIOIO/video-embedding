@@ -8,22 +8,22 @@
 
 ## 背景
 
-仓库根目录包含多个项目。按当前项目约定，后端活跃服务是 `legacy-video-http/`，本设计的迁移对象也限定在该服务内。
+仓库根目录包含多个项目。按当前项目约定，后端活跃服务是 `video-service/`，本设计的迁移对象也限定在该服务内。
 
 当前 AI 相关能力主要分布在：
 
-- `legacy-video-http/internal/worker/vectorworker/client_openai.go`
+- `video-service/internal/worker/vectorworker/client_openai.go`
   - 手写 OpenAI-compatible ChatCompletions 请求。
   - 手写 OpenAI-compatible Embedding 请求。
   - 同时承载 DashScope WebSocket ASR 的配置与入口。
-- `legacy-video-http/internal/worker/vectorworker/hierarchical_stage_processing.go`
+- `video-service/internal/worker/vectorworker/hierarchical_stage_processing.go`
   - 负责粗分段 ASR 后调用 LLM 生成细分段。
   - 包含 LLM 输出解析、分段质量检查、二次 retry 和入库。
-- `legacy-video-http/internal/worker/vectorworker/tasks/asr.go`
+- `video-service/internal/worker/vectorworker/tasks/asr.go`
   - 负责细分段二次 ASR、标题改写和 embedding。
-- `legacy-video-http/internal/infrastructure/embedding/client.go`
+- `video-service/internal/infrastructure/embedding/client.go`
   - HTTP API 推荐入口使用的单条 embedding 客户端。
-- `legacy-video-http/internal/application/videoapp/recommendation/service.go`
+- `video-service/internal/application/videoapp/recommendation/service.go`
   - 题目文本向量化、pgvector 相似度检索、推荐记录入库。
 
 这些代码已经形成了稳定的业务能力，但模型调用层和 AI 编排层仍以手写 HTTP、手写 retry、手写输出解析为主。Eino 适合接管这些 AI 子步骤，而不是替代 FFmpeg、Redis Stream、GORM stage 记录或 HTTP handler。
@@ -116,7 +116,7 @@
 
 新增一个 Eino adapter 层，建议放在：
 
-- `legacy-video-http/internal/infrastructure/ai/eino/`
+- `video-service/internal/infrastructure/ai/eino/`
 
 该层负责把 Eino 的 ChatModel、Embedding 能力适配成当前项目内部接口。
 
@@ -177,10 +177,10 @@ type TextEmbedder interface {
 
 涉及位置：
 
-- `legacy-video-http/internal/worker/vectorworker/client_openai.go`
-- `legacy-video-http/internal/infrastructure/embedding/client.go`
-- `legacy-video-http/internal/http/app/app.go`
-- `legacy-video-http/internal/worker/vectorworker/app.go`
+- `video-service/internal/worker/vectorworker/client_openai.go`
+- `video-service/internal/infrastructure/embedding/client.go`
+- `video-service/internal/http/app/app.go`
+- `video-service/internal/worker/vectorworker/app.go`
 
 建议做法：
 
@@ -226,9 +226,9 @@ BuildSummaryRewritePrompt
 
 涉及位置：
 
-- `legacy-video-http/internal/worker/vectorworker/hierarchical_stage_processing.go`
-- `legacy-video-http/internal/worker/vectorworker/tasks/asr.go`
-- `legacy-video-http/internal/worker/vectorworker/tasks/hierarchical.go`
+- `video-service/internal/worker/vectorworker/hierarchical_stage_processing.go`
+- `video-service/internal/worker/vectorworker/tasks/asr.go`
+- `video-service/internal/worker/vectorworker/tasks/hierarchical.go`
 
 注意事项：
 
@@ -268,7 +268,7 @@ BuildSummaryRewritePrompt
 
 当前位置：
 
-- `legacy-video-http/internal/worker/vectorworker/client_openai.go`
+- `video-service/internal/worker/vectorworker/client_openai.go`
 
 替换价值：
 
@@ -280,8 +280,8 @@ BuildSummaryRewritePrompt
 
 当前位置：
 
-- `legacy-video-http/internal/worker/vectorworker/client_openai.go`
-- `legacy-video-http/internal/infrastructure/embedding/client.go`
+- `video-service/internal/worker/vectorworker/client_openai.go`
+- `video-service/internal/infrastructure/embedding/client.go`
 
 替换价值：
 
@@ -293,7 +293,7 @@ BuildSummaryRewritePrompt
 
 当前位置：
 
-- `legacy-video-http/internal/worker/vectorworker/hierarchical_stage_processing.go`
+- `video-service/internal/worker/vectorworker/hierarchical_stage_processing.go`
 
 替换价值：
 
@@ -305,7 +305,7 @@ BuildSummaryRewritePrompt
 
 当前位置：
 
-- `legacy-video-http/internal/worker/vectorworker/tasks/asr.go`
+- `video-service/internal/worker/vectorworker/tasks/asr.go`
 
 替换价值：
 
@@ -318,8 +318,8 @@ BuildSummaryRewritePrompt
 
 当前位置：
 
-- `legacy-video-http/internal/worker/vectorworker/client_openai.go`
-- `legacy-video-http/internal/worker/vectorworker/dashscope_ws.go`
+- `video-service/internal/worker/vectorworker/client_openai.go`
+- `video-service/internal/worker/vectorworker/dashscope_ws.go`
 
 不替换原因：
 
@@ -339,8 +339,8 @@ BuildSummaryRewritePrompt
 
 当前位置：
 
-- `legacy-video-http/internal/application/videoapp/recommendation/service.go`
-- `legacy-video-http/internal/infrastructure/persistence/gorm_video_repository.go`
+- `video-service/internal/application/videoapp/recommendation/service.go`
+- `video-service/internal/infrastructure/persistence/gorm_video_repository.go`
 
 不替换原因：
 
@@ -398,14 +398,14 @@ AI:
 每阶段完成后至少运行：
 
 ```text
-cd legacy-video-http
+cd video-service
 go test ./internal/worker/vectorworker ./internal/worker/vectorworker/tasks ./internal/infrastructure/ai ./internal/infrastructure/embedding ./internal/application/videoapp/recommendation
 ```
 
 必要时再运行：
 
 ```text
-cd legacy-video-http
+cd video-service
 go test ./...
 ```
 
@@ -492,7 +492,7 @@ go test ./...
 ## Implementation Notes
 
 - `AI.Provider` 控制是否选择 Eino-backed adapters，默认值为 `legacy`。
-- Eino Chat 和 Embedding adapters 隔离在 `legacy-video-http/internal/infrastructure/ai/eino/`。
+- Eino Chat 和 Embedding adapters 隔离在 `video-service/internal/infrastructure/ai/eino/`。
 - 当前 `eino-ext v0.0.1-alpha` 没有可用 provider 包，因此本次实现使用 Eino 组件接口加项目内 OpenAI-compatible HTTP adapter。
 - Vector worker ASR 继续使用现有 DashScope WebSocket 实现，只将 Chat 和 Embedding 能力切到可组合 adapter。
 - HTTP 推荐入口的 embedding 仍由 `FallbackEmbedder` 保护，Eino adapter 初始化失败时回落到 legacy embedding client。
