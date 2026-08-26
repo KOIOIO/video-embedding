@@ -139,6 +139,12 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		CountsPrefix: config.SegmentReactionCountsPrefix(cfg),
 		UserPrefix:   config.SegmentReactionUserPrefix(cfg),
 	})
+	commentLikeBuffer := infraredis.NewCommentLikeBufferWithOptions(rdb, infraredis.CommentLikeBufferOptions{
+		StreamKey:    config.CommentLikeQueueKey(cfg),
+		CountsPrefix: config.CommentLikeCountsPrefix(cfg),
+		UserPrefix:   config.CommentLikeUserPrefix(cfg),
+	})
+	commentCountCache := infraredis.NewCommentSegmentCountCache(rdb, config.CommentSegmentCountPrefix(cfg))
 	statusStore := infraredis.NewTranscodeStatusStore(rdb, config.TranscodeStatusPrefix(cfg))
 	videoapp.SetRuntimeCounters(infraredis.NewRuntimeCounterStore(rdb, config.RuntimeActiveCounterPrefix(cfg)))
 	primaryEmbedder := newRecommendationEmbedder(ctx, cfg)
@@ -166,6 +172,9 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	service.RandomPlayBucket = infraredis.NewRandomPlayBucketStore(rdb, config.RandomPlayBucketPrefix(cfg))
 	service.ReactionStore = reactionBuffer
 	service.SegmentReactionStore = segmentReactionBuffer
+	service.CommentLikeStore = commentLikeBuffer
+	service.CommentCountStore = commentCountCache
+	service.CommentCountTTL = config.CommentSegmentCountTTL(cfg)
 	knowledgeRepo := persistence.NewGormKnowledgeVideoRepository(db)
 	knowledgeQueue := infraredis.NewKnowledgeVideoTranscodeQueue(rdb, cfg.RedisKeys.KnowledgeVideoTranscodeQueue)
 	knowledgeImporter := &knowledgevideo.ImportService{

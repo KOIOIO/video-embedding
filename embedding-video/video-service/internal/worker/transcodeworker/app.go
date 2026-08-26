@@ -87,6 +87,11 @@ func Register(app *lifecycle.App, cfg config.Config) {
 		CountsPrefix: config.SegmentReactionCountsPrefix(cfg),
 		UserPrefix:   config.SegmentReactionUserPrefix(cfg),
 	})
+	commentLikeQueue := infraredis.NewCommentLikeBufferWithOptions(rdb, infraredis.CommentLikeBufferOptions{
+		StreamKey:    config.CommentLikeQueueKey(cfg),
+		CountsPrefix: config.CommentLikeCountsPrefix(cfg),
+		UserPrefix:   config.CommentLikeUserPrefix(cfg),
+	})
 	statusStore := infraredis.NewTranscodeStatusStore(rdb, config.TranscodeStatusPrefix(cfg))
 	videoapp.SetRuntimeCounters(infraredis.NewRuntimeCounterStore(rdb, config.RuntimeActiveCounterPrefix(cfg)))
 	transcoder := transcode.NewFFmpegTranscoder(cfg.FFmpeg, cfg.Transcode.Mode)
@@ -94,6 +99,7 @@ func Register(app *lifecycle.App, cfg config.Config) {
 	worker.CoverURLPrefix = config.CoverURLPrefix(cfg)
 	reactionWorker := videoapp.NewVideoReactionWorker(reactionQueue, repo)
 	segmentReactionWorker := videoapp.NewSegmentReactionWorker(segmentReactionQueue, repo)
+	commentLikeWorker := videoapp.NewCommentLikeWorker(commentLikeQueue, repo)
 
 	zap.L().Info("transcode_worker_start",
 		zap.String("queue_key", queueKey),
@@ -145,6 +151,22 @@ func Register(app *lifecycle.App, cfg config.Config) {
 					return nil
 				}
 				zap.L().Error("segment_reaction_run_once_failed", zap.String("err", err.Error()))
+				select {
+				case <-time.After(time.Second):
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		}
+	})
+
+	app.Go(func(ctx context.Context) error {
+		for {
+			if err := commentLikeWorker.RunOnce(ctx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return nil
+				}
+				zap.L().Error("comment_like_run_once_failed", zap.String("err", err.Error()))
 				select {
 				case <-time.After(time.Second):
 				case <-ctx.Done():

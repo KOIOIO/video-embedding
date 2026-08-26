@@ -265,3 +265,38 @@ type EduRecommendExposure struct {
 }
 
 func (EduRecommendExposure) TableName() string { return "edu_recommend_exposure" }
+
+type EduVideoComment struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	UserID         uint64 `gorm:"column:user_id;not null;index" json:"user_id"`
+	VideoSegmentID uint64 `gorm:"column:video_segment_id;not null;index" json:"video_segment_id"`
+	RootID         uint64 `gorm:"column:root_id;not null;default:0;index" json:"root_id"`
+	ParentID       uint64 `gorm:"column:parent_id;not null;default:0;index" json:"parent_id"`
+	ReplyToUserID  uint64 `gorm:"column:reply_to_user_id;not null;default:0" json:"reply_to_user_id"`
+	Content        string `gorm:"column:content;type:text;not null" json:"content"`
+
+	LikeCount       int64 `gorm:"column:like_count;not null;default:0" json:"like_count"`
+	DoubleLikeCount int64 `gorm:"column:double_like_count;not null;default:0" json:"double_like_count"`
+	DislikeCount    int64 `gorm:"column:dislike_count;not null;default:0" json:"dislike_count"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduVideoComment) TableName() string { return "edu_video_comment" }
+
+type EduCommentLike struct {
+	ID uint64 `gorm:"primaryKey;column:id" json:"id"`
+
+	CommentID    uint64 `gorm:"column:comment_id;not null;index" json:"comment_id"`
+	UserID       uint64 `gorm:"column:user_id;not null;index" json:"user_id"`
+	ReactionType string `gorm:"column:reaction_type;type:text;not null;default:'like'" json:"reaction_type"`
+
+	CreateTime time.Time `gorm:"column:create_time;autoCreateTime" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time;autoUpdateTime" json:"update_time"`
+	Deleted    int16     `gorm:"column:deleted;default:0;index" json:"deleted"`
+}
+
+func (EduCommentLike) TableName() string { return "edu_comment_like" }

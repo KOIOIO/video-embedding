@@ -26,13 +26,16 @@ func EnsureSchema(db *gorm.DB) error {
 		if err := EnsureRecSysSchema(tx); err != nil {
 			return err
 		}
-		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduKnowledgeVideoBatch{}, &model.EduKnowledgeVideo{}, &model.EduKnowledgeVideoPlayRecord{}); err != nil {
+		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduKnowledgeVideoBatch{}, &model.EduKnowledgeVideo{}, &model.EduKnowledgeVideoPlayRecord{}, &model.EduVideoComment{}, &model.EduCommentLike{}); err != nil {
 			return err
 		}
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_embedding ON edu_video_segment USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_user ON edu_user_video_recommend(user_id);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_video ON edu_user_video_recommend(video_id);`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_comment_segment_root ON edu_video_comment(video_segment_id, root_id, create_time);`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_comment_replies ON edu_video_comment(root_id, create_time) WHERE parent_id <> 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_comment_like_comment_user ON edu_comment_like(comment_id, user_id);`).Error
 		if err := ensureKnowledgeVideoIndexes(tx); err != nil {
 			return err
 		}

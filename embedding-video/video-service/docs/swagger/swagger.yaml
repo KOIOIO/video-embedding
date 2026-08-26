@@ -62,6 +62,96 @@ definitions:
       success:
         type: boolean
     type: object
+  dto.CommentCreateResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.CommentData'
+      success:
+        type: boolean
+    type: object
+  dto.CommentData:
+    properties:
+      content:
+        type: string
+      created_at_unix:
+        type: integer
+      double_like_count:
+        type: integer
+      has_more_replies:
+        type: boolean
+      id:
+        type: integer
+      like_count:
+        type: integer
+      replies:
+        items:
+          $ref: '#/definitions/dto.CommentData'
+        type: array
+      reply_count:
+        type: integer
+      reply_to_username:
+        type: string
+      user_id:
+        type: integer
+      user_reaction_type:
+        type: string
+      username:
+        type: string
+    type: object
+  dto.CommentLikeData:
+    properties:
+      active:
+        type: boolean
+      comment_id:
+        type: integer
+      double_like_count:
+        type: integer
+      like_count:
+        type: integer
+      reaction_type:
+        type: string
+    type: object
+  dto.CommentLikeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.CommentLikeData'
+      success:
+        type: boolean
+    type: object
+  dto.CommentListData:
+    properties:
+      comments:
+        items:
+          $ref: '#/definitions/dto.CommentData'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  dto.CommentListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.CommentListData'
+      success:
+        type: boolean
+    type: object
+  dto.CommentReactionRequest:
+    properties:
+      reaction_type:
+        type: string
+    required:
+    - reaction_type
+    type: object
+  dto.CreateCommentRequest:
+    properties:
+      content:
+        type: string
+    required:
+    - content
+    type: object
   dto.DeleteVideoData:
     properties:
       deleted:
@@ -989,6 +1079,20 @@ definitions:
       watch_duration:
         type: integer
     type: object
+  dto.SegmentCommentCountData:
+    properties:
+      total:
+        type: integer
+      video_segment_id:
+        type: integer
+    type: object
+  dto.SegmentCommentCountResponse:
+    properties:
+      data:
+        $ref: '#/definitions/dto.SegmentCommentCountData'
+      success:
+        type: boolean
+    type: object
   dto.SegmentReactionCountsData:
     properties:
       double_like_count:
@@ -1747,6 +1851,137 @@ paths:
       summary: 查询当前管理员
       tags:
       - 管理员认证
+  /api/comments/{id}/reactions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 评论ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 互动类型
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CommentReactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CommentLikeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 提交或取消评论互动（点赞/双赞/踩）
+      tags:
+      - 视频评论
+  /api/comments/{id}/replies:
+    get:
+      parameters:
+      - description: 评论ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 查看者用户ID，用于返回其点赞状态
+        in: query
+        name: user_id
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 3
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CommentListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 查询评论的二级回复列表
+      tags:
+      - 视频评论
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 被回复的评论ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 回复内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CommentCreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 回复一条评论（二级回复）
+      tags:
+      - 视频评论
   /api/healthz:
     get:
       produces:
@@ -2095,6 +2330,115 @@ paths:
       summary: 查询转码任务状态
       tags:
       - 视频播放与转码
+  /api/video-segments/{id}/comment-counts:
+    get:
+      parameters:
+      - description: 视频片段ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SegmentCommentCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 查询视频片段评论总数
+      tags:
+      - 视频评论
+  /api/video-segments/{id}/comments:
+    get:
+      parameters:
+      - description: 视频片段ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 查看者用户ID，用于返回其点赞状态
+        in: query
+        name: user_id
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CommentListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: 查询视频片段评论列表
+      tags:
+      - 视频评论
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 视频片段ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 评论内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CommentCreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 发布视频片段评论
+      tags:
+      - 视频评论
   /api/video-segments/{id}/reaction-counts:
     get:
       parameters:

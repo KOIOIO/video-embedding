@@ -155,6 +155,92 @@ type VideoReactionQueue interface {
 	MoveToDeadLetter(ctx context.Context, msg VideoReactionQueueMessage, reason string) error
 }
 
+// Comment 表示一条视频片段评论或二级回复。
+type Comment struct {
+	ID             uint64
+	UserID         uint64
+	VideoSegmentID uint64
+	RootID         uint64
+	ParentID       uint64
+	ReplyToUserID  uint64
+	Content        string
+	LikeCount      int64
+	DoubleLikeCount int64
+	CreatedAt      time.Time
+}
+
+// CommentList 表示评论分页结果。
+type CommentList struct {
+	Total    int64
+	Comments []Comment
+}
+
+// CommentRepository 抽象评论持久化能力。
+type CommentRepository interface {
+	InsertComment(ctx context.Context, comment *Comment) (uint64, error)
+	GetCommentByID(ctx context.Context, id uint64) (Comment, bool, error)
+	SegmentExists(ctx context.Context, segmentID uint64) (bool, error)
+	ListTopComments(ctx context.Context, segmentID uint64, page int, pageSize int) ([]Comment, int64, error)
+	ListReplies(ctx context.Context, rootID uint64, page int, pageSize int) ([]Comment, int64, error)
+	CountComments(ctx context.Context, segmentID uint64) (int64, error)
+	GetCommentReactionCounts(ctx context.Context, commentIDs []uint64) (map[uint64]VideoReactionCounts, error)
+	GetUserCommentReactionTypes(ctx context.Context, commentIDs []uint64, userID uint64) (map[uint64]VideoReactionType, error)
+	ApplyCommentReactionState(ctx context.Context, commentID uint64, userID uint64, reactionType VideoReactionType, active bool) (bool, error)
+	GetUserNamesByIDs(ctx context.Context, userIDs []uint64) (map[uint64]string, error)
+}
+
+// CommentReactionStateRepository 抽象评论互动状态落库能力，供 worker 消费事件使用。
+type CommentReactionStateRepository interface {
+	ApplyCommentReactionState(ctx context.Context, commentID uint64, userID uint64, reactionType VideoReactionType, active bool) (bool, error)
+}
+
+// CommentLikeEvent 表示一条评论互动变更事件。
+type CommentLikeEvent struct {
+	CommentID    uint64            `json:"comment_id"`
+	UserID       uint64            `json:"user_id"`
+	ReactionType VideoReactionType `json:"reaction_type"`
+	Active       bool              `json:"active"`
+	Retry        int               `json:"retry,omitempty"`
+}
+
+func (e CommentLikeEvent) RetryCount() int {
+	if e.Retry < 0 {
+		return 0
+	}
+	return e.Retry
+}
+
+// CommentLikeQueueMessage 表示从事件流中取出的消息。
+type CommentLikeQueueMessage struct {
+	MessageID string
+	Event     CommentLikeEvent
+}
+
+// CommentLikeQueue 抽象评论互动事件消费能力。
+type CommentLikeQueue interface {
+	Dequeue(ctx context.Context) (CommentLikeQueueMessage, error)
+	Ack(ctx context.Context, id string) error
+	Requeue(ctx context.Context, msg CommentLikeQueueMessage, delay time.Duration, reason string) error
+	MoveToDeadLetter(ctx context.Context, msg CommentLikeQueueMessage, reason string) error
+}
+
+// CommentLikeStore 抽象评论互动的 Redis 缓冲读写能力。
+type CommentLikeStore interface {
+	HasCounts(ctx context.Context, commentID uint64) (bool, error)
+	HasUserReaction(ctx context.Context, commentID uint64, userID uint64) (bool, error)
+	GetUserReaction(ctx context.Context, commentID uint64, userID uint64) (VideoReactionType, bool, bool, error)
+	SeedUserReaction(ctx context.Context, commentID uint64, userID uint64, reactionType VideoReactionType, active bool) error
+	Submit(ctx context.Context, commentID uint64, userID uint64, reactionType VideoReactionType, seed VideoReactionCounts, seedUserReaction VideoReactionType, seedUserActive bool) (VideoReactionResult, error)
+	GetCounts(ctx context.Context, commentID uint64, seed VideoReactionCounts) (VideoReactionCounts, error)
+}
+
+// CommentSegmentCountStore 抽象视频片段评论总数的缓存能力。
+type CommentSegmentCountStore interface {
+	Get(ctx context.Context, segmentID uint64) (int64, bool, error)
+	Seed(ctx context.Context, segmentID uint64, count int64, ttl time.Duration) error
+	Incr(ctx context.Context, segmentID uint64) error
+}
+
 // TextEmbedder 抽象文本向量化能力，供推荐场景按题目文本生成查询向量。
 type TextEmbedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
