@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>video-embedding 项目深度解读 + 面试备战手册</title>
+<style>
+  :root{
+    --bg:#F7F6F2; --card:#FFFFFF; --text:#1A1B1C; --sub:#6B7280;
+    --line:#E4E3DD; --accent:#8B5CF6; --accent2:#0EA5E9; --ok:#16A34A; --warn:#D97706; --err:#DC2626;
+    --tag:#EEF2FF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'PingFang SC','Segoe UI','Microsoft YaHei',sans-serif;line-height:1.7;font-size:15px;}
+  .wrap{max-width:1060px;margin:0 auto;padding:32px 20px 80px;}
+  header.hero{background:linear-gradient(135deg,#1E1B4B 0%,#4C1D95 55%,#6D28D9 100%);color:#fff;border-radius:20px;padding:40px 36px;margin-bottom:28px;}
+  header.hero h1{font-size:28px;font-weight:700;letter-spacing:.5px;}
+  header.hero .sub{color:#C7D2FE;font-size:15px;margin-top:10px;line-height:1.8;}
+  .stats{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px;}
+  .stat{flex:1 1 140px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px 14px;}
+  .stat .num{font-size:22px;font-weight:700;color:#FDE68A;}
+  .stat .lab{font-size:12px;color:#C7D2FE;margin-top:2px;}
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px 28px;margin-bottom:20px;}
+  h2{font-size:20px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:10px;}
+  h2 .idx{background:var(--accent);color:#fff;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;flex:none;}
+  .lead{color:var(--sub);font-size:13.5px;margin-bottom:18px;}
+  h3{font-size:16px;font-weight:700;margin:20px 0 10px;color:#3730A3;}
+  h4{font-size:14.5px;font-weight:700;margin:14px 0 6px;}
+  p{margin:8px 0;}
+  ul,ol{margin:8px 0 8px 22px;}
+  li{margin:5px 0;}
+  code{background:#F1F0EA;border-radius:5px;padding:2px 6px;font-size:13px;font-family:'SF Mono',Menlo,Consolas,monospace;}
+  pre{background:#0F172A;color:#E2E8F0;border-radius:12px;padding:16px 18px;overflow:auto;font-size:13px;line-height:1.6;margin:12px 0;font-family:'SF Mono',Menlo,Consolas,monospace;}
+  pre .c{color:#64748B;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:#F5F3FF;font-weight:600;color:#3730A3;}
+  tr:nth-child(even) td{background:#FAFAF8;}
+  .tag{display:inline-block;background:var(--tag);color:#4C1D95;border-radius:6px;padding:1px 8px;font-size:12px;margin:2px 4px 2px 0;}
+  .callout{border-left:4px solid var(--accent);background:#F5F3FF;border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0;}
+  .callout.warn{border-color:var(--warn);background:#FFF7ED;}
+  .callout.ok{border-color:var(--ok);background:#F0FDF4;}
+  .callout.err{border-color:var(--err);background:#FEF2F2;}
+  .callout .t{font-weight:700;margin-bottom:4px;}
+  .qa{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0;background:#FDFDFC;}
+  .qa .q{font-weight:700;color:#312E81;}
+  .qa .a{margin-top:8px;}
+  .qa .a .ans-label{color:var(--accent);font-weight:600;}
+  .qa .deep{margin-top:8px;background:#F8FAFC;border-radius:8px;padding:10px 14px;font-size:13.5px;}
+  .qa .deep .d-label{color:#0369A1;font-weight:600;}
+  .grid2{display:flex;flex-wrap:wrap;gap:14px;}
+  .grid2>div{flex:1 1 320px;min-width:0;}
+  .layers .layer{border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:10px 0;background:#FAFAF8;}
+  .layers .layer .ln{font-weight:700;font-size:13.5px;color:#4C1D95;}
+  .layers .layer .ld{font-size:13px;color:var(--sub);margin-top:3px;}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0;}
+  .flow .node{background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:8px 12px;font-size:13px;text-align:center;}
+  .flow .node b{display:block;font-size:13.5px;color:#312E81;}
+  .flow .node span{font-size:11.5px;color:#6B7280;}
+  .flow .arr{color:#94A3B8;font-weight:700;}
+  .badge{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:600;}
+  .b-rec{background:#FEF3C7;color:#92400E;}
+  .b-big{background:#DBEAFE;color:#1E40AF;}
+  .b-risk{background:#FEE2E2;color:#991B1B;}
+  .footnote{color:var(--sub);font-size:12px;margin-top:16px;}
+  @media(max-width:640px){
+    header.hero{padding:28px 20px;}
+    header.hero h1{font-size:22px;}
+    section{padding:20px 16px;}
+    .flow .node{flex:1 1 100%;}
+    pre{font-size:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>video-embedding 项目深度解读 + 面试备战手册</h1>
+  <div class="sub">教育视频"向量化 + 智能推荐"系统 —— 把教学视频切成语义片段、AI 理解内容、按题向量/画像/协同过滤做个性化推荐，像刷短视频一样刷知识点。适用于后端 / 推荐系统 / AI 应用方向面试。</div>
+  <div class="stats">
+    <div class="stat"><div class="num">4.2万+</div><div class="lab">Go 代码行（不含测试）</div></div>
+    <div class="stat"><div class="num">13+</div><div class="lab">数据库核心表</div></div>
+    <div class="stat"><div class="num">3</div><div class="lab">可热切换推荐引擎</div></div>
+    <div class="stat"><div class="num">4 级</div><div class="lab">向量化流水线阶段</div></div>
+  </div>
+</header>
+
+<!-- ============ 一、项目全景 ============ -->
+<section>
+  <h2><span class="idx">1</span>项目到底干了什么</h2>
+  <div class="lead">一句话定位 + 完整业务链路 + 它解决了什么真问题</div>
+  <div class="callout ok">
+    <div class="t">一句话说清</div>
+    一个面向学习场景的<b>视频内容理解 + 个性化推荐平台</b>：用户上传教学视频，系统自动转码成 HLS、用 ASR 转写 + 大模型摘要 + 向量化把视频切成"带语义标签的知识点片段"存进 pgvector；学习者输入一道题 / 一个知识点，系统按语义向量召回最相关的视频片段，或像刷短视频一样连续获得个性化推荐；所有观看/点赞/评论行为回流，驱动 RecBole 双塔模型离线训练，形成"数据→训练→发布→推荐→回流"的闭环。
+  </div>
+  <h3>完整业务链路（端到端）</h3>
+  <div class="flow">
+    <div class="node"><b>上传</b><span>单文件 / ZIP归档<br>分片断点续传</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>转码</b><span>FFmpeg → HLS<br>封面抽取</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>向量化</b><span>ASR + 分层切割<br>摘要 + Embedding(1536)</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>入库</b><span>pgvector 片段表<br>知识标签</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>推荐</b><span>按题向量召回<br>画像/双塔/协同</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>互动</b><span>观看/点赞/评论<br>曝光记录</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>训练</b><span>RecBole 离线训练<br>门禁发布</span></div>
+  </div>
+  <h3>它解决的真实问题</h3>
+  <ul>
+    <li><b>长视频"找不到要看的内容"</b>：一门课一小时，学生只想看某个知识点那 3 分钟 → 用语义切割把视频拆成可定位的片段。</li>
+    <li><b>"按题找课"的检索需求</b>：学生拿一道题/一个知识点去匹配讲解 → 向量召回代替关键词匹配。</li>
+    <li><b>个性化冷启动</b>：新用户没有行为 → 用题目向量 + 知识图谱弱项召回兜底；有行为后用双塔模型。</li>
+    <li><b>推荐质量可验证</b>：不是拍脑袋推荐，用曝光-反馈数据离线评估（Recall@20 / NDCG@20）并做模型门禁发布。</li>
+  </ul>
+  <div class="footnote">注：这是仓库级多项目容器，对外服务入口是 video-service（Go HTTP API + worker），推荐用 REST 对接。</div>
+</section>
+
+<!-- ============ 二、系统架构 ============ -->
+<section>
+  <h2><span class="idx">2</span>系统架构（从前端到数据库）</h2>
+  <div class="lead">分层清晰：接入层 → 应用层 → 基础设施层 → 异步 worker，DDD 风格 + 接口适配器</div>
+
+  <div class="layers">
+    <div class="layer"><div class="ln">① 前端层</div><div class="ld"><b>hls-web</b>（Vue3+Vite 联调控制台：视频工作区 / 推荐诊断工作区 / 知识点视频工作区，含 HLS 播放器、上传进度、系统指标实时图表）；<b>short-video-web</b>（抖音风格短视频端：上下滑 Feed、手势、评论、两级评论、相对时间）。</div></div>
+    <div class="layer"><div class="ln">② 接入层 Go HTTP（cmd/httpapi）</div><div class="ld">Gin Router 挂载 REST 接口：认证(JWT)、视频上传/管理、播放、片段互动、题目查询、推荐、知识点视频、媒体代理（/videos、/knowledge-video-media 反代 HLS）、Swagger、健康检查、CORS、访问日志。</div></div>
+    <div class="layer"><div class="ln">③ 应用层（internal/application）</div><div class="ld">videoapp：上传/转码编排/播放/评论/推荐/曝光记录/运行时计数；knowledgevideo：批量导入/进度/播放；adminauth：管理员认证。纯业务编排，不碰具体存储。</div></div>
+    <div class="layer"><div class="ln">④ 领域与基础设施层（internal/domain + internal/infrastructure）</div><div class="ld">domain/video 领域模型；infrastructure 含 AI(LLM)、embedding、transcode(FFmpeg)、objectstorage(RustFS/S3)、persistence(GORM+pgvector+recsys schema)、redis(队列+缓冲)。</div></div>
+    <div class="layer"><div class="ln">⑤ 异步 worker（cmd/worker + internal/worker）</div><div class="ld">transcodeworker（FFmpeg→HLS）、vectorworker（四级向量化流水线，ants 协程池并行）、knowledgevideoworker（Redis Stream 消费）、gorsesync（Gorse 数据同步）、recboletrainer（训练调度）、reaction/comment 消费 worker。</div></div>
+    <div class="layer"><div class="ln">⑥ 数据与外部依赖</div><div class="ld">PostgreSQL+pgvector（业务表 + recsys schema，advisory lock 防并发迁移，ivfflat 向量索引）；Redis（队列/计数缓冲/随机播放去重/运行指标）；MinIO(RustFS)（原始视频、HLS 分片、向量化中间件）；DashScope（FunASR 实时转写、text-embedding-v4、qwen3.7-plus 摘要）；Gorse（可选协同过滤）；RecBole 训练容器。</div></div>
+  </div>
+
+  <h3>依赖注入与生命周期</h3>
+  <p>采用 <code>http/app</code> 组装 App（DB/Redis/Store/Service 全部构造好注入），入口只做 <code>appbuilder.New → router.New → lifecycle.Run</code>；lifecycle 统一管理优雅退出（HTTP Shutdown / worker 协程退出 / 资源 Close）。测试用接口适配器 mock，便于单测。</p>
+</section>
+
+<!-- ============ 三、数据库设计 ============ -->
+<section>
+  <h2><span class="idx">3</span>数据库设计（PostgreSQL + pgvector）</h2>
+  <div class="lead">13+ 张表，分三组：视频内容域 / 推荐域 / 知识点视频域 + recsys 独立 schema</div>
+
+  <h3>① 视频内容域</h3>
+  <table>
+    <tr><th>表</th><th>作用</th><th>关键字段</th></tr>
+    <tr><td><code>edu_video_resource</code></td><td>视频资源主表</td><td>title、video_url、duration、status、is_published、is_recommend、view_count、like/double_like/dislike</td></tr>
+    <tr><td><code>edu_video_segment</code></td><td>视频片段（推荐最小单元）</td><td>video_id、segment_index、start_time/end_time、content_summary、<b>embedding vector(1536)</b>、knowledge_tags text[]</td></tr>
+    <tr><td><code>edu_video_vector_stage</code></td><td>向量化阶段状态（幂等）</td><td><b>(task_id, stage, segment_index, segment_id) 唯一约束</b>、status、retry_count、object_key、error_message</td></tr>
+    <tr><td><code>edu_video_user_reaction</code> / <code>edu_user_reaction</code></td><td>视频级 / 片段级用户反应</td><td>user_id、video_id、video_segment_id、reaction_type</td></tr>
+    <tr><td><code>edu_video_comment</code> / <code>edu_comment_like</code></td><td>两级评论 + 点赞</td><td>root_id、parent_id、reply_to_user_id；comment_id+user_id 唯一</td></tr>
+  </table>
+
+  <h3>② 推荐域</h3>
+  <table>
+    <tr><th>表</th><th>作用</th><th>关键字段</th></tr>
+    <tr><td><code>edu_user_video_recommend</code></td><td>用户推荐结果落库</td><td>user_id、video_id、video_segment_id、recommend_score numeric(5,4)、is_watched、watch_duration</td></tr>
+    <tr><td><code>edu_user_video_profile</code></td><td>用户画像向量</td><td><b>profile_vector vector(1536)</b>、positive/negative/watch count、model_version、status</td></tr>
+    <tr><td><code>edu_recommend_exposure</code></td><td>曝光日志（训练数据源）</td><td>request_id、rank、score、<b>strategy、model_version</b>、clicked、watched、clicked_time、watched_time</td></tr>
+  </table>
+
+  <h3>③ recsys 独立 schema（RecBole 训练产物）</h3>
+  <table>
+    <tr><th>表</th><th>作用</th></tr>
+    <tr><td><code>recsys.recommend_model_version</code></td><td>模型版本管理：model_name/version、algorithm、metrics_json、is_active、published_at（支持门禁发布）</td></tr>
+    <tr><td><code>recsys.recommend_user_embedding</code></td><td>用户 embedding <b>vector(64)</b>（双塔点积语义），按 user_id+model+version 唯一</td></tr>
+    <tr><td><code>recsys.recommend_item_embedding</code></td><td>物品（片段）embedding <b>vector(64)</b>，按 segment+model+version 唯一</td></tr>
+  </table>
+
+  <div class="callout">
+    <div class="t">设计要点：为什么两套向量？</div>
+    <p><b>1536 维</b>：<code>edu_video_segment.embedding</code> / <code>edu_user_video_profile.profile_vector</code>，来自 DashScope text-embedding-v4，用于<b>语义召回</b>（题目↔片段、画像↔片段）。<br>
+    <b>64 维</b>：<code>recsys.*_embedding</code>，来自 RecBole 双塔 BPR 训练产出，保留点积语义，用于<b>个性化模型召回</b>。维度小、检索快，专为线上 pgvector 检索设计。</p>
+  </div>
+
+  <h3>索引与迁移工程</h3>
+  <ul>
+    <li>向量索引：<code>ivfflat (embedding vector_cosine_ops) lists=100</code> —— 余弦距离近似最近邻。</li>
+    <li>评论：<code>(video_segment_id, root_id, create_time)</code> 复合索引 + 回复部分索引 <code>WHERE parent_id &lt;&gt; 0</code>。</li>
+    <li>迁移：启动时 <code>CREATE EXTENSION vector</code> + AutoMigrate + 幂等建索引，用 <b>PostgreSQL advisory lock</b> 保证 HTTP 与 worker 多进程并发迁移不冲突。</li>
+  </ul>
+</section>
+
+<!-- ============ 四、核心机制 ============ -->
+<section>
+  <h2><span class="idx">4</span>核心机制拆解</h2>
+
+  <h3>4.1 异步任务体系（Redis 队列 + 多级流水线）</h3>
+  <p>所有重活异步化，Redis 承载队列与缓冲：</p>
+  <table>
+    <tr><th>队列/缓冲</th><th>用途</th></tr>
+    <tr><td><code>video:transcode:queue</code></td><td>视频转码任务（BRPOP 消费，超时回收）</td></tr>
+    <tr><td><code>video:vector:{prepare|coarse|refine|finalize}</code></td><td>向量化<b>四级流水线</b>队列</td></tr>
+    <tr><td><code>knowledge_video:transcode:stream</code></td><td>知识点视频转码（Redis Stream）</td></tr>
+    <tr><td><code>video/segment:reaction:queue</code>、<code>comment:like:queue</code></td><td>点赞/反应<b>缓冲</b>：先写 Redis 计数，worker 异步刷库，扛高并发点踩</td></tr>
+    <tr><td><code>video:random_play:recent/bucket</code></td><td>随机播放去重（30min）与推荐桶预取</td></tr>
+    <tr><td><code>video:runtime:active</code></td><td>运行时活跃计数（监控指标）</td></tr>
+  </table>
+
+  <h3>4.2 视频向量化：分层切割（核心亮点）</h3>
+  <div class="flow">
+    <div class="node"><b>Prepare</b><span>取视频、探时长</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Coarse 粗切</b><span>40s 基础分片<br>ants 协程池 12 并发<br>裁剪+上传+粗ASR</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Refine 细切</b><span>滑动窗口 30s/步长20s<br>重叠分析区<br>细化 12~90s</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Finalize</b><span>摘要+Embedding<br>落库片段+标签</span></div>
+  </div>
+  <ul>
+    <li><b>为什么滑动窗口步长 &lt; 窗口</b>（30s/20s）：相邻窗口产生重叠分析区，避免关键句被硬切点切断，保证语义完整性。</li>
+    <li><b>结尾对齐</b>：结尾顺延 ≤6s 收全语句，探测步长 0.5s，避免片段末尾"说一半"。</li>
+    <li><b>协程池流水线</b>：裁剪→上传→ASR 三个阶段用 <code>ants</code> 协程池 + channel 流水线并行，互不阻塞；每段都有超时（12min/10min）。</li>
+    <li><b>幂等 &amp; 可重试</b>：<code>edu_video_vector_stage</code> 唯一约束防重复处理，失败记录 error_message/retry_count，支持断点续跑。</li>
+    <li><b>AI 降级</b>：AI provider 不可用时进入 degraded 模式（保留基础上传/播放，跳过向量化），核心服务不挂。</li>
+  </ul>
+
+  <h3>4.3 推荐系统：三引擎热切换</h3>
+  <p>配置项 <code>Recommendation.Engine</code> 可切换 <code>knowledge_match | gorse | recbole</code>，当前线上 <b>recbole</b>。</p>
+  <table>
+    <tr><th>策略</th><th>机制</th><th>典型场景</th></tr>
+    <tr><td><b>question_vector</b></td><td>题目 → embedding(1536) → pgvector 余弦召回片段，score=1/(1+distance)</td><td>按题找讲解</td></tr>
+    <tr><td><b>knowledge_match</b></td><td>结合用户画像向量 + 知识弱项召回（weak knowledge），先画像 rerank（≤300 候选）</td><td>随机播放兜底</td></tr>
+    <tr><td><b>profile_rerank</b></td><td>question 候选 + 用户画像向量二次打分排序</td><td>个性化排序</td></tr>
+    <tr><td><b>recbole</b></td><td>离线双塔 BPR 产出 64 维 user/item embedding → pgvector 检索</td><td>个性化主推</td></tr>
+    <tr><td><b>gorse</b></td><td>Gorse 协同过滤（feedback 同步 + 候选集），RecBole 可作 external recommender 提供候选 ID</td><td>可选集成</td></tr>
+  </table>
+  <p><b>随机播放桶</b>：不每次现算，按用户把推荐结果预取进 Redis 桶（min 3 / max 5），弹出即播，配合 30min 去重，既快又不过度重复。</p>
+
+  <h3>4.4 训练闭环：RecBole 双塔 + 门禁发布</h3>
+  <ol>
+    <li><b>取数</b>：<code>export_recbole_dataset</code> 导出 .inter（显式交互 + 观看/曝光 + 题目搜视频行为）、.user（画像/答题/搜索特征）、.item（片段+内容元数据）。</li>
+    <li><b>训练</b>：RecBole <b>BPR</b>，embedding_size=64，uniform 负采样，eval NDCG@20，8:1:1 切分。</li>
+    <li><b>评估 &amp; 门禁</b>：产出 Recall@20 / NDCG@20 / Hit@20 / Precision@20，与<b>当前激活版本基线对比</b>，不达标不发布。</li>
+    <li><b>发布</b>：import 新 embedding 到 recsys schema，切换 model_version 为 active，旧版本保留可回滚。</li>
+    <li><b>回流</b>：曝光表记录 strategy/model_version，为下一轮训练积累样本。</li>
+  </ol>
+
+  <h3>4.5 互动与评论的并发设计</h3>
+  <ul>
+    <li>点赞/反应走 <b>Redis 缓冲</b>：写请求只操作内存计数，worker 异步合并落库，防抖+扛量。</li>
+    <li>两级评论（root/parent）+ 部分索引，回复列表按时间倒序分页。</li>
+  </ul>
+</section>
+
+<!-- ============ 五、面试深挖 ============ -->
+<section>
+  <h2><span class="idx">5</span>面试深挖 TOP 20（标准答案 + 深入解析）</h2>
+  <div class="lead">面试官最可能从这些点切入，每个问题给出"标准答案"和"再往深问一层"的解析</div>
+
+  <div class="qa"><div class="q">Q1 为什么用 pgvector 而不是专门的向量数据库（Milvus/FAISS/Qdrant）？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>数据规模是教学视频片段，量级不大；pgvector 把向量检索和业务数据放在同一套 PostgreSQL 里，<b>不用引入额外组件、不需要数据同步、能用事务保证一致</b>，运维成本最低。项目还在联调/早期阶段，选型以简单可靠优先。</div>
+    <div class="deep"><span class="d-label">深入：</span>面试官可能追问"什么时候该换向量库？"——候选量到百万级以上、需要 HNSW 高性能、或需要独立扩展/横向扩容时，才考虑专用库。pgvector 的 ivfflat 建立索引慢、召回质量略低于 HNSW，但有 <code>hnsw</code> 索引可选。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q2 ivfflat 和 HNSW 的区别？你项目为什么用 ivfflat？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>ivfflat 用倒排索引把向量聚类（lists=100 个聚类中心），查询只搜最近几个簇，快但有精度损失、建索引慢、数据插入会漂移；HNSW 是分层小世界图，召回精度高、查询快，但内存占用大、构建慢。项目用 ivfflat 是默认保守选择，量小够用。</div>
+    <div class="deep"><span class="d-label">深入：</span>可以主动说"如果数据增长我会切 HNSW"，体现你对索引特性的理解。cosine 距离 vs L2 的选择也要能说清（文本语义向量通常余弦更稳，因为只关心方向不关心模长）。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q3 视频向量化为什么用"分层切割 + 滑动窗口重叠"？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>直接用固定时长硬切会把完整语句切断，导致片段语义残缺。方案是<b>粗切（40s）→ ASR 拿到文本 → 细切</b>：细切用 30s 窗口、20s 步长产生<b>重叠区</b>，保证句子完整；再配合<b>结尾顺延对齐</b>（最多 6s）收全尾部语句。这样切出来的片段能对应到清晰的知识点。</div>
+    <div class="deep"><span class="d-label">深入：</span>能谈"粗切目的"：粗切先做初筛（哪段有有效语音、哪段是静音/片头片尾），细切只在有效区间做精标，节省 ASR 成本。ASR 是实时 FunASR WebSocket，8 路并发。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q4 双塔模型怎么理解？BPR 损失是什么？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>双塔 = 用户塔（user_id→embedding）+ 物品塔（item_id→embedding），各自编码，最后点积/余弦得到匹配分，适合大规模线上检索（user/item embedding 可以离线算好存向量库）。BPR（Bayesian Personalized Ranking）是<b>成对排序损失</b>：对每个用户，正样本（看过的）得分要比随机负样本高，目标函数最大化 <code>ln σ(x_ui - x_uj)</code>。</div>
+    <div class="deep"><span class="d-label">深入：</span>项目用 RecBole 的 BPR，embedding_size=64，负采样 uniform sample_num=1。能讲清"为什么要负采样""为什么双塔天然适合做召回而不是精排"（点积预计算 → 向量索引 ANN 检索）就是加分项。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q5 冷启动怎么解决？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>三层兜底：① <b>内容侧</b>：按题目向量语义召回，新用户输入题/知识点就能拿到结果；② <b>知识侧</b>：知识弱项（weak knowledge）召回——从用户答题/画像推断薄弱知识点，推对应片段；③ <b>随机播放桶</b>：没画像时先随机推优质片段（is_recommend 标记），积累行为后再逐步切到个性化模型。</div>
+    <div class="deep"><span class="d-label">深入：</span>随机播放去重（30min、bucket 预取）本质是"探索+控制重复度"，可以和 EE（Exploration-Exploitation）思想挂钩。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q6 推荐系统的评价指标你怎么看？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>离线用 Recall@K、NDCG@K、Hit@K、Precision@K：Recall 看"该推荐的有没有推出来"，NDCG 看"推荐顺序对不对"（位置加权），Hit 看"有没有命中"，Precision 看"推的对不对"。项目用 NDCG@20 作为验证主指标。</div>
+    <div class="deep"><span class="d-label">深入：</span>能补充"离线指标 ≠ 线上效果"：离线 NDCG 高不代表 CTR 高，真正的验证要靠 A/B 或线上曝光-点击回流数据——项目里的 <code>edu_recommend_exposure</code> 就是为这个设计的数据闭环。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q7 模型怎么发布上线？怎么保证不劣化？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>训练 → 评估 → <b>门禁</b>（新模型指标 vs 当前激活版本基线，不达标拒绝）→ 导入 embedding 到 recsys schema → 切换 model_version 为 active → 线上按 active 版本取向量检索。旧版本保留在 <code>recommend_model_version</code>，可回滚。</div>
+    <div class="deep"><span class="d-label">深入：</span>这就是"模型版本管理 + 灰度/回滚"的思想，推荐系统工程化的关键一环，比只会训练模型更能体现工程能力。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q8 为什么有 1536 维和 64 维两套向量？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>1536 维来自通用文本 Embedding 模型（text-embedding-v4），语义丰富，用于<b>内容理解与语义召回</b>（题目↔片段、画像）；64 维来自 RecBole 双塔训练，是<b>为推荐优化的专属向量</b>，保留点积语义、维度小检索快。两者分工不同：一个"懂内容"，一个"懂用户偏好"。</div>
+    <div class="deep"><span class="d-label">深入：</span>这体现"通用模型 + 业务模型"两层设计，是很多推荐系统的标准做法。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q9 Redis 在项目里除了缓存还做了什么？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>它其实是项目的<b>异步基础设施</b>：① 队列（转码/向量化四级流水线/知识点转码 Stream）解耦重任务；② <b>计数缓冲</b>（点赞/反应先写 Redis，worker 异步刷库）扛高并发互动；③ 随机播放去重与推荐桶；④ 运行时活跃指标。</div>
+    <div class="deep"><span class="d-label">深入：</span>能说清"为什么不直接写库"（DB 写放大、热点行锁竞争）和"缓冲的最终一致性"（短暂不一致可接受，worker 兜底刷库）就是加分。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q10 转码和向量化的失败怎么处理？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>三件套：① 任务状态持久化（edu_video_vector_stage 记录 stage/status/retry_count/error_message），进程重启可续跑；② 队列任务超时回收（pending 超过阈值重新入队）；③ 单段失败只标记该段，不影响整批；AI 服务不可用走降级模式。</div>
+    <div class="deep"><span class="d-label">深入：</span>可展开"幂等"：唯一约束 (task_id, stage, segment_index) 防止重复处理，这是分布式任务最常见的坑。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q11 多进程并发启动，Schema 迁移怎么做安全？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>HTTP 和 worker 可能同时启动都触发 AutoMigrate，用 <b>PostgreSQL advisory lock</b>（pg_advisory_lock 固定 ID）把迁移包在事务里串行化，后到者等待，避免 DDL 竞争。</div>
+    <div class="deep"><span class="d-label">深入：</span>能对比"advisory lock vs 应用层分布式锁（Redis/DB 锁表）"的取舍，说明为什么 Postgres 自带锁最可靠。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q12 用 ants 协程池解决什么问题？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>向量化粗切阶段每个视频要切几十段并行做"裁剪→上传→ASR"，直接开 goroutine 会无上限爆炸。用 <code>ants</code> 协程池固定并发（clip 12 / ASR 8），配合 channel 做三阶段流水线，<b>控制资源、限流背压</b>，避免打爆 FFmpeg 进程和对象存储。</div>
+    <div class="deep"><span class="d-label">深入：</span>可以谈"为什么要池化而非每次 new goroutine"（goroutine 栈开销小但无界，池化提供上限与复用）、context 超时取消（每段 12min 超时）防止卡死。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q13 前端是怎么组织的？和你的后端怎么对接？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>两个前端：hls-web 是<b>开发/联调控制台</b>（视频工作区做上传/转码/播放/系统指标，推荐工作区做诊断/预览/追踪，知识点视频工作区做批量导入），short-video-web 是<b>产品形态的抖音风格端</b>（上下滑 Feed、手势、两级评论）。都通过 REST API + JWT 对接，Vite 代理 /api、/videos、/swagger。</div>
+    <div class="deep"><span class="d-label">深入：</span>能说明"控制台与产品端分离"的价值——开发期用控制台调试推荐质量、排查问题，产品端保持干净。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q14 推荐接口按题召回和随机播放的差异？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>按题召回（by-question）是<b>主动检索</b>：用户明确带着题目/知识点，走语义向量召回，命中相关性优先；随机播放（random-play）是<b>被动推荐</b>：无明确意图，走画像/双塔/弱项召回，考虑去重和探索。两者曝光都落库。</div>
+    <div class="deep"><span class="d-label">深入：</span>这是"检索 vs 推荐"两种场景的经典区分，能说清就说明你真的理解业务。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q15 Gorse 在项目里是什么角色？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>Gorse 是开源的 Go 推荐系统，做<b>协同过滤</b>。项目把它作为可选引擎：同步反馈数据（Feedback）、用候选集召回，甚至把 RecBole 作为它的 external recommender 提供候选 ID。当前主推已切到 RecBole，Gorse 保留为可选集成。</div>
+    <div class="deep"><span class="d-label">深入：</span>能说明"推荐引擎可插拔"的架构思想——通过统一的 Service 接口抽象，Engine 配置切换，不同模型互不侵入。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q16 曝光数据怎么用于训练？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>每次推荐落 <code>edu_recommend_exposure</code>（request_id/rank/score/strategy/model_version），用户点击/观看后回写 clicked/watched + 时间戳。导数据集时把这些"曝光+反馈"作为样本，正样本=看了/点了，负样本=曝光未点，喂给 RecBole 训练。这保证了<b>训练分布与线上分布一致</b>。</div>
+    <div class="deep"><span class="d-label">深入：</span>能提到"曝光-点击负样本采样（避免全库随机负样本偏差）"就是非常专业的点。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q17 项目里怎么保证接口与文档一致？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>用 swaggo 注解生成 Swagger（docs/swagger），路由挂 /swagger/index.html，前端和 Java 对接方直接看文档联调；Swagger 是生成物不手工改。</div>
+    <div class="deep"><span class="d-label">深入：</span>体现工程规范意识，很多候选人忽略了 API 文档化。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q18 上传大文件/压缩包怎么做的？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>支持单文件、ZIP 归档（批量解压入库，限制展开大小 4GB/单文件 512MB/最多 1000 个）、以及<b>分片上传</b>：Initiate → 逐 chunk PUT → Complete 合并，前端保存断点进度，失败可续传。</div>
+    <div class="deep"><span class="d-label">深入：</span>分片上传是面试高频题，能说清"为什么分片"（网络容错、并发上传、大文件内存友好、断点续传）就够。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q19 知识点视频批量导入的流程？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>上传 ZIP（视频）+ XLSX（知识点映射表）→ 记录 batch → 逐条校验/入队（Redis Stream）→ worker 转码为 HLS → 关联到知识点 → 前端可查进度（total/ready/failed）和按知识点播放。</div>
+    <div class="deep"><span class="d-label">深入：</span>这是"内容导入管线"的通用模式：批量任务要有状态机、进度、失败重试。</div>
+  </div>
+
+  <div class="qa"><div class="q">Q20 这个项目如果让你重构/改进，你会做什么？</div>
+    <div class="a"><span class="ans-label">标准答案：</span>三到四个务实方向：① 向量索引从 ivfflat 切 HNSW（数据增长后）；② 推荐评估补线上 A/B 或 CTR 回流指标，不只靠离线 NDCG；③ 队列从 Redis List 升级到更可靠的消息队列（或加 DLQ/重试拓扑，仓库已有 dlqctl 工具）；④ 向量化加"增量/去重"避免重复 ASR 成本；⑤ 分片/切片的存储加生命周期管理（冷热分层）。</div>
+    <div class="deep"><span class="d-label">深入：</span>主动暴露可改进点并给出优先级，比"项目很完美"更让面试官信服。</div>
+  </div>
+</section>
+
+<!-- ============ 六、简历写法 ============ -->
+<section>
+  <h2><span class="idx">6</span>简历怎么包装（STAR + 量化）</h2>
+  <div class="lead">项目名建议写"衡桃学堂视频服务 · 教育视频向量化与智能推荐系统"，突出后端工程 + 推荐系统双线</div>
+
+  <div class="callout">
+    <div class="t">示例简历条目（可直接改）</div>
+    <p><b>教育视频向量化与智能推荐系统</b>（Go / PostgreSQL+pgvector / Redis / FFmpeg / RecBole）</p>
+    <ul>
+      <li>独立设计并实现<b>视频内容理解流水线</b>：上传 → FFmpeg HLS 转码 → FunASR 转写 → 分层语义切割（滑动窗口重叠+结尾对齐）→ 大模型摘要 → 1536 维 Embedding 入库，支撑按题向量召回；基于 ants 协程池做三阶段并行，单视频向量化任务并发可控。</li>
+      <li>搭建<b>多策略推荐系统</b>：实现 knowledge_match / Gorse / RecBole 三引擎热切换，覆盖题目向量召回、用户画像 rerank、双塔模型召回；Redis 随机播放桶预取 + 30min 去重，冷启动分层兜底。</li>
+      <li>构建<b>推荐训练闭环</b>：导出曝光-行为样本 → RecBole BPR 双塔离线训练 → Recall@20/NDCG@20 门禁评估 → 模型版本管理与回滚，embedding 落 recsys schema 供线上 pgvector 检索。</li>
+      <li>设计<b>异步任务与高并发互动</b>：Redis 队列承载转码/四级向量化流水线；点赞反应 Redis 缓冲异步刷库；两级评论；PostgreSQL advisory lock 防并发迁移；全链路单测覆盖。</li>
+    </ul>
+  </div>
+
+  <h3>话术要点</h3>
+  <ul>
+    <li><b>开场 30 秒</b>："这是一个把教学视频变成可检索、可推荐的知识库的系统。我负责后端全链路：内容理解流水线、推荐系统、以及数据闭环。"</li>
+    <li><b>数字随时能报</b>：4.2 万行 Go、13+ 表、3 引擎、4 级流水线、1536/64 双向量。</li>
+    <li><b>主动抛钩子</b>：讲完架构后主动说"这里我最想聊的是推荐闭环——曝光数据怎么回流训练、模型怎么门禁发布"，引导面试官往你准备最充分的点问。</li>
+    <li><b>承认边界</b>：数据量是联调级别、没有真实线上大规模验证——但要立刻补上"所以我设计了可扩展的方向（HNSW、A/B、MQ）"，把短板转成思考深度。</li>
+  </ul>
+</section>
+
+<!-- ============ 七、短板与风险 ============ -->
+<section>
+  <h2><span class="idx">7</span>短板与应对（面试官可能的质疑）</h2>
+  <table>
+    <tr><th>可能的质疑</th><th>怎么应对</th></tr>
+    <tr><td><span class="badge b-risk">数据量小</span>没经过真实大规模流量</td><td>承认是早期/联调阶段，但强调<b>工程结构是按大规模设计的</b>：异步解耦、队列缓冲、协程池限流、幂等、模型版本门禁——这些正是大规模系统需要的骨架。</td></tr>
+    <tr><td><span class="badge b-risk">单人项目</span>是不是你一个人写的？</td><td>说清你负责的核心范围（后端 + 推荐链路），其余（前端控制台、部署包）是配合完成；强调<b>你自己把端到端打通了</b>。</td></tr>
+    <tr><td><span class="badge b-risk">推荐效果</span>离线指标高就代表好？</td><td>主动讲清离线 vs 在线的差距，说明你设计了曝光-反馈回流就是为了未来做线上验证——体现你懂评估的局限。</td></tr>
+    <tr><td><span class="badge b-risk">依赖开源</span>主要靠 RecBole/Gorse/FFmpeg</td><td>强调你的价值在<b>工程集成与系统设计</b>：把开源组件编排成可用系统、设计数据闭环、处理失败与幂等，而不是调包。</td></tr>
+    <tr><td><span class="badge b-risk">为什么不用微服务</span></td><td>单体分层 + worker 拆分已满足当前规模；演进路径清晰（video-service 是独立服务，可拆分 recommendation 等），避免过度设计。</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <div class="t">面试前必做 checklist</div>
+    <ul>
+      <li>能在白板上画出：上传→转码→向量化→推荐→训练闭环 的完整链路（含每步的数据落点）。</li>
+      <li>能手写核心 SQL：<code>SELECT ... ORDER BY embedding &lt;=&gt; $1 LIMIT 10</code>（余弦距离）以及 pgvector 建索引语句。</li>
+      <li>能讲清 BPR 损失公式和"为什么双塔适合召回"。</li>
+      <li>能说清一个线上问题排查案例（比如：向量化某段一直失败 → 看 vector_stage 的 error_message/retry → 定位是 ASR 超时 → 调整超时/重试）。</li>
+    </ul>
+  </div>
+</section>
+
+<div class="footnote">本手册由对 video-embedding 仓库的代码逐层分析生成：Go 服务（cmd/application/domain/http/infrastructure/worker）、数据库 schema（业务表 + recsys）、RecBole 训练管线、两个前端与部署拓扑。技术细节以仓库代码为准。</div>
+
+</div>
+</body>
+</html>
