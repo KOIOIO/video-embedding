@@ -45,7 +45,7 @@ def build_config(
         },
         "train_neg_sample_args": {
             "distribution": "uniform",
-            "sample_num": "none",
+            "sample_num": 1,
         },
     }
 
