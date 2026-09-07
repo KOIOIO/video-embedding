@@ -243,6 +243,36 @@ function normalizeConversation(item) {
   }
 }
 
+// --- 主页访问统计 API ---
+
+export async function recordVisit(userId, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  if (!id) return
+  try {
+    await requestJson(`/api/users/${encodeURIComponent(String(id))}/visit`, {
+      method: 'POST',
+      headers: authHeaders(),
+    }, fetchImpl)
+  } catch {
+    // fire and forget：静默失败，不影响页面
+  }
+}
+
+export async function fetchMyVisits(date, fetchImpl = fetch) {
+  const params = new URLSearchParams()
+  if (date) params.set('date', String(date))
+  const query = params.toString()
+  const url = query ? `/api/me/visits?${query}` : '/api/me/visits'
+  const data = await requestJson(url, {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return {
+    date: String(data?.date || ''),
+    unique_visitors: Number(data?.unique_visitors || 0) || 0,
+    total_visits: Number(data?.total_visits || 0) || 0,
+  }
+}
+
 // --- 时间格式化 ---
 
 export function formatMessageTime(timestamp) {

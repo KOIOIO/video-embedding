@@ -38,6 +38,7 @@ func New(httpApp *app.App) *gin.Engine {
 	userProfileHandler := handler.NewUserProfileHandler(httpApp.UserProfileService, httpApp.Store)
 	userFollowHandler := handler.NewUserFollowHandler(httpApp.UserFollowService)
 	userMessageHandler := handler.NewUserMessageHandler(httpApp.UserMessageService)
+	profileVisitHandler := handler.NewProfileVisitHandler(httpApp.ProfileVisitService)
 	rawURLPrefix := ""
 	if httpApp.Service != nil {
 		rawURLPrefix = httpApp.Service.Paths.RawURLPrefix
@@ -147,6 +148,9 @@ func New(httpApp *app.App) *gin.Engine {
 	public.GET("/api/messages/conversations", userMessageHandler.GetConversations)
 	public.GET("/api/messages/:userId", userMessageHandler.GetMessages)
 	public.POST("/api/messages/:userId/read", userMessageHandler.MarkAsRead)
+	// 用户主页访问统计：TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/users/:id/visit", profileVisitHandler.RecordVisit)
+	public.GET("/api/me/visits", profileVisitHandler.GetMyVisits)
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.POST("/api/me/videos", userPublishHandler.PublishVideo)
 	public.GET("/api/me/videos/:id/status", userPublishHandler.GetVideoStatus)

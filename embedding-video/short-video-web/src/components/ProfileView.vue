@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { fetchRelation, fetchUserProfile, getCurrentUserId } from '../user/api.js'
+import { computed, onMounted, ref, watch } from 'vue'
+import { fetchMyVisits, fetchRelation, fetchUserProfile, getCurrentUserId, recordVisit } from '../user/api.js'
 import { fetchUserVideos, formatDuration, STATUS_PUBLISHED } from '../user/videoApi.js'
 import FollowButton from './FollowButton.vue'
 
@@ -15,6 +15,8 @@ const loading = ref(true)
 const loadError = ref('')
 const avatarFailed = ref(false)
 const relation = ref('none')
+const visitReported = ref(false)
+const todayVisits = ref({ unique_visitors: 0, total_visits: 0 })
 
 const works = ref([])
 const worksTotal = ref(0)
@@ -56,6 +58,22 @@ async function loadRelation() {
     relation.value = await fetchRelation(props.userId)
   } catch {
     relation.value = 'none'
+  }
+}
+
+function reportVisit() {
+  if (visitReported.value) return
+  if (isOwnProfile.value) return
+  visitReported.value = true
+  recordVisit(props.userId)
+}
+
+async function loadMyVisits() {
+  if (!isOwnProfile.value) return
+  try {
+    todayVisits.value = await fetchMyVisits()
+  } catch {
+    // 静默失败
   }
 }
 
@@ -150,6 +168,14 @@ onMounted(() => {
   loadProfile()
   loadRelation()
   loadWorks(true)
+  reportVisit()
+  loadMyVisits()
+})
+
+watch(() => props.userId, () => {
+  visitReported.value = false
+  reportVisit()
+  loadMyVisits()
 })
 </script>
 
@@ -201,6 +227,10 @@ onMounted(() => {
         <div class="stat" role="button" tabindex="0" @click="onShowFollowers" @keydown.enter="onShowFollowers">
           <span class="stat-num">{{ profile.fans_count }}</span>
           <span class="stat-label">粉丝</span>
+        </div>
+        <div v-if="isOwnProfile" class="stat stat-visitor" :title="`独立访客 ${todayVisits.unique_visitors} · 总访问 ${todayVisits.total_visits}`">
+          <span class="stat-num">{{ todayVisits.unique_visitors }}</span>
+          <span class="stat-label">今日访客</span>
         </div>
       </div>
 
@@ -390,6 +420,14 @@ onMounted(() => {
 
 .stat:hover {
   opacity: 0.7;
+}
+
+.stat-visitor {
+  cursor: default;
+}
+
+.stat-visitor:hover {
+  opacity: 1;
 }
 
 .stat-num {

@@ -4,6 +4,7 @@ import {
   fetchFollowers,
   fetchFollowing,
   fetchMessages,
+  fetchMyVisits,
   fetchRelation,
   fetchUserProfile,
   followUser,
@@ -13,6 +14,7 @@ import {
   markAsRead,
   normalizeUserProfile,
   prefetchUserProfiles,
+  recordVisit,
   sendMessage,
   setCurrentUserId,
   unfollowUser,
@@ -352,5 +354,48 @@ describe('user api', () => {
     await prefetchUserProfiles([5001, 6001], fetchImpl)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(getCachedUserProfile(6001)).not.toBeNull()
+  })
+
+  it('recordVisit sends POST to visit endpoint and does not throw on error', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/users/2002/visit')
+      expect(init.method).toBe('POST')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return errResponse(500, 'server error')
+    })
+    // fire and forget：即使失败也不抛异常
+    await expect(recordVisit(2002, fetchImpl)).resolves.toBeUndefined()
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('recordVisit does nothing for invalid userId', async () => {
+    const fetchImpl = vi.fn()
+    await recordVisit(0, fetchImpl)
+    await recordVisit(null, fetchImpl)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('fetchMyVisits sends GET to /api/me/visits without date by default', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/me/visits')
+      expect(init.method).toBeUndefined()
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({ date: '2026-09-07', unique_visitors: 5, total_visits: 12 })
+    })
+    const result = await fetchMyVisits(undefined, fetchImpl)
+    expect(result).toEqual({ date: '2026-09-07', unique_visitors: 5, total_visits: 12 })
+  })
+
+  it('fetchMyVisits includes date query when provided', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url) => {
+      expect(url).toBe('/api/me/visits?date=2026-09-01')
+      return okResponse({ date: '2026-09-01', unique_visitors: 3, total_visits: 7 })
+    })
+    const result = await fetchMyVisits('2026-09-01', fetchImpl)
+    expect(result.unique_visitors).toBe(3)
+    expect(result.total_visits).toBe(7)
   })
 })

@@ -26,7 +26,7 @@ func EnsureSchema(db *gorm.DB) error {
 		if err := EnsureRecSysSchema(tx); err != nil {
 			return err
 		}
-		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduKnowledgeVideoBatch{}, &model.EduKnowledgeVideo{}, &model.EduKnowledgeVideoPlayRecord{}, &model.EduVideoComment{}, &model.EduCommentLike{}, &model.EduUserProfile{}, &model.EduUserFollow{}, &model.EduUserMessage{}); err != nil {
+		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduKnowledgeVideoBatch{}, &model.EduKnowledgeVideo{}, &model.EduKnowledgeVideoPlayRecord{}, &model.EduVideoComment{}, &model.EduCommentLike{}, &model.EduUserProfile{}, &model.EduUserFollow{}, &model.EduUserMessage{}, &model.EduUserProfileVisit{}); err != nil {
 			return err
 		}
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
@@ -43,6 +43,8 @@ func EnsureSchema(db *gorm.DB) error {
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_message_conversation ON edu_user_message(conversation_id, create_time) WHERE deleted = 0;`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_message_receiver_unread ON edu_user_message(receiver_id, is_read) WHERE deleted = 0;`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_message_sender ON edu_user_message(sender_id, create_time) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_user_profile_visit_daily ON edu_user_profile_visit(visitor_id, owner_id, visit_date) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_profile_visit_owner_date ON edu_user_profile_visit(owner_id, visit_date) WHERE deleted = 0;`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_resource_source_user ON edu_video_resource(source_type, user_id) WHERE deleted = 0;`).Error
 		if err := ensureKnowledgeVideoIndexes(tx); err != nil {
 			return err
