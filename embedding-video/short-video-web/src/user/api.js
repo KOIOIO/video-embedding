@@ -294,6 +294,33 @@ export async function fetchMyVisits(date, fetchImpl = fetch) {
   }
 }
 
+// --- 用户搜索（评论 @提及） ---
+
+export async function searchUsers(keyword, page = 1, pageSize = 20, fetchImpl = fetch) {
+  const q = String(keyword || '').trim()
+  if (!q) return { list: [], total: 0, page, page_size: pageSize }
+  const params = new URLSearchParams({ q, page: String(page), page_size: String(pageSize) })
+  const data = await requestJson(`/api/users/search?${params.toString()}`, {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return {
+    list: Array.isArray(data?.list) ? data.list.map(normalizeSearchUser) : [],
+    total: Number(data?.total || 0) || 0,
+    page: Number(data?.page || page) || page,
+    page_size: Number(data?.page_size || pageSize) || pageSize,
+  }
+}
+
+function normalizeSearchUser(item) {
+  return {
+    id: Number(item?.id || 0) || 0,
+    username: String(item?.username || ''),
+    nickname: String(item?.nickname || ''),
+    avatar_url: String(item?.avatar_url || ''),
+    is_following: Boolean(item?.is_following),
+  }
+}
+
 // --- 时间格式化 ---
 
 export function formatMessageTime(timestamp) {

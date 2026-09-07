@@ -11,6 +11,7 @@ import {
   toggleCommentReaction,
 } from '../feed/commentApi.js'
 import { formatRelativeTime } from '../feed/relativeTime.js'
+import { searchUsers } from '../user/api.js'
 
 const props = defineProps({
   segmentId: { type: Number, required: true },
@@ -30,6 +31,15 @@ const inputText = ref('')
 const replyTarget = ref(null)
 const expandedReplies = ref({})
 const reactionBusy = ref(false)
+
+// --- @提及用户状态 ---
+const mentionOpen = ref(false)
+const mentionKeyword = ref('')
+const mentionResults = ref([])
+const mentionLoading = ref(false)
+const mentionActiveIndex = ref(0)
+const mentionStartPos = ref(-1)
+let searchTimer = null
 
 const hasMore = computed(() => comments.value.length < total.value)
 const inputPlaceholder = computed(() => {
@@ -171,6 +181,119 @@ async function submit() {
   }
 }
 
+// --- @提及用户功能 ---
+
+function onInput(event) {
+  const input = event.target
+  const cursor = input.selectionStart
+  const text = inputText.value
+
+  // 从光标位置向前查找最近的 "@"
+  let atPos = -1
+  for (let i = cursor - 1; i >= 0; i--) {
+    if (text[i] === '@') {
+      atPos = i
+      break
+    }
+    // @ 后不能有空格，如果遇到空格说明不是在输入提及
+    if (text[i] === ' ') break
+  }
+
+  if (atPos === -1) {
+    closeMention()
+    return
+  }
+
+  // 提取 @ 后的关键词（到光标位置，不含空格）
+  const keyword = text.slice(atPos + 1, cursor)
+  if (keyword.includes(' ')) {
+    closeMention()
+    return
+  }
+
+  mentionStartPos.value = atPos
+  mentionKeyword.value = keyword
+  mentionOpen.value = true
+
+  // 防抖 300ms 搜索
+  if (searchTimer) clearTimeout(searchTimer)
+  if (keyword.length === 0) {
+    mentionResults.value = []
+    mentionLoading.value = false
+    return
+  }
+  mentionLoading.value = true
+  searchTimer = setTimeout(async () => {
+    try {
+      const result = await searchUsers(keyword, 1, 20)
+      mentionResults.value = result.list
+      mentionActiveIndex.value = 0
+    } catch {
+      mentionResults.value = []
+    } finally {
+      mentionLoading.value = false
+    }
+  }, 300)
+}
+
+function selectMention(user) {
+  if (!user) return
+  const input = document.querySelector('.comment-input')
+  const cursor = mentionStartPos.value + mentionKeyword.value.length + 1
+  const before = inputText.value.slice(0, mentionStartPos.value)
+  const after = inputText.value.slice(cursor)
+  const replacement = `@${user.nickname} `
+  inputText.value = before + replacement + after
+
+  // 设置光标到替换后的末尾
+  const newCursor = before.length + replacement.length
+  if (input) {
+    requestAnimationFrame(() => {
+      input.focus()
+      input.setSelectionRange(newCursor, newCursor)
+    })
+  }
+  closeMention()
+}
+
+function closeMention() {
+  mentionOpen.value = false
+  mentionKeyword.value = ''
+  mentionResults.value = []
+  mentionLoading.value = false
+  mentionActiveIndex.value = 0
+  mentionStartPos.value = -1
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+}
+
+function onMentionKeydown(event) {
+  if (!mentionOpen.value) return
+  const visible = mentionResults.value.slice(0, 8)
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    if (visible.length > 0) {
+      mentionActiveIndex.value = (mentionActiveIndex.value + 1) % visible.length
+    }
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (visible.length > 0) {
+      mentionActiveIndex.value = (mentionActiveIndex.value - 1 + visible.length) % visible.length
+    }
+  } else if (event.key === 'Enter') {
+    if (visible.length > 0 && mentionActiveIndex.value < visible.length) {
+      event.preventDefault()
+      selectMention(visible[mentionActiveIndex.value])
+    }
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    closeMention()
+  }
+}
+
 onMounted(() => load(true))
 </script>
 
@@ -298,14 +421,38 @@ onMounted(() => load(true))
 
       <div class="input-bar">
         <button v-if="replyTarget" class="cancel-reply" type="button" @click="cancelReply">✕</button>
-        <input
-          v-model="inputText"
-          class="comment-input"
-          type="text"
-          :placeholder="inputPlaceholder"
-          maxlength="500"
-          @keyup.enter="submit"
-        />
+        <div class="input-wrap">
+          <div v-if="mentionOpen" class="mention-dropdown">
+            <div v-if="mentionLoading" class="mention-loading">搜索中…</div>
+            <div v-else-if="mentionResults.length === 0" class="mention-empty">无匹配用户</div>
+            <div
+              v-for="(user, idx) in mentionResults.slice(0, 8)"
+              :key="user.id"
+              class="mention-item"
+              :class="{ active: idx === mentionActiveIndex }"
+              @click="selectMention(user)"
+            >
+              <div class="mention-avatar">
+                <img v-if="user.avatar_url" :src="user.avatar_url" alt="" />
+                <span v-else>{{ user.nickname?.charAt(0) || '?' }}</span>
+              </div>
+              <div class="mention-info">
+                <span class="mention-nickname">{{ user.nickname }}</span>
+                <span v-if="user.is_following" class="mention-following">已关注</span>
+              </div>
+            </div>
+          </div>
+          <input
+            v-model="inputText"
+            class="comment-input"
+            type="text"
+            :placeholder="inputPlaceholder"
+            maxlength="500"
+            @input="onInput"
+            @keydown="onMentionKeydown"
+            @keyup.enter="!mentionOpen && submit()"
+          />
+        </div>
         <button class="send-btn" type="button" :disabled="!inputText.trim() || sending" @click="submit">
           发送
         </button>
@@ -609,5 +756,106 @@ onMounted(() => load(true))
 .send-btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* --- @提及用户下拉 --- */
+
+.input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.mention-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  animation: dropdown-up 0.15s ease both;
+}
+
+@keyframes dropdown-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mention-loading,
+.mention-empty {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mention-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #25f4ee, #3a86ff);
+  font-size: 13px;
+  font-weight: 700;
+  color: #04252b;
+  overflow: hidden;
+}
+
+.mention-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mention-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mention-nickname {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-following {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(254, 44, 85, 0.15);
+  color: #fe2c55;
+  font-size: 11px;
+  font-weight: 600;
 }
 </style>

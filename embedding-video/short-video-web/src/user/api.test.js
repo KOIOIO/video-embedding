@@ -15,6 +15,7 @@ import {
   normalizeUserProfile,
   prefetchUserProfiles,
   recordVisit,
+  searchUsers,
   sendMessage,
   setCurrentUserId,
   unfollowUser,
@@ -397,5 +398,55 @@ describe('user api', () => {
     const result = await fetchMyVisits('2026-09-01', fetchImpl)
     expect(result.unique_visitors).toBe(3)
     expect(result.total_visits).toBe(7)
+  })
+
+  // --- 用户搜索 API 测试 ---
+
+  it('searchUsers sends GET with q, page, page_size and Authorization header', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toContain('/api/users/search')
+      expect(url).toContain('q=alice')
+      expect(url).toContain('page=1')
+      expect(url).toContain('page_size=20')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({
+        list: [
+          { id: 2, username: 'alice', nickname: '爱丽丝', avatar_url: '/a.png', is_following: true },
+          { id: 3, username: 'alice2', nickname: '爱丽丝2', avatar_url: '', is_following: false },
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      })
+    })
+    const result = await searchUsers('alice', 1, 20, fetchImpl)
+    expect(result.total).toBe(2)
+    expect(result.list).toHaveLength(2)
+    expect(result.list[0].id).toBe(2)
+    expect(result.list[0].nickname).toBe('爱丽丝')
+    expect(result.list[0].is_following).toBe(true)
+    expect(result.list[1].avatar_url).toBe('')
+    expect(result.list[1].is_following).toBe(false)
+  })
+
+  it('searchUsers returns empty for blank keyword without fetching', async () => {
+    const fetchImpl = vi.fn()
+    const result = await searchUsers('   ', 1, 20, fetchImpl)
+    expect(result.list).toEqual([])
+    expect(result.total).toBe(0)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('searchUsers trims keyword and uses defaults', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url) => {
+      expect(url).toContain('q=bob')
+      expect(url).toContain('page=1')
+      expect(url).toContain('page_size=20')
+      return okResponse({ list: [], total: 0, page: 1, page_size: 20 })
+    })
+    await searchUsers('  bob  ', undefined, undefined, fetchImpl)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })
