@@ -40,6 +40,7 @@ func New(httpApp *app.App) *gin.Engine {
 	userMessageHandler := handler.NewUserMessageHandler(httpApp.UserMessageService)
 	profileVisitHandler := handler.NewProfileVisitHandler(httpApp.ProfileVisitService)
 	userSearchHandler := handler.NewUserSearchHandler(httpApp.UserSearchService)
+	notificationHandler := handler.NewNotificationHandler(httpApp.NotificationService)
 	rawURLPrefix := ""
 	if httpApp.Service != nil {
 		rawURLPrefix = httpApp.Service.Paths.RawURLPrefix
@@ -137,6 +138,11 @@ func New(httpApp *app.App) *gin.Engine {
 	public.GET("/api/users/:id/profile", userProfileHandler.GetProfile)
 	// 用户搜索：JWT 认证保护，用于评论 @提及
 	userRoutes.GET("/api/users/search", userSearchHandler.SearchUsers)
+	// 用户通知：JWT 认证保护
+	userRoutes.GET("/api/notifications", notificationHandler.ListNotifications)
+	userRoutes.GET("/api/notifications/unread-count", notificationHandler.GetUnreadCount)
+	userRoutes.POST("/api/notifications/:id/read", notificationHandler.MarkAsRead)
+	userRoutes.POST("/api/notifications/read-all", notificationHandler.MarkAllAsRead)
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.GET("/api/me", userProfileHandler.GetMe)
 	public.PUT("/api/me/profile", userProfileHandler.UpdateProfile)

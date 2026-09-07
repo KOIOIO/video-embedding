@@ -3,10 +3,14 @@ package videoapp
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
+
+// mentionRegex 匹配评论中的 @昵称，支持中文、字母、数字、下划线。
+var mentionRegex = regexp.MustCompile(`@([\x{4e00}-\x{9fa5}a-zA-Z0-9_]+)`)
 
 const (
 	// MaxCommentContentLength 限制单条评论内容的 UTF-8 字符数。
@@ -32,10 +36,13 @@ var (
 type CommentView struct {
 	Comment
 	Username         string
+	Nickname         string
+	AvatarURL        string
 	ReplyToUsername  string
 	UserReactionType VideoReactionType
 	ReplyCount       int64
 	HasMoreReplies   bool
+	Mentions         []MentionInfo
 	Replies          []CommentView
 }
 
@@ -76,7 +83,9 @@ func (s *Service) CreateComment(ctx context.Context, segmentID uint64, userID ui
 	comment.ID = id
 	comment.CreatedAt = s.Now()
 	s.bumpSegmentCommentCount(ctx, segmentID)
-	return CommentView{Comment: comment, Username: s.usernameOf(ctx, userID)}, nil
+	view := CommentView{Comment: comment, Username: s.usernameOf(ctx, userID)}
+	s.createMentionNotifications(ctx, userID, view.Username, segmentID, id, content)
+	return view, nil
 }
 
 // CreateReply 对一条评论追加二级回复；无论被回复的是一级还是二级评论，
@@ -118,7 +127,9 @@ func (s *Service) CreateReply(ctx context.Context, commentID uint64, userID uint
 	reply.ID = id
 	reply.CreatedAt = s.Now()
 	s.bumpSegmentCommentCount(ctx, parent.VideoSegmentID)
-	return CommentView{Comment: reply, Username: s.usernameOf(ctx, userID)}, nil
+	view := CommentView{Comment: reply, Username: s.usernameOf(ctx, userID)}
+	s.createMentionNotifications(ctx, userID, view.Username, parent.VideoSegmentID, id, content)
+	return view, nil
 }
 
 func (s *Service) usernameOf(ctx context.Context, userID uint64) string {
@@ -127,6 +138,24 @@ func (s *Service) usernameOf(ctx context.Context, userID uint64) string {
 		return ""
 	}
 	return names[userID]
+}
+
+// createMentionNotifications 在评论创建后，异步风格（同步调用，错误静默）为 @用户 创建通知。
+// 通知创建失败不影响评论主流程，仅记录错误。
+func (s *Service) createMentionNotifications(ctx context.Context, fromUserID uint64, fromNickname string, segmentID, commentID uint64, content string) {
+	if s.MentionNotifier == nil || commentID == 0 || fromUserID == 0 {
+		return
+	}
+	if !strings.Contains(content, "@") {
+		return
+	}
+	videoID := uint64(0)
+	if s.Repo != nil {
+		if id, err := s.Repo.GetVideoIDBySegmentID(ctx, segmentID); err == nil {
+			videoID = id
+		}
+	}
+	_ = s.MentionNotifier.CreateMentionNotifications(ctx, fromUserID, fromNickname, videoID, segmentID, commentID, content)
 }
 
 // ListSegmentComments 分页返回片段的一级评论，并附带每条的二级回复首页。
@@ -295,7 +324,7 @@ func (s *Service) bumpSegmentCommentCount(ctx context.Context, segmentID uint64)
 	_ = s.CommentCountStore.Incr(ctx, segmentID)
 }
 
-// decorateCommentViews 批量补充用户名、回复对象、点赞数与当前用户的点赞状态。
+// decorateCommentViews 批量补充用户名、昵称、头像、回复对象、点赞数、@提及 与当前用户的点赞状态。
 func (s *Service) decorateCommentViews(ctx context.Context, viewerID uint64, views []CommentView) error {
 	if len(views) == 0 {
 		return nil
@@ -325,6 +354,20 @@ func (s *Service) decorateCommentViews(ctx context.Context, viewerID uint64, vie
 	if err != nil {
 		return err
 	}
+	displayInfo, err := s.CommentRepo.GetUserDisplayInfoByIDs(ctx, userIDs)
+	if err != nil {
+		return err
+	}
+
+	// 收集所有评论内容中的 @昵称，批量查找用户 ID
+	allNicknames := collectMentionNicknames(views)
+	var nicknameToUserID map[string]uint64
+	if len(allNicknames) > 0 {
+		nicknameToUserID, err = s.CommentRepo.FindUserIDsByNicknames(ctx, allNicknames)
+		if err != nil {
+			return err
+		}
+	}
 
 	dbCounts, err := s.CommentRepo.GetCommentReactionCounts(ctx, commentIDs)
 	if err != nil {
@@ -341,9 +384,14 @@ func (s *Service) decorateCommentViews(ctx context.Context, viewerID uint64, vie
 	attach := func(views []CommentView) error {
 		for i := range views {
 			views[i].Username = names[views[i].UserID]
+			if info, ok := displayInfo[views[i].UserID]; ok {
+				views[i].Nickname = info.Nickname
+				views[i].AvatarURL = info.AvatarURL
+			}
 			if views[i].ReplyToUserID != 0 {
 				views[i].ReplyToUsername = names[views[i].ReplyToUserID]
 			}
+			views[i].Mentions = parseMentionsForContent(views[i].Content, nicknameToUserID)
 			seedUserReaction := reactionTypes[views[i].ID]
 			seedUserActive := seedUserReaction != ""
 			if s.CommentLikeStore != nil {
@@ -385,6 +433,61 @@ func (s *Service) decorateCommentViews(ctx context.Context, viewerID uint64, vie
 		}
 	}
 	return attach(views)
+}
+
+// collectMentionNicknames 收集所有评论（含回复）中的 @昵称，去重。
+func collectMentionNicknames(views []CommentView) []string {
+	seen := map[string]struct{}{}
+	var result []string
+	var collect func(vs []CommentView)
+	collect = func(vs []CommentView) {
+		for _, v := range vs {
+			matches := mentionRegex.FindAllStringSubmatch(v.Content, -1)
+			for _, m := range matches {
+				nick := strings.TrimSpace(m[1])
+				if nick == "" {
+					continue
+				}
+				if _, ok := seen[nick]; ok {
+					continue
+				}
+				seen[nick] = struct{}{}
+				result = append(result, nick)
+			}
+			collect(v.Replies)
+		}
+	}
+	collect(views)
+	return result
+}
+
+// parseMentionsForContent 解析单条评论内容中的 @提及，返回匹配到用户 ID 的提及列表。
+func parseMentionsForContent(content string, nicknameToUserID map[string]uint64) []MentionInfo {
+	if !strings.Contains(content, "@") || len(nicknameToUserID) == 0 {
+		return nil
+	}
+	matches := mentionRegex.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var result []MentionInfo
+	for _, m := range matches {
+		nick := strings.TrimSpace(m[1])
+		if nick == "" {
+			continue
+		}
+		if _, ok := seen[nick]; ok {
+			continue
+		}
+		uid, ok := nicknameToUserID[nick]
+		if !ok || uid == 0 {
+			continue
+		}
+		seen[nick] = struct{}{}
+		result = append(result, MentionInfo{Nickname: nick, UserID: uid})
+	}
+	return result
 }
 
 func (s *Service) seedUserReactionCache(ctx context.Context, commentID uint64, viewerID uint64, reactionType VideoReactionType, active bool) error {

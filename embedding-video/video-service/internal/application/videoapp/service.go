@@ -35,6 +35,7 @@ type Service struct {
 	Now                  func() time.Time
 	StatusTTL            time.Duration
 	DeleteLocal          bool
+	MentionNotifier      MentionNotifier
 }
 
 // NewService 创建应用服务，并注入运行期所需的基础设施依赖。

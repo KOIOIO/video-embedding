@@ -169,6 +169,25 @@ type Comment struct {
 	CreatedAt      time.Time
 }
 
+// UserDisplayInfo 用户展示信息（昵称、头像、用户名）。
+type UserDisplayInfo struct {
+	UserID    uint64
+	Username  string
+	Nickname  string
+	AvatarURL string
+}
+
+// MentionInfo 评论中 @提及 的用户信息。
+type MentionInfo struct {
+	Nickname string
+	UserID   uint64
+}
+
+// MentionNotifier 评论 @提及 通知创建器，由 notification.Service 实现。
+type MentionNotifier interface {
+	CreateMentionNotifications(ctx context.Context, fromUserID uint64, fromNickname string, videoID, videoSegmentID, commentID uint64, content string) error
+}
+
 // CommentList 表示评论分页结果。
 type CommentList struct {
 	Total    int64
@@ -187,6 +206,8 @@ type CommentRepository interface {
 	GetUserCommentReactionTypes(ctx context.Context, commentIDs []uint64, userID uint64) (map[uint64]VideoReactionType, error)
 	ApplyCommentReactionState(ctx context.Context, commentID uint64, userID uint64, reactionType VideoReactionType, active bool) (bool, error)
 	GetUserNamesByIDs(ctx context.Context, userIDs []uint64) (map[uint64]string, error)
+	GetUserDisplayInfoByIDs(ctx context.Context, userIDs []uint64) (map[uint64]UserDisplayInfo, error)
+	FindUserIDsByNicknames(ctx context.Context, nicknames []string) (map[string]uint64, error)
 }
 
 // CommentReactionStateRepository 抽象评论互动状态落库能力，供 worker 消费事件使用。

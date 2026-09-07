@@ -280,6 +280,8 @@ func mapCommentView(view videoapp.CommentView) dto.CommentData {
 		ID:               view.ID,
 		UserID:           view.UserID,
 		Username:         view.Username,
+		Nickname:         view.Nickname,
+		AvatarURL:        view.AvatarURL,
 		ReplyToUsername:  view.ReplyToUsername,
 		Content:          view.Content,
 		LikeCount:        view.LikeCount,
@@ -288,6 +290,12 @@ func mapCommentView(view videoapp.CommentView) dto.CommentData {
 		CreatedAtUnix:    view.CreatedAt.Unix(),
 		ReplyCount:       view.ReplyCount,
 		HasMoreReplies:   view.HasMoreReplies,
+	}
+	if len(view.Mentions) > 0 {
+		data.Mentions = make([]dto.MentionData, 0, len(view.Mentions))
+		for _, m := range view.Mentions {
+			data.Mentions = append(data.Mentions, dto.MentionData{Nickname: m.Nickname, UserID: m.UserID})
+		}
 	}
 	if len(view.Replies) > 0 {
 		data.Replies = mapCommentViews(view.Replies)

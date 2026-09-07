@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   COMMENT_REACTION_DISLIKE,
   COMMENT_REACTION_DOUBLE_LIKE,
@@ -16,8 +16,9 @@ import { searchUsers } from '../user/api.js'
 const props = defineProps({
   segmentId: { type: Number, required: true },
   userId: { type: Number, default: 0 },
+  highlightCommentId: { type: Number, default: 0 },
 })
-const emit = defineEmits(['close', 'total-change'])
+const emit = defineEmits(['close', 'total-change', 'navigate'])
 
 const PAGE_SIZE = 10
 
@@ -46,6 +47,66 @@ const inputPlaceholder = computed(() => {
   if (replyTarget.value) return `回复 @${replyTarget.value.username}`
   return '有爱评论，说点儿什么…'
 })
+
+// --- @提及 渲染 ---
+// 将评论内容中的 @昵称 替换为可点击 span，使用 mentions 数组中的 user_id 跳转
+function renderContentWithMentions(content, mentions) {
+  if (!content) return []
+  if (!Array.isArray(mentions) || mentions.length === 0) {
+    return [{ type: 'text', text: content }]
+  }
+  // 构建 nickname -> user_id 映射
+  const mentionMap = {}
+  for (const m of mentions) {
+    if (m && m.nickname && m.user_id) {
+      mentionMap[m.nickname] = m.user_id
+    }
+  }
+  const regex = /@([\u4e00-\u9fa5a-zA-Z0-9_]+)/g
+  const parts = []
+  let lastIndex = 0
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    const nick = match[1]
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', text: content.slice(lastIndex, match.index) })
+    }
+    if (mentionMap[nick]) {
+      parts.push({ type: 'mention', text: '@' + nick, userId: mentionMap[nick] })
+    } else {
+      parts.push({ type: 'text', text: match[0] })
+    }
+    lastIndex = regex.lastIndex
+  }
+  if (lastIndex < content.length) {
+    parts.push({ type: 'text', text: content.slice(lastIndex) })
+  }
+  return parts
+}
+
+function onMentionClick(userId) {
+  if (!userId) return
+  emit('navigate', { view: 'profile', userId })
+}
+
+function displayName(comment) {
+  return comment.nickname || comment.username || `用户${comment.user_id}`
+}
+
+function avatarInitial(comment) {
+  return displayName(comment).slice(0, 1) || '?'
+}
+
+// 高亮评论自动滚动
+function scrollToHighlighted() {
+  if (!props.highlightCommentId) return
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`.comment[data-comment-id="${props.highlightCommentId}"], .reply[data-comment-id="${props.highlightCommentId}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
+}
 
 async function load(reset = false) {
   loading.value = true
@@ -295,6 +356,16 @@ function onMentionKeydown(event) {
 }
 
 onMounted(() => load(true))
+
+// 评论加载完成后，滚动到高亮评论
+watch(
+  () => loading.value,
+  (isLoading) => {
+    if (!isLoading && props.highlightCommentId > 0) {
+      nextTick(() => scrollToHighlighted())
+    }
+  }
+)
 </script>
 
 <template>
@@ -317,14 +388,28 @@ onMounted(() => load(true))
         <div v-else-if="comments.length === 0" class="state">还没有评论，来抢沙发～</div>
 
         <template v-else>
-          <div v-for="comment in comments" :key="comment.id" class="comment">
-            <div class="avatar">{{ comment.username.slice(0, 1) || '?' }}</div>
+          <div
+            v-for="comment in comments"
+            :key="comment.id"
+            class="comment"
+            :class="{ highlighted: highlightCommentId > 0 && comment.id === highlightCommentId }"
+            :data-comment-id="comment.id"
+          >
+            <div class="avatar" @click.stop="onMentionClick(comment.user_id)">
+              <img v-if="comment.avatar_url" :src="comment.avatar_url" :alt="displayName(comment)" />
+              <span v-else>{{ avatarInitial(comment) }}</span>
+            </div>
             <div class="comment-main">
               <div class="comment-meta">
-                <span class="comment-username">{{ comment.username || `用户${comment.user_id}` }}</span>
+                <span class="comment-username" @click.stop="onMentionClick(comment.user_id)">{{ displayName(comment) }}</span>
                 <span class="comment-time">{{ formatRelativeTime(comment.created_at_unix) }}</span>
               </div>
-              <p class="comment-content">{{ comment.content }}</p>
+              <p class="comment-content">
+                <template v-for="(part, idx) in renderContentWithMentions(comment.content, comment.mentions)" :key="idx">
+                  <span v-if="part.type === 'mention'" class="mention-link" @click.stop="onMentionClick(part.userId)">{{ part.text }}</span>
+                  <span v-else>{{ part.text }}</span>
+                </template>
+              </p>
               <div class="comment-actions">
                 <button
                   class="reaction-btn"
@@ -361,11 +446,22 @@ onMounted(() => load(true))
               </div>
 
               <div v-if="comment.replies.length > 0 || comment.reply_count > 0" class="replies">
-                <div v-for="reply in repliesOf(comment)" :key="reply.id" class="reply">
-                  <span class="reply-name">{{ reply.username || `用户${reply.user_id}` }}</span>
+                <div
+                  v-for="reply in repliesOf(comment)"
+                  :key="reply.id"
+                  class="reply"
+                  :class="{ highlighted: highlightCommentId > 0 && reply.id === highlightCommentId }"
+                  :data-comment-id="reply.id"
+                >
+                  <span class="reply-name" @click.stop="onMentionClick(reply.user_id)">{{ displayName(reply) }}</span>
                   <span v-if="reply.reply_to_username" class="reply-to">回复 {{ reply.reply_to_username }}</span>
                   <span class="reply-colon">：</span>
-                  <span class="reply-content">{{ reply.content }}</span>
+                  <span class="reply-content">
+                    <template v-for="(part, idx) in renderContentWithMentions(reply.content, reply.mentions)" :key="idx">
+                      <span v-if="part.type === 'mention'" class="mention-link" @click.stop="onMentionClick(part.userId)">{{ part.text }}</span>
+                      <span v-else>{{ part.text }}</span>
+                    </template>
+                  </span>
                   <span class="reply-time">{{ formatRelativeTime(reply.created_at_unix) }}</span>
                   <span class="reply-reactions">
                     <button
@@ -575,6 +671,14 @@ onMounted(() => load(true))
   font-size: 15px;
   font-weight: 700;
   color: #04252b;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .comment-main {
@@ -605,6 +709,50 @@ onMounted(() => load(true))
   color: rgba(255, 255, 255, 0.94);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.mention-link {
+  color: #fe2c55;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.mention-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.comment-username {
+  cursor: pointer;
+}
+
+.comment-username:hover {
+  color: #fe2c55;
+}
+
+/* 高亮评论：黄色背景闪烁动画 */
+.comment.highlighted {
+  background: rgba(255, 215, 0, 0.12);
+  border-radius: 8px;
+  margin: 0 -8px;
+  padding: 12px 8px;
+  animation: highlight-flash 2s ease-in-out;
+}
+
+.reply.highlighted {
+  background: rgba(255, 215, 0, 0.15);
+  border-radius: 6px;
+  padding: 4px 6px;
+  animation: highlight-flash 2s ease-in-out;
+}
+
+@keyframes highlight-flash {
+  0% { background: rgba(255, 215, 0, 0.4); }
+  25% { background: rgba(255, 215, 0, 0.15); }
+  50% { background: rgba(255, 215, 0, 0.35); }
+  75% { background: rgba(255, 215, 0, 0.12); }
+  100% { background: rgba(255, 215, 0, 0.08); }
 }
 
 .comment-actions {

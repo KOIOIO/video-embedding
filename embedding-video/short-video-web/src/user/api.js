@@ -28,7 +28,7 @@ export function setCurrentUserId(userId) {
   }
 }
 
-async function requestJson(url, init = {}, fetchImpl = fetch) {
+export async function requestJson(url, init = {}, fetchImpl = fetch) {
   const headers = new Headers(init.headers || {})
   if (init.body && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
@@ -43,7 +43,7 @@ async function requestJson(url, init = {}, fetchImpl = fetch) {
   return payload?.data ?? payload
 }
 
-function authHeaders(extra = {}) {
+export function authHeaders(extra = {}) {
   const headers = {
     'X-User-ID': String(getCurrentUserId()),
     ...extra,
@@ -344,6 +344,62 @@ function normalizeSearchUser(item) {
     nickname: String(item?.nickname || ''),
     avatar_url: String(item?.avatar_url || ''),
     is_following: Boolean(item?.is_following),
+  }
+}
+
+// --- 用户通知 API ---
+
+export async function fetchNotifications({ page = 1, pageSize = 20 } = {}, fetchImpl = fetch) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  const data = await requestJson(`/api/notifications?${params.toString()}`, {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return {
+    total: Number(data?.total || 0) || 0,
+    page: Number(data?.page || page) || page,
+    page_size: Number(data?.page_size || pageSize) || pageSize,
+    notifications: Array.isArray(data?.notifications) ? data.notifications.map(normalizeNotification) : [],
+  }
+}
+
+export async function fetchNotificationUnreadCount(fetchImpl = fetch) {
+  const data = await requestJson('/api/notifications/unread-count', {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return Number(data?.unread_count || 0) || 0
+}
+
+export async function markNotificationRead(notificationId, fetchImpl = fetch) {
+  const id = Number(notificationId) || 0
+  if (!id) return false
+  const data = await requestJson(`/api/notifications/${encodeURIComponent(String(id))}/read`, {
+    method: 'POST',
+    headers: authHeaders(),
+  }, fetchImpl)
+  return Boolean(data?.success)
+}
+
+export async function markAllNotificationsRead(fetchImpl = fetch) {
+  const data = await requestJson('/api/notifications/read-all', {
+    method: 'POST',
+    headers: authHeaders(),
+  }, fetchImpl)
+  return Boolean(data?.success)
+}
+
+function normalizeNotification(item) {
+  return {
+    id: Number(item?.id || 0) || 0,
+    type: String(item?.type || ''),
+    from_user_id: Number(item?.from_user_id || 0) || 0,
+    from_user_nickname: String(item?.from_user_nickname || ''),
+    from_user_avatar: String(item?.from_user_avatar || ''),
+    video_id: Number(item?.video_id || 0) || 0,
+    video_segment_id: Number(item?.video_segment_id || 0) || 0,
+    comment_id: Number(item?.comment_id || 0) || 0,
+    content: String(item?.content || ''),
+    is_read: Number(item?.is_read || 0) || 0,
+    created_at_unix: Number(item?.created_at_unix || 0) || 0,
   }
 }
 

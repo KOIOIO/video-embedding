@@ -312,3 +312,59 @@ func mapComments(rows []model.EduVideoComment) []videoapp.Comment {
 	}
 	return comments
 }
+
+// GetUserDisplayInfoByIDs 批量查询用户展示信息，LEFT JOIN edu_user_profile，回退 sys_user.username。
+func (r *GormVideoRepository) GetUserDisplayInfoByIDs(ctx context.Context, userIDs []uint64) (map[uint64]videoapp.UserDisplayInfo, error) {
+	result := make(map[uint64]videoapp.UserDisplayInfo, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	type row struct {
+		ID        uint64 `gorm:"column:id"`
+		Username  string `gorm:"column:username"`
+		Nickname  string `gorm:"column:nickname"`
+		AvatarURL string `gorm:"column:avatar_url"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).Table("sys_user AS u").
+		Select(`u.id, u.username,
+			COALESCE(p.nickname, '') AS nickname,
+			COALESCE(p.avatar_url, '') AS avatar_url`).
+		Joins("LEFT JOIN edu_user_profile AS p ON p.user_id = u.id AND p.deleted = 0").
+		Where("u.id IN ? AND u.deleted = 0", userIDs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		result[r.ID] = videoapp.UserDisplayInfo{
+			UserID:    r.ID,
+			Username:  r.Username,
+			Nickname:  r.Nickname,
+			AvatarURL: r.AvatarURL,
+		}
+	}
+	return result, nil
+}
+
+// FindUserIDsByNicknames 按昵称批量查找用户 ID，用于评论 @提及 解析。
+func (r *GormVideoRepository) FindUserIDsByNicknames(ctx context.Context, nicknames []string) (map[string]uint64, error) {
+	result := make(map[string]uint64, len(nicknames))
+	if len(nicknames) == 0 {
+		return result, nil
+	}
+	type row struct {
+		UserID   uint64 `gorm:"column:user_id"`
+		Nickname string `gorm:"column:nickname"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).Table("edu_user_profile").
+		Select("user_id, nickname").
+		Where("nickname IN ? AND deleted = 0", nicknames).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		result[r.Nickname] = r.UserID
+	}
+	return result, nil
+}

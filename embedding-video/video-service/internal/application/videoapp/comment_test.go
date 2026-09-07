@@ -75,6 +75,18 @@ func (r *commentTestRepo) GetUserNamesByIDs(_ context.Context, userIDs []uint64)
 	return r.names, nil
 }
 
+func (r *commentTestRepo) GetUserDisplayInfoByIDs(_ context.Context, userIDs []uint64) (map[uint64]UserDisplayInfo, error) {
+	result := make(map[uint64]UserDisplayInfo, len(userIDs))
+	for _, id := range userIDs {
+		result[id] = UserDisplayInfo{UserID: id, Username: r.names[id]}
+	}
+	return result, nil
+}
+
+func (r *commentTestRepo) FindUserIDsByNicknames(_ context.Context, nicknames []string) (map[string]uint64, error) {
+	return map[string]uint64{}, nil
+}
+
 type commentLikeStoreStub struct {
 	counts         map[uint64]VideoReactionCounts
 	userReactions  map[uint64]VideoReactionType

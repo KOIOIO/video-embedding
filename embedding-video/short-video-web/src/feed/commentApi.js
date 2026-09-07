@@ -9,6 +9,8 @@ export function normalizeComment(data) {
     id: Number(data?.id || 0) || 0,
     user_id: Number(data?.user_id || 0) || 0,
     username: String(data?.username || ''),
+    nickname: String(data?.nickname || ''),
+    avatar_url: String(data?.avatar_url || ''),
     reply_to_username: String(data?.reply_to_username || ''),
     content: String(data?.content || ''),
     like_count: Number(data?.like_count || 0) || 0,
@@ -17,7 +19,15 @@ export function normalizeComment(data) {
     created_at_unix: Number(data?.created_at_unix || 0) || 0,
     reply_count: Number(data?.reply_count || 0) || 0,
     has_more_replies: Boolean(data?.has_more_replies),
+    mentions: Array.isArray(data?.mentions) ? data.mentions.map(normalizeMention) : [],
     replies: Array.isArray(data?.replies) ? data.replies.map(normalizeComment) : [],
+  }
+}
+
+function normalizeMention(data) {
+  return {
+    nickname: String(data?.nickname || ''),
+    user_id: Number(data?.user_id || 0) || 0,
   }
 }
 

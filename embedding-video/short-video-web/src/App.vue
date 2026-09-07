@@ -12,12 +12,14 @@ import PublishView from './components/PublishView.vue'
 import FollowListView from './components/FollowListView.vue'
 import MessageListView from './components/MessageListView.vue'
 import ChatView from './components/ChatView.vue'
+import VideoView from './components/VideoView.vue'
 
 const status = ref('checking')
 const session = ref(null)
 const profileUserId = ref(getCurrentUserId())
 const followListParams = ref({ userId: 0, type: 'following' })
 const chatUserId = ref(0)
+const videoParams = ref({ videoId: 0, segmentId: 0, commentId: 0 })
 
 onMounted(async () => {
   const saved = readSession()
@@ -116,6 +118,15 @@ function onNavigate(target) {
     status.value = 'friends'
   } else if (target?.view === 'feed') {
     status.value = 'feed'
+  } else if (target?.view === 'video') {
+    videoParams.value = {
+      videoId: Number(target.videoId) || 0,
+      segmentId: Number(target.segmentId) || 0,
+      commentId: Number(target.commentId) || 0,
+    }
+    if (videoParams.value.segmentId > 0) {
+      status.value = 'video'
+    }
   }
 }
 
@@ -187,6 +198,10 @@ function onChatBack() {
   status.value = 'messages'
 }
 
+function onVideoBack() {
+  status.value = 'feed'
+}
+
 function onFriendsBack() {
   status.value = 'feed'
 }
@@ -234,6 +249,15 @@ function onFriendsBack() {
     v-else-if="status === 'messages'"
     @back="onMessagesBack"
     @open-chat="onOpenChat"
+    @navigate="onNavigate"
+  />
+  <VideoView
+    v-else-if="status === 'video'"
+    :video-id="videoParams.videoId"
+    :segment-id="videoParams.segmentId"
+    :highlight-comment-id="videoParams.commentId"
+    @back="onVideoBack"
+    @navigate="onNavigate"
   />
   <ChatView
     v-else-if="status === 'chat'"

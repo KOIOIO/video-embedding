@@ -16,6 +16,7 @@ const props = defineProps({
   item: { type: Object, required: true },
   active: { type: Boolean, default: false },
   userId: { type: Number, default: 0 },
+  highlightCommentId: { type: Number, default: 0 },
 })
 const emit = defineEmits(['ended', 'navigate'])
 
@@ -352,6 +353,9 @@ onMounted(() => {
   loadCommentCount()
   loadAuthorRelation()
   if (props.active) setupPlayer()
+  if (props.highlightCommentId > 0) {
+    setTimeout(() => openComments(), 300)
+  }
 })
 onBeforeUnmount(() => {
   destroyPlayer()
@@ -490,8 +494,10 @@ onBeforeUnmount(() => {
       v-if="showComments"
       :segment-id="item.video_segment_id"
       :user-id="userId"
+      :highlight-comment-id="highlightCommentId"
       @close="showComments = false"
       @total-change="commentCount = $event"
+      @navigate="(target) => emit('navigate', target)"
     />
   </div>
 </template>
