@@ -28,6 +28,7 @@ const errorText = ref('')
 const activeReaction = ref(String(props.item.user_reaction_type || ''))
 const likeCount = ref(0)
 const doubleLikeCount = ref(0)
+const dislikeCount = ref(0)
 const reactionBusy = ref(false)
 const burstVisible = ref(false)
 const floatHearts = ref([])
@@ -225,11 +226,13 @@ function applyReactionChange(type, wasActive) {
     activeReaction.value = ''
     if (type === REACTION_LIKE) likeCount.value = Math.max(0, likeCount.value - 1)
     if (type === REACTION_DOUBLE_LIKE) doubleLikeCount.value = Math.max(0, doubleLikeCount.value - 1)
+    if (type === REACTION_DISLIKE) dislikeCount.value = Math.max(0, dislikeCount.value - 1)
     return
   }
   const previous = activeReaction.value
   if (previous === REACTION_LIKE) likeCount.value = Math.max(0, likeCount.value - 1)
   if (previous === REACTION_DOUBLE_LIKE) doubleLikeCount.value = Math.max(0, doubleLikeCount.value - 1)
+  if (previous === REACTION_DISLIKE) dislikeCount.value = Math.max(0, dislikeCount.value - 1)
   activeReaction.value = type
   if (type === REACTION_LIKE) {
     likeCount.value += 1
@@ -237,6 +240,7 @@ function applyReactionChange(type, wasActive) {
     popFloatHeart()
   }
   if (type === REACTION_DOUBLE_LIKE) doubleLikeCount.value += 1
+  if (type === REACTION_DISLIKE) dislikeCount.value += 1
 }
 
 async function react(reactionType) {
@@ -245,6 +249,7 @@ async function react(reactionType) {
     type: activeReaction.value,
     like: likeCount.value,
     doubleLike: doubleLikeCount.value,
+    dislike: dislikeCount.value,
   }
   applyReactionChange(reactionType, activeReaction.value === reactionType)
   reactionBusy.value = true
@@ -253,10 +258,12 @@ async function react(reactionType) {
     activeReaction.value = result.active ? result.reaction_type : ''
     likeCount.value = result.like_count
     doubleLikeCount.value = result.double_like_count
+    dislikeCount.value = result.dislike_count || 0
   } catch {
     activeReaction.value = previous.type
     likeCount.value = previous.like
     doubleLikeCount.value = previous.doubleLike
+    dislikeCount.value = previous.dislike
   } finally {
     reactionBusy.value = false
   }
@@ -267,9 +274,11 @@ async function loadReactionCounts() {
     const counts = await fetchReactionCounts(props.item)
     likeCount.value = counts.like_count
     doubleLikeCount.value = counts.double_like_count
+    dislikeCount.value = counts.dislike_count || 0
   } catch {
     likeCount.value = 0
     doubleLikeCount.value = 0
+    dislikeCount.value = 0
   }
 }
 
@@ -427,6 +436,25 @@ onBeforeUnmount(() => {
         >
           <svg viewBox="0 0 24 24" fill="#fe2c55"><path d="M12 21s-7.5-4.7-10-9.3C.6 8.5 2.5 4.6 6.1 4.6c2 0 3.4 1 4.2 2.2.3.5 1.1.5 1.4 0 .8-1.2 2.2-2.2 4.2-2.2 3.6 0 5.5 3.9 4.1 7.1C19.5 16.3 12 21 12 21Z"/></svg>
         </span>
+      </button>
+
+      <button class="rail-btn" type="button" @click.stop="react(REACTION_DOUBLE_LIKE)">
+        <span class="rail-icon" :class="{ active: activeReaction === REACTION_DOUBLE_LIKE }">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path transform="translate(1.8 1.2) scale(0.7)" d="M12 21s-7.5-4.7-10-9.3C.6 8.5 2.5 4.6 6.1 4.6c2 0 3.4 1 4.2 2.2.3.5 1.1.5 1.4 0 .8-1.2 2.2-2.2 4.2-2.2 3.6 0 5.5 3.9 4.1 7.1C19.5 16.3 12 21 12 21Z"/>
+            <path transform="translate(-1.8 0.4) scale(0.7)" d="M12 21s-7.5-4.7-10-9.3C.6 8.5 2.5 4.6 6.1 4.6c2 0 3.4 1 4.2 2.2.3.5 1.1.5 1.4 0 .8-1.2 2.2-2.2 4.2-2.2 3.6 0 5.5 3.9 4.1 7.1C19.5 16.3 12 21 12 21Z"/>
+          </svg>
+        </span>
+        <span class="rail-count" :class="{ active: activeReaction === REACTION_DOUBLE_LIKE }">{{ doubleLikeCount }}</span>
+      </button>
+
+      <button class="rail-btn" type="button" @click.stop="react(REACTION_DISLIKE)">
+        <span class="rail-icon" :class="{ active: activeReaction === REACTION_DISLIKE }">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path transform="rotate(180 12 12)" d="M7 10v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1Zm13.8.8c-.3-1.2-1.4-2-2.7-2h-3.7a.3.3 0 0 1-.3-.4l.7-3.6a3 3 0 0 0-2.9-3.4 2 2 0 0 0-1.8 1.2l-2.5 5.2a3 3 0 0 0-.3 1.2v6.5a3 3 0 0 0 3 3h6.4a3 3 0 0 0 2.9-2.4l1.2-4.3v-1Z"/>
+          </svg>
+        </span>
+        <span class="rail-count" :class="{ active: activeReaction === REACTION_DISLIKE }">{{ dislikeCount || '倒赞' }}</span>
       </button>
 
       <button class="rail-btn" type="button" @click.stop="openComments">

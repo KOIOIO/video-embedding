@@ -298,7 +298,8 @@ onMounted(() => load(true))
 </script>
 
 <template>
-  <div class="panel-wrap" @click.self="emit('close')">
+  <Teleport to="body">
+    <div class="panel-wrap" @click.self="emit('close')">
     <div class="panel">
       <header class="panel-head">
         <span class="panel-title">{{ total }} 条评论</span>
@@ -458,7 +459,8 @@ onMounted(() => load(true))
         </button>
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
