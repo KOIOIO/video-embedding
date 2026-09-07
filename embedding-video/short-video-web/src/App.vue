@@ -4,6 +4,7 @@ import { clearSession, readSession } from './auth/session.js'
 import { loadCurrentAdmin } from './auth/api.js'
 import { getCurrentUserId } from './user/api.js'
 import LoginView from './components/LoginView.vue'
+import RegisterView from './components/RegisterView.vue'
 import FeedView from './components/FeedView.vue'
 import ProfileView from './components/ProfileView.vue'
 import ProfileEditView from './components/ProfileEditView.vue'
@@ -37,6 +38,19 @@ onMounted(async () => {
 function onLoggedIn(nextSession) {
   session.value = nextSession
   status.value = 'feed'
+}
+
+function onRegistered(nextSession) {
+  session.value = nextSession
+  status.value = 'feed'
+}
+
+function onGoRegister() {
+  status.value = 'register'
+}
+
+function onGoLogin() {
+  status.value = 'login'
 }
 
 function onLogout() {
@@ -132,7 +146,8 @@ function onFriendsBack() {
     <div class="boot-logo">短</div>
     <p class="boot-text">加载中…</p>
   </div>
-  <LoginView v-else-if="status === 'login'" @logged-in="onLoggedIn" />
+  <LoginView v-else-if="status === 'login'" @logged-in="onLoggedIn" @go-register="onGoRegister" />
+  <RegisterView v-else-if="status === 'register'" @registered="onRegistered" @go-login="onGoLogin" />
   <FeedView
     v-else-if="status === 'feed'"
     :session="session"

@@ -46,6 +46,7 @@ func EnsureSchema(db *gorm.DB) error {
 		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_user_profile_visit_daily ON edu_user_profile_visit(visitor_id, owner_id, visit_date) WHERE deleted = 0;`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_profile_visit_owner_date ON edu_user_profile_visit(owner_id, visit_date) WHERE deleted = 0;`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_resource_source_user ON edu_video_resource(source_type, user_id) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_sys_user_username ON sys_user(username) WHERE deleted = 0;`).Error
 		if err := ensureKnowledgeVideoIndexes(tx); err != nil {
 			return err
 		}

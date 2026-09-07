@@ -44,6 +44,44 @@ func TestRequireAdmin(t *testing.T) {
 	}
 }
 
+func TestRequireUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	authenticator := &stubAdminAuthenticator{admin: adminauth.Admin{ID: 99, Username: "normaluser", UserType: 2}}
+	router := gin.New()
+	router.GET("/user", RequireUser(authenticator), func(c *gin.Context) {
+		id, ok := UserID(c)
+		if !ok || id != 99 {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		user, ok := CurrentUser(c)
+		if !ok || user.Username != "normaluser" {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	for _, tc := range []struct {
+		name, authorization string
+		want                int
+	}{
+		{"missing", "", http.StatusUnauthorized},
+		{"malformed", "Token abc", http.StatusUnauthorized},
+		{"valid", "Bearer good-token", http.StatusNoContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/user", nil)
+			req.Header.Set("Authorization", tc.authorization)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != tc.want {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
 type stubAdminAuthenticator struct {
 	admin adminauth.Admin
 }

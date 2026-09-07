@@ -1,28 +1,44 @@
 <script setup>
-import { ref } from 'vue'
-import { loginAdmin } from '../auth/api.js'
+import { computed, ref } from 'vue'
+import { registerUser } from '../auth/api.js'
 
-const emit = defineEmits(['logged-in', 'go-register'])
+const emit = defineEmits(['registered', 'go-login'])
 
 const username = ref('')
 const password = ref('')
+const confirmPassword = ref('')
+const nickname = ref('')
 const submitting = ref(false)
 const errorText = ref('')
 
+const usernamePattern = /^[a-zA-Z0-9_]{4,20}$/
+const usernameValid = computed(() => usernamePattern.test(username.value.trim()))
+const passwordValid = computed(() => password.value.length >= 6 && password.value.length <= 32)
+const confirmValid = computed(() => confirmPassword.value.length > 0 && confirmPassword.value === password.value)
+const formValid = computed(() => usernameValid.value && passwordValid.value && confirmValid.value)
+
+const usernameHint = computed(() => {
+  const v = username.value.trim()
+  if (!v) return '4-20位，字母、数字或下划线'
+  if (!usernamePattern.test(v)) return '用户名格式不正确：4-20位字母、数字或下划线'
+  return '用户名可用'
+})
+
 async function submit() {
-  const name = username.value.trim()
-  const pass = password.value
-  if (!name || !pass) {
-    errorText.value = '请输入账号和密码'
-    return
-  }
+  if (!formValid.value) return
   submitting.value = true
   errorText.value = ''
   try {
-    const session = await loginAdmin(name, pass)
-    emit('logged-in', session)
+    const session = await registerUser(username.value.trim(), password.value, nickname.value.trim())
+    emit('registered', session)
   } catch (error) {
-    errorText.value = error?.status === 401 ? '账号或密码错误' : (error?.message || '登录失败，请稍后重试')
+    if (error?.status === 409) {
+      errorText.value = '用户名已被注册'
+    } else if (error?.status === 400) {
+      errorText.value = error?.message || '注册信息不合法'
+    } else {
+      errorText.value = error?.message || '注册失败，请稍后重试'
+    }
   } finally {
     submitting.value = false
   }
@@ -33,57 +49,80 @@ function onSubmit(event) {
   submit()
 }
 
-function goRegister() {
-  emit('go-register')
+function goLogin() {
+  emit('go-login')
 }
 </script>
 
 <template>
-  <div class="login">
+  <div class="register">
     <div class="halo halo-1"></div>
     <div class="halo halo-2"></div>
 
     <form class="card" @submit="onSubmit">
       <div class="logo">短</div>
-      <h1 class="title">短视频</h1>
-      <p class="subtitle">上下滑动 · 随机好片刷不停</p>
+      <h1 class="title">创建账号</h1>
+      <p class="subtitle">加入短视频，刷到停不下来</p>
 
       <label class="field">
         <input
           v-model="username"
           type="text"
           autocomplete="username"
-          placeholder="账号"
-          maxlength="64"
+          placeholder="用户名"
+          maxlength="20"
         />
+        <span class="hint" :class="{ ok: usernameValid && username.trim() }">{{ usernameHint }}</span>
       </label>
+
       <label class="field">
         <input
           v-model="password"
           type="password"
-          autocomplete="current-password"
-          placeholder="密码"
-          maxlength="128"
+          autocomplete="new-password"
+          placeholder="密码（6-32位）"
+          maxlength="32"
+        />
+      </label>
+
+      <label class="field">
+        <input
+          v-model="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="确认密码"
+          maxlength="32"
+        />
+        <span v-if="confirmPassword && !confirmValid" class="hint error">两次输入的密码不一致</span>
+      </label>
+
+      <label class="field">
+        <input
+          v-model="nickname"
+          type="text"
+          autocomplete="nickname"
+          placeholder="昵称（选填，默认用用户名）"
+          maxlength="32"
         />
       </label>
 
       <p v-if="errorText" class="error">{{ errorText }}</p>
 
-      <button class="submit" type="submit" :disabled="submitting">
+      <button class="submit" type="submit" :disabled="!formValid || submitting">
         <span v-if="submitting" class="spinner"></span>
-        {{ submitting ? '登录中…' : '登录' }}
+        {{ submitting ? '注册中…' : '注册并登录' }}
       </button>
 
       <p class="footer">
-        没有账号？
-        <button type="button" class="link" @click="goRegister">去注册</button>
+        已有账号？
+        <button type="button" class="link" @click="goLogin">去登录</button>
       </p>
     </form>
   </div>
 </template>
 
 <style scoped>
-.login {
+.register {
   position: relative;
   height: 100%;
   display: grid;
@@ -121,8 +160,8 @@ function goRegister() {
   width: min(92vw, 380px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 40px 32px 36px;
+  gap: 12px;
+  padding: 36px 32px 32px;
   border-radius: 24px;
   background: rgba(22, 22, 22, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -149,21 +188,27 @@ function goRegister() {
 .title {
   margin: 0;
   text-align: center;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: 1px;
 }
 
 .subtitle {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   text-align: center;
   font-size: 13px;
   color: var(--text-dim);
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .field input {
   width: 100%;
-  padding: 13px 16px;
+  padding: 12px 16px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
@@ -171,6 +216,7 @@ function goRegister() {
   font-size: 15px;
   outline: none;
   transition: border-color 0.2s, background 0.2s;
+  box-sizing: border-box;
 }
 
 .field input::placeholder {
@@ -180,6 +226,20 @@ function goRegister() {
 .field input:focus {
   border-color: rgba(254, 44, 85, 0.8);
   background: rgba(255, 255, 255, 0.09);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  padding-left: 4px;
+}
+
+.hint.ok {
+  color: #25f4ee;
+}
+
+.hint.error {
+  color: #ff6b81;
 }
 
 .error {
@@ -195,14 +255,14 @@ function goRegister() {
   gap: 8px;
   width: 100%;
   padding: 13px;
-  margin-top: 6px;
+  margin-top: 4px;
   border-radius: 12px;
   background: linear-gradient(90deg, #fe2c55, #ff5470);
   color: #fff;
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: 6px;
-  text-indent: 6px;
+  letter-spacing: 4px;
+  text-indent: 4px;
   transition: transform 0.15s, filter 0.15s;
 }
 
@@ -216,7 +276,7 @@ function goRegister() {
 }
 
 .submit:disabled {
-  opacity: 0.65;
+  opacity: 0.5;
   cursor: default;
 }
 

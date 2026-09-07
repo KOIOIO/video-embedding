@@ -48,6 +48,7 @@ func New(httpApp *app.App) *gin.Engine {
 	adminRoutes := r.Group("")
 	adminRoutes.Use(middleware.RequireAdmin(httpApp.AdminAuth))
 	public.POST("/api/auth/login", authHandler.Login)
+	public.POST("/api/auth/register", authHandler.Register)
 	adminRoutes.GET("/api/auth/me", authHandler.Me)
 	if httpApp.KnowledgeVideoService != nil {
 		knowledgeHandler := knowledgevideohandler.New(httpApp.KnowledgeVideoService, httpApp.KnowledgeVideoMaxRequestBytes)

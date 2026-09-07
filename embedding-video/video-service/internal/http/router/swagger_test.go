@@ -331,6 +331,18 @@ func (routerAuthRepository) FindActiveAdminByID(_ context.Context, id uint64) (a
 	return adminauth.Admin{ID: id, Username: "admin"}, id == 7, nil
 }
 
+func (routerAuthRepository) FindActiveUserByUsername(context.Context, string) (adminauth.Admin, bool, error) {
+	return adminauth.Admin{ID: 7, Username: "admin"}, true, nil
+}
+
+func (routerAuthRepository) FindActiveUserByID(_ context.Context, id uint64) (adminauth.Admin, bool, error) {
+	return adminauth.Admin{ID: id, Username: "admin"}, id == 7, nil
+}
+
+func (routerAuthRepository) CreateUser(context.Context, adminauth.Admin) (uint64, error) {
+	return 7, nil
+}
+
 func authenticatedTestRouter(t *testing.T, app *appbuilder.App) (*gin.Engine, string) {
 	t.Helper()
 	const secret = "01234567890123456789012345678901"

@@ -13,21 +13,28 @@ import (
 	"video-service/middleware"
 )
 
-type adminLoginService interface {
+type adminAuthService interface {
 	Login(ctx context.Context, username, password string) (adminauth.LoginResult, error)
+	Register(ctx context.Context, username, password, nickname string) (adminauth.LoginResult, error)
 }
 
 type AdminAuthHandler struct {
-	service adminLoginService
+	service adminAuthService
 }
 
-func NewAdminAuthHandler(service adminLoginService) *AdminAuthHandler {
+func NewAdminAuthHandler(service adminAuthService) *AdminAuthHandler {
 	return &AdminAuthHandler{service: service}
 }
 
 type AdminLoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+type RegisterRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Nickname string `json:"nickname"`
 }
 
 // Login godoc
@@ -53,6 +60,42 @@ func (h *AdminAuthHandler) Login(c *gin.Context) {
 	}
 	if err != nil {
 		writeAuthError(c, http.StatusInternalServerError, "internal", "login failed")
+		return
+	}
+	c.JSON(http.StatusOK, dto.SuccessResponse[adminauth.LoginResult]{Success: true, Data: result})
+}
+
+// Register godoc
+// @Summary 用户注册
+// @Tags 用户认证
+// @Accept json
+// @Produce json
+// @Param request body RegisterRequest true "注册信息"
+// @Success 200 {object} adminauth.LoginResult
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 409 {object} dto.ErrorResponse
+// @Router /api/auth/register [post]
+func (h *AdminAuthHandler) Register(c *gin.Context) {
+	var request RegisterRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeAuthError(c, http.StatusBadRequest, "invalid_argument", "username and password are required")
+		return
+	}
+	result, err := h.service.Register(c.Request.Context(), strings.TrimSpace(request.Username), request.Password, request.Nickname)
+	if errors.Is(err, adminauth.ErrUsernameExists) {
+		writeAuthError(c, http.StatusConflict, "username_exists", "username already exists")
+		return
+	}
+	if errors.Is(err, adminauth.ErrInvalidUsername) {
+		writeAuthError(c, http.StatusBadRequest, "invalid_username", "username must be 4-20 characters, letters digits or underscore")
+		return
+	}
+	if errors.Is(err, adminauth.ErrInvalidPassword) {
+		writeAuthError(c, http.StatusBadRequest, "invalid_password", "password must be 6-32 characters")
+		return
+	}
+	if err != nil {
+		writeAuthError(c, http.StatusInternalServerError, "internal", "registration failed")
 		return
 	}
 	c.JSON(http.StatusOK, dto.SuccessResponse[adminauth.LoginResult]{Success: true, Data: result})

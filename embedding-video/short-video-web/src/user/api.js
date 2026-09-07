@@ -1,3 +1,5 @@
+import { readSession } from '../auth/session.js'
+
 const DEMO_USER_ID_KEY = 'demo_user_id'
 const DEFAULT_USER_ID = 1001
 
@@ -36,10 +38,15 @@ async function requestJson(url, init = {}, fetchImpl = fetch) {
 }
 
 function authHeaders(extra = {}) {
-  return {
+  const headers = {
     'X-User-ID': String(getCurrentUserId()),
     ...extra,
   }
+  const session = readSession()
+  if (session?.accessToken) {
+    headers['Authorization'] = `Bearer ${session.accessToken}`
+  }
+  return headers
 }
 
 export function normalizeUserProfile(data) {
