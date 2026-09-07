@@ -2,12 +2,13 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { fetchRandomVideoDistinct, uniqueKeyOf } from '../feed/api.js'
 import { clampIndex, pushDistinct, resolveSwipeIndex, visibleWindow } from '../feed/swipe.js'
+import { getCurrentUserId } from '../user/api.js'
 import VideoCard from './VideoCard.vue'
 
 const props = defineProps({
   session: { type: Object, required: true },
 })
-const emit = defineEmits(['logout'])
+const emit = defineEmits(['logout', 'navigate'])
 
 const SWIPE_THRESHOLD = 60
 const MIN_FETCH_AHEAD = 2
@@ -161,6 +162,10 @@ function onLogout() {
   emit('logout')
 }
 
+function onMyProfile() {
+  emit('navigate', { view: 'profile', userId: getCurrentUserId() })
+}
+
 bootstrap()
 onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
@@ -206,7 +211,9 @@ onBeforeUnmount(() => {
           <span class="tab active">推荐</span>
         </div>
         <div class="userbox">
-          <div class="avatar">{{ avatarText }}</div>
+          <button class="my-profile" type="button" aria-label="我的主页" @click="onMyProfile">
+            <div class="avatar">{{ avatarText }}</div>
+          </button>
           <span class="user-name">{{ username }}</span>
           <button class="logout" type="button" @click="onLogout">退出</button>
         </div>
@@ -362,6 +369,19 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 700;
   color: #04252b;
+}
+
+.my-profile {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.my-profile:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 12px rgba(37, 244, 238, 0.5);
 }
 
 .user-name {

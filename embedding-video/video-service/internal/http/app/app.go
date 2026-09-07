@@ -14,6 +14,7 @@ import (
 
 	"video-service/internal/application/adminauth"
 	"video-service/internal/application/knowledgevideo"
+	"video-service/internal/application/userprofile"
 	"video-service/internal/application/videoapp"
 	recommendationapp "video-service/internal/application/videoapp/recommendation"
 	"video-service/internal/config"
@@ -39,6 +40,7 @@ type App struct {
 	KnowledgeVideoMaxRequestBytes  int64
 	KnowledgeVideoRepository       knowledgevideo.WorkerRepository
 	AdminAuth                      *adminauth.Service
+	UserProfileService             *userprofile.Service
 }
 
 type HTTPRuntimeConfig struct {
@@ -191,6 +193,9 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Tree:     knowledgeRepo,
 	}
 
+	userProfileRepo := persistence.NewGormUserProfileRepository(db)
+	userProfileService := userprofile.NewService(userProfileRepo)
+
 	return &App{
 		DB:               db,
 		Redis:            rdb,
@@ -212,6 +217,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		KnowledgeVideoMaxRequestBytes:  cfg.KnowledgeVideoStorage.MaxArchiveBytes + 32<<20,
 		KnowledgeVideoRepository:       knowledgeRepo,
 		AdminAuth:                      adminAuth,
+		UserProfileService:             userProfileService,
 	}, nil
 }
 

@@ -35,6 +35,7 @@ func New(httpApp *app.App) *gin.Engine {
 	objectProxyHandler := handler.NewObjectProxyHandler(httpApp.Store)
 	systemHandler := handler.NewSystemHandler(httpApp.Service)
 	authHandler := handler.NewAdminAuthHandler(httpApp.AdminAuth)
+	userProfileHandler := handler.NewUserProfileHandler(httpApp.UserProfileService, httpApp.Store)
 	public := r.Group("")
 	adminRoutes := r.Group("")
 	adminRoutes.Use(middleware.RequireAdmin(httpApp.AdminAuth))
@@ -120,6 +121,11 @@ func New(httpApp *app.App) *gin.Engine {
 	r.GET("/api/video-segments/:id/reaction-counts", videoHandler.GetSegmentReactionCounts)
 	public.GET("/api/video-segments/:id/comments", commentHandler.ListComments)
 	public.GET("/api/video-segments/:id/comment-counts", commentHandler.GetCommentCounts)
+	// 用户资料：公开查询
+	public.GET("/api/users/:id/profile", userProfileHandler.GetProfile)
+	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.PUT("/api/me/profile", userProfileHandler.UpdateProfile)
+	public.POST("/api/me/avatar", userProfileHandler.UploadAvatar)
 	adminRoutes.POST("/api/video-segments/:id/comments", commentHandler.CreateComment)
 	public.GET("/api/comments/:id/replies", commentHandler.ListReplies)
 	adminRoutes.POST("/api/comments/:id/replies", commentHandler.CreateReply)

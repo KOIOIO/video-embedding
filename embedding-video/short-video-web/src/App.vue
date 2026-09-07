@@ -2,11 +2,15 @@
 import { onMounted, ref } from 'vue'
 import { clearSession, readSession } from './auth/session.js'
 import { loadCurrentAdmin } from './auth/api.js'
+import { getCurrentUserId } from './user/api.js'
 import LoginView from './components/LoginView.vue'
 import FeedView from './components/FeedView.vue'
+import ProfileView from './components/ProfileView.vue'
+import ProfileEditView from './components/ProfileEditView.vue'
 
 const status = ref('checking')
 const session = ref(null)
+const profileUserId = ref(getCurrentUserId())
 
 onMounted(async () => {
   const saved = readSession()
@@ -34,6 +38,31 @@ function onLogout() {
   session.value = null
   status.value = 'login'
 }
+
+function onNavigate(target) {
+  if (target?.view === 'profile') {
+    profileUserId.value = Number(target.userId) || getCurrentUserId()
+    status.value = 'profile'
+  } else if (target?.view === 'profile-edit') {
+    status.value = 'profile-edit'
+  }
+}
+
+function onProfileBack() {
+  status.value = 'feed'
+}
+
+function onProfileEdit() {
+  status.value = 'profile-edit'
+}
+
+function onProfileEditBack() {
+  status.value = 'profile'
+}
+
+function onProfileEditSaved() {
+  status.value = 'profile'
+}
 </script>
 
 <template>
@@ -42,7 +71,23 @@ function onLogout() {
     <p class="boot-text">加载中…</p>
   </div>
   <LoginView v-else-if="status === 'login'" @logged-in="onLoggedIn" />
-  <FeedView v-else :session="session" @logout="onLogout" />
+  <FeedView
+    v-else-if="status === 'feed'"
+    :session="session"
+    @logout="onLogout"
+    @navigate="onNavigate"
+  />
+  <ProfileView
+    v-else-if="status === 'profile'"
+    :user-id="profileUserId"
+    @back="onProfileBack"
+    @edit="onProfileEdit"
+  />
+  <ProfileEditView
+    v-else-if="status === 'profile-edit'"
+    @back="onProfileEditBack"
+    @saved="onProfileEditSaved"
+  />
 </template>
 
 <style scoped>
