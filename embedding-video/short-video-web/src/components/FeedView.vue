@@ -166,6 +166,10 @@ function onMyProfile() {
   emit('navigate', { view: 'profile', userId: getCurrentUserId() })
 }
 
+function onPublish() {
+  emit('navigate', { view: 'publish' })
+}
+
 bootstrap()
 onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
@@ -227,6 +231,10 @@ onBeforeUnmount(() => {
         @click="goPrev"
       >
         ↑
+      </button>
+
+      <button class="publish-fab" type="button" aria-label="发布视频" @click="onPublish">
+        <span class="publish-fab-icon">＋</span>
       </button>
     </div>
 
@@ -422,6 +430,32 @@ onBeforeUnmount(() => {
   color: #fff;
   font-size: 16px;
   animation: fade-in 0.3s ease both;
+}
+
+.publish-fab {
+  position: absolute;
+  right: 16px;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fe2c55, #ff5470);
+  box-shadow: 0 4px 16px rgba(254, 44, 85, 0.5);
+  color: #fff;
+  z-index: 20;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.publish-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(254, 44, 85, 0.7);
+}
+.publish-fab:active { transform: scale(0.95); }
+.publish-fab-icon {
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
 }
 
 .center {

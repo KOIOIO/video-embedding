@@ -7,6 +7,7 @@ import LoginView from './components/LoginView.vue'
 import FeedView from './components/FeedView.vue'
 import ProfileView from './components/ProfileView.vue'
 import ProfileEditView from './components/ProfileEditView.vue'
+import PublishView from './components/PublishView.vue'
 
 const status = ref('checking')
 const session = ref(null)
@@ -45,6 +46,8 @@ function onNavigate(target) {
     status.value = 'profile'
   } else if (target?.view === 'profile-edit') {
     status.value = 'profile-edit'
+  } else if (target?.view === 'publish') {
+    status.value = 'publish'
   }
 }
 
@@ -61,6 +64,21 @@ function onProfileEditBack() {
 }
 
 function onProfileEditSaved() {
+  status.value = 'profile'
+}
+
+function onProfilePublish() {
+  status.value = 'publish'
+}
+
+function onPublishBack() {
+  // 从发布页返回时，回到之前的页面（feed 或 profile）
+  status.value = 'feed'
+}
+
+function onPublishPublished() {
+  // 发布成功后跳转到自己的主页
+  profileUserId.value = getCurrentUserId()
   status.value = 'profile'
 }
 </script>
@@ -82,11 +100,17 @@ function onProfileEditSaved() {
     :user-id="profileUserId"
     @back="onProfileBack"
     @edit="onProfileEdit"
+    @publish="onProfilePublish"
   />
   <ProfileEditView
     v-else-if="status === 'profile-edit'"
     @back="onProfileEditBack"
     @saved="onProfileEditSaved"
+  />
+  <PublishView
+    v-else-if="status === 'publish'"
+    @back="onPublishBack"
+    @published="onPublishPublished"
   />
 </template>
 

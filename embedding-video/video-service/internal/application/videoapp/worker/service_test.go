@@ -224,10 +224,16 @@ func (fakeStatusStore) Set(context.Context, string, domainvideo.Status, string, 
 	return nil
 }
 
-type fakeTranscoder struct{}
+type fakeTranscoder struct {
+	durationSec int
+	probeErr    error
+}
 
-func (fakeTranscoder) ConvertToHLS(context.Context, string, string) error  { return nil }
-func (fakeTranscoder) GenerateCover(context.Context, string, string) error { return nil }
+func (f fakeTranscoder) ConvertToHLS(context.Context, string, string) error  { return nil }
+func (f fakeTranscoder) GenerateCover(context.Context, string, string) error { return nil }
+func (f fakeTranscoder) ProbeDurationSeconds(context.Context, string) (int, error) {
+	return f.durationSec, f.probeErr
+}
 
 type fakeObjectStore struct{}
 
@@ -291,5 +297,121 @@ func newTestService(queue *fakeQueue) Service {
 		TempRawDir:  "tmp/raw",
 		TempHlsDir:  "tmp/hls",
 		StatusTTL:   time.Hour,
+	}
+}
+
+type recordingStatusStore struct {
+	statuses []domainvideo.Status
+}
+
+func (s *recordingStatusStore) Set(_ context.Context, _ string, status domainvideo.Status, _ string, _ time.Duration) error {
+	s.statuses = append(s.statuses, status)
+	return nil
+}
+
+type recordingRepo struct {
+	statuses []domainvideo.Status
+	errMsgs  []string
+}
+
+func (r *recordingRepo) GetByID(context.Context, uint64) (bool, error) { return true, nil }
+func (r *recordingRepo) UpdateStatusByID(_ context.Context, _ uint64, status domainvideo.Status, errMsg string) error {
+	r.statuses = append(r.statuses, status)
+	r.errMsgs = append(r.errMsgs, errMsg)
+	return nil
+}
+func (r *recordingRepo) UpdateCoverByID(context.Context, uint64, string) (bool, error) { return true, nil }
+
+func TestRunOnceMarksFailedWhenDurationExceedsLimit(t *testing.T) {
+	queue := &fakeQueue{
+		msg: QueueMessage{
+			MessageID: "dur-0",
+			Task: Task{
+				VideoID:         99,
+				RawKey:          "raw/long.mp4",
+				HLSObjectPrefix: "hls/99",
+				TaskID:          "task-99",
+				HLSURL:          "/videos/hls/99/master.m3u8",
+			},
+		},
+	}
+	statusStore := &recordingStatusStore{}
+	repo := &recordingRepo{}
+	svc := newTestService(queue)
+	svc.StatusStore = statusStore
+	svc.Repo = repo
+	svc.Transcoder = fakeTranscoder{durationSec: 200} // > 180
+
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+
+	// Should be acked (not retried / dead-lettered)
+	if len(queue.acked) != 1 || queue.acked[0] != "dur-0" {
+		t.Fatalf("acked = %#v, want [dur-0]", queue.acked)
+	}
+	if len(queue.requeued) > 0 {
+		t.Fatalf("requeued = %#v, want empty", queue.requeued)
+	}
+	// Last status should be Failed
+	foundFailed := false
+	for _, s := range repo.statuses {
+		if s == domainvideo.StatusFailed {
+			foundFailed = true
+		}
+	}
+	if !foundFailed {
+		t.Fatalf("repo statuses = %#v, want StatusFailed", repo.statuses)
+	}
+	if len(repo.errMsgs) == 0 || !strings.Contains(repo.errMsgs[len(repo.errMsgs)-1], "exceeds") {
+		t.Fatalf("last errMsg = %q, want contains 'exceeds'", repo.errMsgs)
+	}
+}
+
+func TestRunOnceContinuesWhenDurationWithinLimit(t *testing.T) {
+	queue := &fakeQueue{
+		msg: QueueMessage{
+			MessageID: "dur-1",
+			Task: Task{
+				VideoID:         100,
+				RawKey:          "raw/short.mp4",
+				HLSObjectPrefix: "hls/100",
+				TaskID:          "task-100",
+				HLSURL:          "/videos/hls/100/master.m3u8",
+			},
+		},
+	}
+	svc := newTestService(queue)
+	svc.Transcoder = fakeTranscoder{durationSec: 60} // <= 180
+
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if len(queue.acked) != 1 {
+		t.Fatalf("acked = %#v, want 1 ack", queue.acked)
+	}
+}
+
+func TestRunOnceContinuesWhenProbeFails(t *testing.T) {
+	queue := &fakeQueue{
+		msg: QueueMessage{
+			MessageID: "dur-2",
+			Task: Task{
+				VideoID:         101,
+				RawKey:          "raw/probe_err.mp4",
+				HLSObjectPrefix: "hls/101",
+				TaskID:          "task-101",
+				HLSURL:          "/videos/hls/101/master.m3u8",
+			},
+		},
+	}
+	svc := newTestService(queue)
+	svc.Transcoder = fakeTranscoder{probeErr: errors.New("ffprobe not found")}
+
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if len(queue.acked) != 1 {
+		t.Fatalf("acked = %#v, want 1 ack (probe failure should not block)", queue.acked)
 	}
 }

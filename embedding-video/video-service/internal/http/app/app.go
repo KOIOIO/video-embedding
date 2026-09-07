@@ -15,6 +15,7 @@ import (
 	"video-service/internal/application/adminauth"
 	"video-service/internal/application/knowledgevideo"
 	"video-service/internal/application/userprofile"
+	"video-service/internal/application/userpublish"
 	"video-service/internal/application/videoapp"
 	recommendationapp "video-service/internal/application/videoapp/recommendation"
 	"video-service/internal/config"
@@ -41,6 +42,7 @@ type App struct {
 	KnowledgeVideoRepository       knowledgevideo.WorkerRepository
 	AdminAuth                      *adminauth.Service
 	UserProfileService             *userprofile.Service
+	UserPublishService             *userpublish.Service
 }
 
 type HTTPRuntimeConfig struct {
@@ -196,6 +198,9 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	userProfileRepo := persistence.NewGormUserProfileRepository(db)
 	userProfileService := userprofile.NewService(userProfileRepo)
 
+	userPublishRepo := persistence.NewGormUserPublishRepository(db)
+	userPublishService := userpublish.NewService(userPublishRepo, queue, vectorQueue)
+
 	return &App{
 		DB:               db,
 		Redis:            rdb,
@@ -218,6 +223,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		KnowledgeVideoRepository:       knowledgeRepo,
 		AdminAuth:                      adminAuth,
 		UserProfileService:             userProfileService,
+		UserPublishService:             userPublishService,
 	}, nil
 }
 

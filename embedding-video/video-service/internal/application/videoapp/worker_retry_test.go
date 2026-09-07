@@ -208,8 +208,9 @@ func (f fakeDownloader) DownloadToFile(context.Context, string, string) error { 
 
 type fakeTranscoder struct{}
 
-func (fakeTranscoder) ConvertToHLS(context.Context, string, string) error  { return nil }
-func (fakeTranscoder) GenerateCover(context.Context, string, string) error { return nil }
+func (fakeTranscoder) ConvertToHLS(context.Context, string, string) error    { return nil }
+func (fakeTranscoder) GenerateCover(context.Context, string, string) error   { return nil }
+func (fakeTranscoder) ProbeDurationSeconds(context.Context, string) (int, error) { return 60, nil }
 
 type fakeUploader struct{}
 

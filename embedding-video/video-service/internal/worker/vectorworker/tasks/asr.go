@@ -990,3 +990,98 @@ func normalizeText(s string) string {
 	}
 	return strings.Join(out, "\n")
 }
+
+// AllCoarseTextEmpty 判断所有 coarse item 的文本是否都为空。
+func AllCoarseTextEmpty(items []CoarseItem) bool {
+	if len(items) == 0 {
+		return true
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item.Text) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// FallbackEmbedFromTitleDescription 当 coarse ASR 全部为空时，用视频标题+描述直接做 embedding，
+// 生成单 segment（0 到 videoDurationSec），跳过正常 refine 流程。
+// 返回 true 表示 fallback 已成功应用（调用方应跳过正常 refine）；返回 false 表示无可用文本，应继续原有错误流程。
+func FallbackEmbedFromTitleDescription(ctx context.Context, db *gorm.DB, client openAICompatClient, videoID uint64, taskID string, videoDurationSec int, stageRecorder StageRecorder) (bool, error) {
+	if videoID == 0 {
+		return false, errors.New("videoID is required")
+	}
+	var video model.EduVideoResource
+	if err := db.WithContext(ctx).First(&video, videoID).Error; err != nil {
+		zap.L().Warn("asr_fallback_video_lookup_failed",
+			zap.Uint64("video_id", videoID),
+			zap.String("task_id", taskID),
+			zap.Error(err))
+		return false, nil
+	}
+
+	fallbackText := strings.TrimSpace(strings.TrimSpace(video.Title) + " " + strings.TrimSpace(video.Description))
+	if fallbackText == "" {
+		return false, nil
+	}
+
+	if videoDurationSec <= 0 {
+		videoDurationSec = video.Duration
+	}
+	if videoDurationSec <= 0 {
+		videoDurationSec = 1
+	}
+
+	embedCtx, cancelEmbed := context.WithTimeout(ctx, 2*time.Minute)
+	vecs, err := client.Embed(embedCtx, []string{fallbackText})
+	cancelEmbed()
+	if err != nil {
+		zap.L().Error("asr_fallback_embedding_failed",
+			zap.Uint64("video_id", videoID),
+			zap.String("task_id", taskID),
+			zap.Error(err))
+		return false, err
+	}
+	if len(vecs) == 0 || len(vecs[0]) == 0 {
+		return false, errors.New("asr fallback embedding returned empty vector")
+	}
+
+	segment := model.EduVideoSegment{
+		VideoID:        videoID,
+		SegmentIndex:   0,
+		StartTimeSec:   0,
+		EndTimeSec:     videoDurationSec,
+		ContentSummary: fallbackText,
+		Embedding:      pgvector.NewVector(vecs[0]),
+		Status:         1,
+		Deleted:        0,
+	}
+	if err := db.WithContext(ctx).Create(&segment).Error; err != nil {
+		zap.L().Error("asr_fallback_segment_create_failed",
+			zap.Uint64("video_id", videoID),
+			zap.String("task_id", taskID),
+			zap.Error(err))
+		return false, err
+	}
+
+	if stageRecorder != nil {
+		recordStageComplete(ctx, stageRecorder, StageRecord{
+			TaskID:       taskID,
+			VideoID:      videoID,
+			Stage:        "vector.refine.asr",
+			SegmentIndex: 0,
+			SegmentID:    segment.ID,
+			StartSec:     0,
+			EndSec:       videoDurationSec,
+			Text:         "fallback_title_description",
+		})
+	}
+
+	zap.L().Info("asr_fallback_applied",
+		zap.Uint64("video_id", videoID),
+		zap.String("task_id", taskID),
+		zap.Int("duration_sec", videoDurationSec),
+		zap.Int("text_len", len(fallbackText)),
+		zap.Uint64("segment_id", segment.ID))
+	return true, nil
+}

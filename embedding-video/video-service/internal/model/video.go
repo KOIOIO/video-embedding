@@ -105,6 +105,8 @@ type EduVideoResource struct {
 
 	UserID uint64 `gorm:"column:user_id;not null;default:1;index" json:"user_id"`
 
+	SourceType string `gorm:"column:source_type;type:text;not null;default:'admin_import';index" json:"source_type"`
+
 	Title       string `gorm:"column:title;size:200;not null" json:"title"`
 	Description string `gorm:"column:description;type:text" json:"description"`
 

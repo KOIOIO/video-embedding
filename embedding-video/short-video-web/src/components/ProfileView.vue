@@ -1,17 +1,25 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { fetchUserProfile, getCurrentUserId } from '../user/api.js'
+import { fetchUserVideos, formatDuration, STATUS_PUBLISHED } from '../user/videoApi.js'
 
 const props = defineProps({
   userId: { type: Number, required: true },
 })
 
-const emit = defineEmits(['back', 'edit'])
+const emit = defineEmits(['back', 'edit', 'publish'])
 
 const profile = ref(null)
 const loading = ref(true)
 const loadError = ref('')
 const avatarFailed = ref(false)
+
+const works = ref([])
+const worksTotal = ref(0)
+const worksPage = ref(1)
+const worksLoading = ref(false)
+const worksLoaded = ref(false)
+const worksPageSize = 12
 
 const isOwnProfile = computed(() => Number(props.userId) === getCurrentUserId())
 const displayName = computed(() => profile.value?.nickname || `用户${props.userId}`)
@@ -23,6 +31,7 @@ const genderLabel = computed(() => {
     default: return ''
   }
 })
+const hasMoreWorks = computed(() => works.value.length < worksTotal.value)
 
 async function loadProfile() {
   loading.value = true
@@ -33,6 +42,38 @@ async function loadProfile() {
     loadError.value = '加载用户资料失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadWorks(reset = false) {
+  if (worksLoading.value) return
+  if (reset) {
+    works.value = []
+    worksPage.value = 1
+    worksTotal.value = 0
+    worksLoaded.value = false
+  }
+  if (worksLoaded.value && !reset) return
+  worksLoading.value = true
+  try {
+    const result = await fetchUserVideos(props.userId, { page: worksPage.value, pageSize: worksPageSize })
+    works.value = works.value.concat(result.list)
+    worksTotal.value = result.total
+    if (result.list.length < worksPageSize || works.value.length >= worksTotal.value) {
+      worksLoaded.value = true
+    } else {
+      worksPage.value++
+    }
+  } catch {
+    // 静默失败，显示空状态
+  } finally {
+    worksLoading.value = false
+  }
+}
+
+function onLoadMore() {
+  if (hasMoreWorks.value && !worksLoading.value) {
+    loadWorks(false)
   }
 }
 
@@ -48,7 +89,19 @@ function onEdit() {
   emit('edit')
 }
 
-onMounted(loadProfile)
+function onPublish() {
+  emit('publish')
+}
+
+function onWorkClick(video) {
+  // 第一版简单提示，后续阶段完善播放
+  alert(`播放视频：${video.title}`)
+}
+
+onMounted(() => {
+  loadProfile()
+  loadWorks(true)
+})
 </script>
 
 <template>
@@ -110,9 +163,35 @@ onMounted(loadProfile)
         <div class="works-tabs">
           <span class="works-tab active">作品</span>
         </div>
-        <div class="works-empty">
+        <div v-if="worksLoading && works.length === 0" class="works-skeleton">
+          <div v-for="i in 6" :key="i" class="skeleton-item"></div>
+        </div>
+        <div v-else-if="works.length > 0" class="works-grid">
+          <div
+            v-for="video in works"
+            :key="video.id"
+            class="work-card"
+            @click="onWorkClick(video)"
+          >
+            <div class="work-cover">
+              <img v-if="video.cover_url" :src="video.cover_url" :alt="video.title" loading="lazy" />
+              <div v-else class="work-cover-placeholder">
+                <span>{{ displayName.slice(0, 1) }}</span>
+              </div>
+              <span class="work-duration">{{ formatDuration(video.duration) }}</span>
+            </div>
+            <p class="work-title">{{ video.title }}</p>
+          </div>
+        </div>
+        <div v-else class="works-empty">
           <div class="works-empty-icon">🎬</div>
           <p>暂无作品</p>
+          <button v-if="isOwnProfile" class="publish-first-btn" type="button" @click="onPublish">发布第一个视频</button>
+        </div>
+        <div v-if="hasMoreWorks" class="load-more-wrap">
+          <button class="load-more-btn" type="button" :disabled="worksLoading" @click="onLoadMore">
+            {{ worksLoading ? '加载中…' : '加载更多' }}
+          </button>
         </div>
       </div>
     </div>
@@ -323,6 +402,102 @@ onMounted(loadProfile)
   margin: 0;
   font-size: 14px;
 }
+
+.publish-first-btn {
+  margin-top: 8px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fe2c55, #ff5470);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.works-skeleton {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+.skeleton-item {
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+  border-radius: 4px;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+.work-card {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.work-card:active { opacity: 0.7; }
+.work-cover {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: #111;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.work-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.work-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+  color: #555;
+  font-size: 28px;
+  font-weight: 700;
+}
+.work-duration {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.work-title {
+  margin: 6px 4px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #ddd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+.load-more-btn {
+  padding: 8px 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  font-size: 13px;
+}
+.load-more-btn:disabled { opacity: 0.5; }
 
 .center {
   height: 60vh;

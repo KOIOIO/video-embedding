@@ -12,6 +12,7 @@ import (
 type Transcoder interface {
 	ConvertToHLS(ctx context.Context, inputPath string, outputDir string) error
 	GenerateCover(ctx context.Context, inputPath string, outputPath string) error
+	ProbeDurationSeconds(ctx context.Context, inputPath string) (int, error)
 }
 
 // ObjectDownloader 抽象从对象存储拉取原始视频到本地的能力。

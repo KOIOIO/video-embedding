@@ -36,6 +36,11 @@ func New(httpApp *app.App) *gin.Engine {
 	systemHandler := handler.NewSystemHandler(httpApp.Service)
 	authHandler := handler.NewAdminAuthHandler(httpApp.AdminAuth)
 	userProfileHandler := handler.NewUserProfileHandler(httpApp.UserProfileService, httpApp.Store)
+	rawURLPrefix := ""
+	if httpApp.Service != nil {
+		rawURLPrefix = httpApp.Service.Paths.RawURLPrefix
+	}
+	userPublishHandler := handler.NewUserPublishHandler(httpApp.UserPublishService, httpApp.Store, rawURLPrefix)
 	public := r.Group("")
 	adminRoutes := r.Group("")
 	adminRoutes.Use(middleware.RequireAdmin(httpApp.AdminAuth))
@@ -126,6 +131,11 @@ func New(httpApp *app.App) *gin.Engine {
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.PUT("/api/me/profile", userProfileHandler.UpdateProfile)
 	public.POST("/api/me/avatar", userProfileHandler.UploadAvatar)
+	// 用户发布视频：公开查询作品列表
+	public.GET("/api/users/:id/videos", userPublishHandler.ListUserVideos)
+	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/me/videos", userPublishHandler.PublishVideo)
+	public.GET("/api/me/videos/:id/status", userPublishHandler.GetVideoStatus)
 	adminRoutes.POST("/api/video-segments/:id/comments", commentHandler.CreateComment)
 	public.GET("/api/comments/:id/replies", commentHandler.ListReplies)
 	adminRoutes.POST("/api/comments/:id/replies", commentHandler.CreateReply)
