@@ -8,10 +8,12 @@ import FeedView from './components/FeedView.vue'
 import ProfileView from './components/ProfileView.vue'
 import ProfileEditView from './components/ProfileEditView.vue'
 import PublishView from './components/PublishView.vue'
+import FollowListView from './components/FollowListView.vue'
 
 const status = ref('checking')
 const session = ref(null)
 const profileUserId = ref(getCurrentUserId())
+const followListParams = ref({ userId: 0, type: 'following' })
 
 onMounted(async () => {
   const saved = readSession()
@@ -71,6 +73,15 @@ function onProfilePublish() {
   status.value = 'publish'
 }
 
+function onProfileShowList(params) {
+  followListParams.value = { userId: Number(params?.userId) || profileUserId.value, type: params?.type || 'following' }
+  status.value = 'follow-list'
+}
+
+function onFollowListBack() {
+  status.value = 'profile'
+}
+
 function onPublishBack() {
   // 从发布页返回时，回到之前的页面（feed 或 profile）
   status.value = 'feed'
@@ -101,6 +112,13 @@ function onPublishPublished() {
     @back="onProfileBack"
     @edit="onProfileEdit"
     @publish="onProfilePublish"
+    @show-list="onProfileShowList"
+  />
+  <FollowListView
+    v-else-if="status === 'follow-list'"
+    :user-id="followListParams.userId"
+    :type="followListParams.type"
+    @back="onFollowListBack"
   />
   <ProfileEditView
     v-else-if="status === 'profile-edit'"

@@ -1,18 +1,20 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { fetchUserProfile, getCurrentUserId } from '../user/api.js'
+import { fetchRelation, fetchUserProfile, getCurrentUserId } from '../user/api.js'
 import { fetchUserVideos, formatDuration, STATUS_PUBLISHED } from '../user/videoApi.js'
+import FollowButton from './FollowButton.vue'
 
 const props = defineProps({
   userId: { type: Number, required: true },
 })
 
-const emit = defineEmits(['back', 'edit', 'publish'])
+const emit = defineEmits(['back', 'edit', 'publish', 'show-list'])
 
 const profile = ref(null)
 const loading = ref(true)
 const loadError = ref('')
 const avatarFailed = ref(false)
+const relation = ref('none')
 
 const works = ref([])
 const worksTotal = ref(0)
@@ -32,6 +34,48 @@ const genderLabel = computed(() => {
   }
 })
 const hasMoreWorks = computed(() => works.value.length < worksTotal.value)
+
+async function loadProfile() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    profile.value = await fetchUserProfile(props.userId)
+  } catch {
+    loadError.value = '加载用户资料失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadRelation() {
+  if (isOwnProfile.value) {
+    relation.value = 'none'
+    return
+  }
+  try {
+    relation.value = await fetchRelation(props.userId)
+  } catch {
+    relation.value = 'none'
+  }
+}
+
+function onRelationChange(newRelation) {
+  relation.value = newRelation
+  if (!profile.value) return
+  if (newRelation === 'following') {
+    profile.value.follow_count = (profile.value.follow_count || 0) + 1
+  } else if (newRelation === 'none') {
+    profile.value.follow_count = Math.max(0, (profile.value.follow_count || 0) - 1)
+  }
+}
+
+function onShowFollowing() {
+  emit('show-list', { type: 'following', userId: props.userId })
+}
+
+function onShowFollowers() {
+  emit('show-list', { type: 'followers', userId: props.userId })
+}
 
 async function loadProfile() {
   loading.value = true
@@ -100,6 +144,7 @@ function onWorkClick(video) {
 
 onMounted(() => {
   loadProfile()
+  loadRelation()
   loadWorks(true)
 })
 </script>
@@ -145,18 +190,24 @@ onMounted(() => {
       </div>
 
       <div class="stats">
-        <div class="stat">
+        <div class="stat" role="button" tabindex="0" @click="onShowFollowing" @keydown.enter="onShowFollowing">
           <span class="stat-num">{{ profile.follow_count }}</span>
           <span class="stat-label">关注</span>
         </div>
-        <div class="stat">
+        <div class="stat" role="button" tabindex="0" @click="onShowFollowers" @keydown.enter="onShowFollowers">
           <span class="stat-num">{{ profile.fans_count }}</span>
           <span class="stat-label">粉丝</span>
         </div>
       </div>
 
-      <div v-if="isOwnProfile" class="actions">
-        <button class="edit-btn" type="button" @click="onEdit">编辑资料</button>
+      <div class="actions">
+        <FollowButton
+          v-if="!isOwnProfile"
+          :user-id="userId"
+          :relation="relation"
+          @change="onRelationChange"
+        />
+        <button v-else class="edit-btn" type="button" @click="onEdit">编辑资料</button>
       </div>
 
       <div class="works-section">
@@ -328,6 +379,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.stat:hover {
+  opacity: 0.7;
 }
 
 .stat-num {

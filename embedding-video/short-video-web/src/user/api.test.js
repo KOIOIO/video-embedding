@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchFollowers,
+  fetchFollowing,
+  fetchRelation,
   fetchUserProfile,
+  followUser,
   getCurrentUserId,
   normalizeUserProfile,
   setCurrentUserId,
+  unfollowUser,
   updateMyProfile,
   uploadAvatar,
 } from './api.js'
@@ -144,5 +149,85 @@ describe('user api', () => {
 
   it('uploadAvatar throws when no file provided', async () => {
     await expect(uploadAvatar(null)).rejects.toThrow('avatar file is required')
+  })
+
+  it('followUser sends POST with X-User-ID header', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/users/2002/follow')
+      expect(init.method).toBe('POST')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({ status: 'following' })
+    })
+    const result = await followUser(2002, fetchImpl)
+    expect(result).toBe('following')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('unfollowUser sends DELETE with X-User-ID header', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/users/2002/follow')
+      expect(init.method).toBe('DELETE')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({ status: 'none' })
+    })
+    const result = await unfollowUser(2002, fetchImpl)
+    expect(result).toBe('none')
+  })
+
+  it('fetchFollowing sends GET and normalizes list result', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      expect(url).toContain('/api/users/1001/following')
+      expect(url).toContain('page=1')
+      expect(url).toContain('page_size=20')
+      return okResponse({
+        list: [
+          { id: '1', follower_id: '1001', following_id: '2002', nickname: '用户2002', avatar_url: '/a.jpg', bio: 'hi' },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      })
+    })
+    const result = await fetchFollowing(1001, 1, 20, fetchImpl)
+    expect(result.total).toBe(1)
+    expect(result.list).toHaveLength(1)
+    expect(result.list[0].following_id).toBe(2002)
+    expect(result.list[0].nickname).toBe('用户2002')
+  })
+
+  it('fetchFollowers sends GET and normalizes list result', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      expect(url).toContain('/api/users/1001/followers')
+      return okResponse({
+        list: [
+          { id: '1', follower_id: '2002', following_id: '1001', nickname: '用户2002', avatar_url: '', bio: '' },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      })
+    })
+    const result = await fetchFollowers(1001, 1, 20, fetchImpl)
+    expect(result.list[0].follower_id).toBe(2002)
+    expect(result.total).toBe(1)
+  })
+
+  it('fetchRelation sends GET with X-User-ID and returns relation', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/users/2002/relation')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({ relation: 'mutual' })
+    })
+    const result = await fetchRelation(2002, fetchImpl)
+    expect(result).toBe('mutual')
+  })
+
+  it('fetchRelation defaults to none when response missing', async () => {
+    const fetchImpl = vi.fn(async () => okResponse({}))
+    const result = await fetchRelation(2002, fetchImpl)
+    expect(result).toBe('none')
   })
 })

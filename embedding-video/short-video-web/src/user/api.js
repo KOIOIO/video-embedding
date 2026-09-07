@@ -89,3 +89,65 @@ export async function uploadAvatar(file, fetchImpl = fetch) {
     avatar_url: String(data?.avatar_url || ''),
   }
 }
+
+export async function followUser(userId, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const data = await requestJson(`/api/users/${encodeURIComponent(String(id))}/follow`, {
+    method: 'POST',
+    headers: authHeaders(),
+  }, fetchImpl)
+  return String(data?.status || '')
+}
+
+export async function unfollowUser(userId, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const data = await requestJson(`/api/users/${encodeURIComponent(String(id))}/follow`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }, fetchImpl)
+  return String(data?.status || '')
+}
+
+export async function fetchFollowing(userId, page = 1, pageSize = 20, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  const data = await requestJson(`/api/users/${encodeURIComponent(String(id))}/following?${params.toString()}`, {}, fetchImpl)
+  return {
+    list: Array.isArray(data?.list) ? data.list.map(normalizeFollowItem) : [],
+    total: Number(data?.total || 0) || 0,
+    page: Number(data?.page || page) || page,
+    page_size: Number(data?.page_size || pageSize) || pageSize,
+  }
+}
+
+export async function fetchFollowers(userId, page = 1, pageSize = 20, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  const data = await requestJson(`/api/users/${encodeURIComponent(String(id))}/followers?${params.toString()}`, {}, fetchImpl)
+  return {
+    list: Array.isArray(data?.list) ? data.list.map(normalizeFollowItem) : [],
+    total: Number(data?.total || 0) || 0,
+    page: Number(data?.page || page) || page,
+    page_size: Number(data?.page_size || pageSize) || pageSize,
+  }
+}
+
+export async function fetchRelation(userId, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const data = await requestJson(`/api/users/${encodeURIComponent(String(id))}/relation`, {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return String(data?.relation || 'none')
+}
+
+function normalizeFollowItem(item) {
+  return {
+    id: Number(item?.id || 0) || 0,
+    follower_id: Number(item?.follower_id || 0) || 0,
+    following_id: Number(item?.following_id || 0) || 0,
+    create_time: item?.create_time || '',
+    nickname: String(item?.nickname || ''),
+    avatar_url: String(item?.avatar_url || ''),
+    bio: String(item?.bio || ''),
+  }
+}

@@ -36,6 +36,7 @@ func New(httpApp *app.App) *gin.Engine {
 	systemHandler := handler.NewSystemHandler(httpApp.Service)
 	authHandler := handler.NewAdminAuthHandler(httpApp.AdminAuth)
 	userProfileHandler := handler.NewUserProfileHandler(httpApp.UserProfileService, httpApp.Store)
+	userFollowHandler := handler.NewUserFollowHandler(httpApp.UserFollowService)
 	rawURLPrefix := ""
 	if httpApp.Service != nil {
 		rawURLPrefix = httpApp.Service.Paths.RawURLPrefix
@@ -133,6 +134,13 @@ func New(httpApp *app.App) *gin.Engine {
 	public.POST("/api/me/avatar", userProfileHandler.UploadAvatar)
 	// 用户发布视频：公开查询作品列表
 	public.GET("/api/users/:id/videos", userPublishHandler.ListUserVideos)
+	// 用户关注系统：公开查询列表与关系
+	public.GET("/api/users/:id/following", userFollowHandler.ListFollowing)
+	public.GET("/api/users/:id/followers", userFollowHandler.ListFollowers)
+	public.GET("/api/users/:id/relation", userFollowHandler.GetRelation)
+	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/users/:id/follow", userFollowHandler.Follow)
+	public.DELETE("/api/users/:id/follow", userFollowHandler.Unfollow)
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.POST("/api/me/videos", userPublishHandler.PublishVideo)
 	public.GET("/api/me/videos/:id/status", userPublishHandler.GetVideoStatus)

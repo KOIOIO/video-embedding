@@ -20,6 +20,11 @@ func NewGormUserProfileRepository(db *gorm.DB) *GormUserProfileRepository {
 	return &GormUserProfileRepository{db: db}
 }
 
+// WithTx 返回绑定到指定事务的仓储实例，用于事务内操作。
+func (r *GormUserProfileRepository) WithTx(tx *gorm.DB) *GormUserProfileRepository {
+	return &GormUserProfileRepository{db: tx}
+}
+
 // GetByUserID 按用户 ID 查询未删除的资料记录，查不到返回 (nil, nil)。
 func (r *GormUserProfileRepository) GetByUserID(userID uint64) (*model.EduUserProfile, error) {
 	var m model.EduUserProfile
@@ -65,22 +70,40 @@ func (r *GormUserProfileRepository) UpdateAvatar(userID uint64, avatarURL string
 	})
 }
 
-// IncrementFollowCount 原子增减关注数，delta 可为负数。
+// IncrementFollowCount 原子增减关注数，delta 可为负数，计数不会低于 0。
 func (r *GormUserProfileRepository) IncrementFollowCount(userID uint64, delta int) error {
 	if delta == 0 {
 		return nil
 	}
+	var expr string
+	var args []interface{}
+	if delta < 0 {
+		expr = "CASE WHEN follow_count + ? < 0 THEN 0 ELSE follow_count + ? END"
+		args = []interface{}{delta, delta}
+	} else {
+		expr = "follow_count + ?"
+		args = []interface{}{delta}
+	}
 	return r.db.Model(&model.EduUserProfile{}).
 		Where("user_id = ? AND deleted = ?", userID, 0).
-		UpdateColumn("follow_count", gorm.Expr("follow_count + ?", delta)).Error
+		UpdateColumn("follow_count", gorm.Expr(expr, args...)).Error
 }
 
-// IncrementFansCount 原子增减粉丝数，delta 可为负数。
+// IncrementFansCount 原子增减粉丝数，delta 可为负数，计数不会低于 0。
 func (r *GormUserProfileRepository) IncrementFansCount(userID uint64, delta int) error {
 	if delta == 0 {
 		return nil
 	}
+	var expr string
+	var args []interface{}
+	if delta < 0 {
+		expr = "CASE WHEN fans_count + ? < 0 THEN 0 ELSE fans_count + ? END"
+		args = []interface{}{delta, delta}
+	} else {
+		expr = "fans_count + ?"
+		args = []interface{}{delta}
+	}
 	return r.db.Model(&model.EduUserProfile{}).
 		Where("user_id = ? AND deleted = ?", userID, 0).
-		UpdateColumn("fans_count", gorm.Expr("fans_count + ?", delta)).Error
+		UpdateColumn("fans_count", gorm.Expr(expr, args...)).Error
 }
