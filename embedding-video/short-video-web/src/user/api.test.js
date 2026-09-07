@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchConversations,
   fetchFollowers,
   fetchFollowing,
+  fetchMessages,
   fetchRelation,
   fetchUserProfile,
   followUser,
+  formatMessageTime,
+  getCachedUserProfile,
   getCurrentUserId,
+  markAsRead,
   normalizeUserProfile,
+  prefetchUserProfiles,
+  sendMessage,
   setCurrentUserId,
   unfollowUser,
   updateMyProfile,
@@ -229,5 +236,121 @@ describe('user api', () => {
     const fetchImpl = vi.fn(async () => okResponse({}))
     const result = await fetchRelation(2002, fetchImpl)
     expect(result).toBe('none')
+  })
+
+  // --- 私信 API 测试 ---
+
+  it('sendMessage sends POST with X-User-ID and content body', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/messages/2002')
+      expect(init.method).toBe('POST')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      expect(init.headers.get('Content-Type')).toBe('application/json')
+      const body = JSON.parse(init.body)
+      expect(body.content).toBe('hello')
+      return okResponse({ message: { id: 1, sender_id: 1001, receiver_id: 2002, content: 'hello', is_read: false, create_time: '2026-01-01T10:00:00Z' } })
+    })
+    const result = await sendMessage(2002, 'hello', fetchImpl)
+    expect(result.id).toBe(1)
+    expect(result.sender_id).toBe(1001)
+    expect(result.content).toBe('hello')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetchConversations sends GET with X-User-ID and normalizes list', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/messages/conversations')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({
+        list: [
+          { conversation_id: '1001_2002', other_user_id: 2002, last_message: 'hi', last_message_time: '2026-01-01T10:00:00Z', unread_count: 3 },
+        ],
+      })
+    })
+    const result = await fetchConversations(fetchImpl)
+    expect(result).toHaveLength(1)
+    expect(result[0].other_user_id).toBe(2002)
+    expect(result[0].last_message).toBe('hi')
+    expect(result[0].unread_count).toBe(3)
+  })
+
+  it('fetchMessages sends GET with pagination and normalizes list', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url) => {
+      expect(url).toContain('/api/messages/2002')
+      expect(url).toContain('page=1')
+      expect(url).toContain('page_size=20')
+      return okResponse({
+        list: [
+          { id: 1, sender_id: 2002, receiver_id: 1001, content: 'hello', is_read: false, create_time: '2026-01-01T10:00:00Z' },
+        ],
+        page: 1,
+        page_size: 20,
+      })
+    })
+    const result = await fetchMessages(2002, 1, 20, fetchImpl)
+    expect(result.list).toHaveLength(1)
+    expect(result.list[0].content).toBe('hello')
+    expect(result.page).toBe(1)
+    expect(result.page_size).toBe(20)
+  })
+
+  it('markAsRead sends POST to read endpoint', async () => {
+    setCurrentUserId(1001)
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe('/api/messages/2002/read')
+      expect(init.method).toBe('POST')
+      expect(init.headers.get('X-User-ID')).toBe('1001')
+      return okResponse({ success: true })
+    })
+    const result = await markAsRead(2002, fetchImpl)
+    expect(result).toBe(true)
+  })
+
+  it('formatMessageTime formats today as HH:MM', () => {
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T14:30:00`
+    const result = formatMessageTime(todayStr)
+    expect(result).toBe('14:30')
+  })
+
+  it('formatMessageTime returns empty for invalid input', () => {
+    expect(formatMessageTime('')).toBe('')
+    expect(formatMessageTime(null)).toBe('')
+    expect(formatMessageTime('invalid-date')).toBe('')
+  })
+
+  it('getCachedUserProfile returns null for uncached user', () => {
+    expect(getCachedUserProfile(99999)).toBeNull()
+    expect(getCachedUserProfile(0)).toBeNull()
+  })
+
+  it('prefetchUserProfiles fetches and caches profiles', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      const userId = url.match(/\/api\/users\/(\d+)\/profile/)[1]
+      return okResponse({ user_id: Number(userId), nickname: `用户${userId}` })
+    })
+    await prefetchUserProfiles([5001, 5002], fetchImpl)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    const p1 = getCachedUserProfile(5001)
+    expect(p1).not.toBeNull()
+    expect(p1.nickname).toBe('用户5001')
+    const p2 = getCachedUserProfile(5002)
+    expect(p2).not.toBeNull()
+    expect(p2.nickname).toBe('用户5002')
+  })
+
+  it('prefetchUserProfiles does not refetch already cached profiles', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      const userId = url.match(/\/api\/users\/(\d+)\/profile/)[1]
+      return okResponse({ user_id: Number(userId), nickname: `用户${userId}` })
+    })
+    // 5001 已在上一个测试中缓存
+    await prefetchUserProfiles([5001, 6001], fetchImpl)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(getCachedUserProfile(6001)).not.toBeNull()
   })
 })

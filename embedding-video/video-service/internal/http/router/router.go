@@ -37,6 +37,7 @@ func New(httpApp *app.App) *gin.Engine {
 	authHandler := handler.NewAdminAuthHandler(httpApp.AdminAuth)
 	userProfileHandler := handler.NewUserProfileHandler(httpApp.UserProfileService, httpApp.Store)
 	userFollowHandler := handler.NewUserFollowHandler(httpApp.UserFollowService)
+	userMessageHandler := handler.NewUserMessageHandler(httpApp.UserMessageService)
 	rawURLPrefix := ""
 	if httpApp.Service != nil {
 		rawURLPrefix = httpApp.Service.Paths.RawURLPrefix
@@ -141,6 +142,11 @@ func New(httpApp *app.App) *gin.Engine {
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.POST("/api/users/:id/follow", userFollowHandler.Follow)
 	public.DELETE("/api/users/:id/follow", userFollowHandler.Unfollow)
+	// 用户私信系统：TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/messages/:userId", userMessageHandler.SendMessage)
+	public.GET("/api/messages/conversations", userMessageHandler.GetConversations)
+	public.GET("/api/messages/:userId", userMessageHandler.GetMessages)
+	public.POST("/api/messages/:userId/read", userMessageHandler.MarkAsRead)
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.POST("/api/me/videos", userPublishHandler.PublishVideo)
 	public.GET("/api/me/videos/:id/status", userPublishHandler.GetVideoStatus)

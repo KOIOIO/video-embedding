@@ -170,6 +170,10 @@ function onPublish() {
   emit('navigate', { view: 'publish' })
 }
 
+function onMessages() {
+  emit('navigate', { view: 'messages' })
+}
+
 bootstrap()
 onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
@@ -215,6 +219,9 @@ onBeforeUnmount(() => {
           <span class="tab active">推荐</span>
         </div>
         <div class="userbox">
+          <button class="msg-btn" type="button" aria-label="消息" @click="onMessages">
+            <span class="msg-icon">✉</span>
+          </button>
           <button class="my-profile" type="button" aria-label="我的主页" @click="onMyProfile">
             <div class="avatar">{{ avatarText }}</div>
           </button>
@@ -412,6 +419,26 @@ onBeforeUnmount(() => {
 
 .logout:hover {
   background: rgba(254, 44, 85, 0.75);
+}
+
+.msg-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.msg-btn:hover {
+  background: rgba(254, 44, 85, 0.6);
+  transform: scale(1.08);
+}
+
+.msg-icon {
+  font-size: 15px;
+  color: #fff;
 }
 
 .up-hint {

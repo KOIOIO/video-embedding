@@ -9,11 +9,14 @@ import ProfileView from './components/ProfileView.vue'
 import ProfileEditView from './components/ProfileEditView.vue'
 import PublishView from './components/PublishView.vue'
 import FollowListView from './components/FollowListView.vue'
+import MessageListView from './components/MessageListView.vue'
+import ChatView from './components/ChatView.vue'
 
 const status = ref('checking')
 const session = ref(null)
 const profileUserId = ref(getCurrentUserId())
 const followListParams = ref({ userId: 0, type: 'following' })
+const chatUserId = ref(0)
 
 onMounted(async () => {
   const saved = readSession()
@@ -50,6 +53,13 @@ function onNavigate(target) {
     status.value = 'profile-edit'
   } else if (target?.view === 'publish') {
     status.value = 'publish'
+  } else if (target?.view === 'messages') {
+    status.value = 'messages'
+  } else if (target?.view === 'chat') {
+    chatUserId.value = Number(target.userId) || 0
+    if (chatUserId.value > 0) {
+      status.value = 'chat'
+    }
   }
 }
 
@@ -92,6 +102,21 @@ function onPublishPublished() {
   profileUserId.value = getCurrentUserId()
   status.value = 'profile'
 }
+
+function onMessagesBack() {
+  status.value = 'feed'
+}
+
+function onOpenChat(payload) {
+  chatUserId.value = Number(payload?.userId) || 0
+  if (chatUserId.value > 0) {
+    status.value = 'chat'
+  }
+}
+
+function onChatBack() {
+  status.value = 'messages'
+}
 </script>
 
 <template>
@@ -113,6 +138,7 @@ function onPublishPublished() {
     @edit="onProfileEdit"
     @publish="onProfilePublish"
     @show-list="onProfileShowList"
+    @navigate="onNavigate"
   />
   <FollowListView
     v-else-if="status === 'follow-list'"
@@ -129,6 +155,16 @@ function onPublishPublished() {
     v-else-if="status === 'publish'"
     @back="onPublishBack"
     @published="onPublishPublished"
+  />
+  <MessageListView
+    v-else-if="status === 'messages'"
+    @back="onMessagesBack"
+    @open-chat="onOpenChat"
+  />
+  <ChatView
+    v-else-if="status === 'chat'"
+    :other-user-id="chatUserId"
+    @back="onChatBack"
   />
 </template>
 

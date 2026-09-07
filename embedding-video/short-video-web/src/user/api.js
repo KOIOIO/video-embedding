@@ -151,3 +151,111 @@ function normalizeFollowItem(item) {
     bio: String(item?.bio || ''),
   }
 }
+
+// --- 用户资料缓存 ---
+
+const profileCache = new Map()
+
+export function getCachedUserProfile(userId) {
+  const id = Number(userId) || 0
+  if (!id) return null
+  return profileCache.get(id) || null
+}
+
+export async function prefetchUserProfiles(userIds, fetchImpl = fetch) {
+  const ids = (Array.isArray(userIds) ? userIds : [userIds])
+    .map((id) => Number(id) || 0)
+    .filter((id) => id > 0 && !profileCache.has(id))
+  const uniqueIds = [...new Set(ids)]
+  await Promise.all(uniqueIds.map(async (id) => {
+    try {
+      const profile = await fetchUserProfile(id, fetchImpl)
+      profileCache.set(id, profile)
+    } catch {
+      // 单个失败不影响其他
+    }
+  }))
+}
+
+// --- 私信 API ---
+
+export async function sendMessage(userId, content, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const data = await requestJson(`/api/messages/${encodeURIComponent(String(id))}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ content: String(content || '') }),
+  }, fetchImpl)
+  return normalizeMessage(data?.message || data)
+}
+
+export async function fetchConversations(fetchImpl = fetch) {
+  const data = await requestJson('/api/messages/conversations', {
+    headers: authHeaders(),
+  }, fetchImpl)
+  const list = Array.isArray(data?.list) ? data.list : []
+  return list.map(normalizeConversation)
+}
+
+export async function fetchMessages(userId, page = 1, pageSize = 20, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  const data = await requestJson(`/api/messages/${encodeURIComponent(String(id))}?${params.toString()}`, {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return {
+    list: Array.isArray(data?.list) ? data.list.map(normalizeMessage) : [],
+    page: Number(data?.page || page) || page,
+    page_size: Number(data?.page_size || pageSize) || pageSize,
+  }
+}
+
+export async function markAsRead(userId, fetchImpl = fetch) {
+  const id = Number(userId) || 0
+  const data = await requestJson(`/api/messages/${encodeURIComponent(String(id))}/read`, {
+    method: 'POST',
+    headers: authHeaders(),
+  }, fetchImpl)
+  return Boolean(data?.success)
+}
+
+// --- 私信数据规范化 ---
+
+function normalizeMessage(item) {
+  return {
+    id: Number(item?.id || 0) || 0,
+    sender_id: Number(item?.sender_id || 0) || 0,
+    receiver_id: Number(item?.receiver_id || 0) || 0,
+    conversation_id: String(item?.conversation_id || ''),
+    content: String(item?.content || ''),
+    is_read: Boolean(item?.is_read),
+    create_time: item?.create_time || '',
+  }
+}
+
+function normalizeConversation(item) {
+  return {
+    conversation_id: String(item?.conversation_id || ''),
+    other_user_id: Number(item?.other_user_id || 0) || 0,
+    last_message: String(item?.last_message || ''),
+    last_message_time: item?.last_message_time || '',
+    unread_count: Number(item?.unread_count || 0) || 0,
+  }
+}
+
+// --- 时间格式化 ---
+
+export function formatMessageTime(timestamp) {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const timeStr = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const isToday = date.toDateString() === now.toDateString()
+  if (isToday) return timeStr
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) return `昨天 ${timeStr}`
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${timeStr}`
+}

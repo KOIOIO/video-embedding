@@ -8,7 +8,7 @@ const props = defineProps({
   userId: { type: Number, required: true },
 })
 
-const emit = defineEmits(['back', 'edit', 'publish', 'show-list'])
+const emit = defineEmits(['back', 'edit', 'publish', 'show-list', 'navigate'])
 
 const profile = ref(null)
 const loading = ref(true)
@@ -67,6 +67,10 @@ function onRelationChange(newRelation) {
   } else if (newRelation === 'none') {
     profile.value.follow_count = Math.max(0, (profile.value.follow_count || 0) - 1)
   }
+}
+
+function onMessage() {
+  emit('navigate', { view: 'chat', userId: props.userId })
 }
 
 function onShowFollowing() {
@@ -207,6 +211,7 @@ onMounted(() => {
           :relation="relation"
           @change="onRelationChange"
         />
+        <button v-if="!isOwnProfile" class="message-btn" type="button" @click="onMessage">发消息</button>
         <button v-else class="edit-btn" type="button" @click="onEdit">编辑资料</button>
       </div>
 
@@ -399,6 +404,26 @@ onMounted(() => {
 
 .actions {
   padding: 16px 0;
+  display: flex;
+  gap: 10px;
+}
+
+.actions > * {
+  flex: 1;
+}
+
+.message-btn {
+  padding: 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.message-btn:hover {
+  background: rgba(254, 44, 85, 0.7);
 }
 
 .edit-btn {
