@@ -132,6 +132,7 @@ func New(httpApp *app.App) *gin.Engine {
 	// 用户资料：公开查询
 	public.GET("/api/users/:id/profile", userProfileHandler.GetProfile)
 	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.GET("/api/me", userProfileHandler.GetMe)
 	public.PUT("/api/me/profile", userProfileHandler.UpdateProfile)
 	public.POST("/api/me/avatar", userProfileHandler.UploadAvatar)
 	// 用户发布视频：公开查询作品列表
@@ -146,6 +147,7 @@ func New(httpApp *app.App) *gin.Engine {
 	// 用户私信系统：TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
 	public.POST("/api/messages/:userId", userMessageHandler.SendMessage)
 	public.GET("/api/messages/conversations", userMessageHandler.GetConversations)
+	public.GET("/api/messages/unread-count", userMessageHandler.GetUnreadCount)
 	public.GET("/api/messages/:userId", userMessageHandler.GetMessages)
 	public.POST("/api/messages/:userId/read", userMessageHandler.MarkAsRead)
 	// 用户主页访问统计：TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler

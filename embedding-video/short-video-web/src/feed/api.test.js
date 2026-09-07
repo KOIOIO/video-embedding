@@ -24,6 +24,7 @@ describe('feed api', () => {
       play_url: '/videos/hls/3/master.m3u8',
       user_reacted: true,
       user_reaction_type: 'like',
+      author_id: '42',
     })
     expect(item).toEqual({
       video_id: 3,
@@ -34,6 +35,7 @@ describe('feed api', () => {
       cover_url: '/covers/3.jpg',
       play_url: '/videos/hls/3/master.m3u8',
       user_reaction_type: 'like',
+      author_id: 42,
     })
     expect(normalizeFeedItem({}).play_url).toBe('')
   })

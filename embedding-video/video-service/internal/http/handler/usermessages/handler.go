@@ -93,6 +93,29 @@ func (h *Handler) GetConversations(c *gin.Context) {
 	writeSuccess(c, gin.H{"list": list})
 }
 
+// GetUnreadCount godoc
+// @Summary 获取未读消息总数
+// @Tags 用户私信
+// @Produce json
+// @Param X-User-ID header string true "用户ID（TODO: replace with real user authentication）"
+// @Success 200 {object} dto.SuccessResponse[map[string]int64]
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/messages/unread-count [get]
+func (h *Handler) GetUnreadCount(c *gin.Context) {
+	// TODO: replace with real user authentication
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	count, err := h.service.GetTotalUnread(c.Request.Context(), userID)
+	if err != nil {
+		httperrors.Write(c, httperrors.Internal("get unread count failed"))
+		return
+	}
+	writeSuccess(c, gin.H{"unread_count": count})
+}
+
 // GetMessages godoc
 // @Summary 获取会话消息列表
 // @Tags 用户私信

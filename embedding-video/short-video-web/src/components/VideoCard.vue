@@ -9,6 +9,7 @@ import {
   submitReaction,
 } from '../feed/api.js'
 import { fetchCommentCounts } from '../feed/commentApi.js'
+import { fetchRelation, followUser, getCurrentUserId, unfollowUser } from '../user/api.js'
 import CommentsPanel from './CommentsPanel.vue'
 
 const props = defineProps({
@@ -16,7 +17,7 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   userId: { type: Number, default: 0 },
 })
-const emit = defineEmits(['ended'])
+const emit = defineEmits(['ended', 'navigate'])
 
 const videoEl = ref(null)
 const coverVisible = ref(true)
@@ -32,6 +33,17 @@ const burstVisible = ref(false)
 const floatHearts = ref([])
 const commentCount = ref(0)
 const showComments = ref(false)
+const authorRelation = ref('none')
+const authorBusy = ref(false)
+const shareVisible = ref(false)
+
+const authorId = computed(() => Number(props.item?.author_id || 0) || 0)
+const isOwnVideo = computed(() => authorId.value > 0 && authorId.value === getCurrentUserId())
+const authorAvatarText = computed(() => {
+  // 用 author_id 生成一个字母作为默认头像
+  const id = authorId.value || 1
+  return String.fromCharCode(65 + (id % 26))
+})
 
 const isHlsSrc = computed(() => String(props.item.play_url || '').toLowerCase().includes('.m3u8'))
 const segmentMode = computed(() => {
@@ -275,6 +287,45 @@ function openComments() {
   if (video) video.pause()
 }
 
+async function loadAuthorRelation() {
+  if (!authorId.value || isOwnVideo.value) return
+  try {
+    authorRelation.value = await fetchRelation(authorId.value)
+  } catch {
+    authorRelation.value = 'none'
+  }
+}
+
+async function toggleFollow() {
+  if (authorBusy.value || !authorId.value || isOwnVideo.value) return
+  authorBusy.value = true
+  try {
+    if (authorRelation.value === 'none') {
+      await followUser(authorId.value)
+      authorRelation.value = 'following'
+    } else {
+      await unfollowUser(authorId.value)
+      authorRelation.value = 'none'
+    }
+  } catch {
+    // 静默失败
+  } finally {
+    authorBusy.value = false
+  }
+}
+
+function onAuthorClick() {
+  if (!authorId.value) return
+  emit('navigate', { view: 'profile', userId: authorId.value })
+}
+
+function onShare() {
+  shareVisible.value = true
+  setTimeout(() => {
+    shareVisible.value = false
+  }, 1800)
+}
+
 watch(() => props.active, (active) => {
   if (active) {
     setupPlayer()
@@ -290,6 +341,7 @@ watch(() => props.item.play_url, () => {
 onMounted(() => {
   loadReactionCounts()
   loadCommentCount()
+  loadAuthorRelation()
   if (props.active) setupPlayer()
 })
 onBeforeUnmount(() => {
@@ -344,12 +396,22 @@ onBeforeUnmount(() => {
     </div>
 
     <aside class="rail">
-      <button class="rail-btn" type="button" @click.stop="openComments">
-        <span class="rail-icon">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.6A9.4 9.4 0 0 0 2.6 12c0 3.8 2.3 7.2 5.9 8.7.4.1.6-.2.6-.4v-1.5c-2.4.5-2.9-1.2-2.9-1.2-.4-1-1-1.3-1-1.3-.8-.5.1-.5.1-.5.9.1 1.3.9 1.3.9.8 1.3 2 1 2.5.7.1-.5.3-.9.6-1.1-2-.2-4-.9-4-4.2 0-.9.3-1.7.9-2.3-.1-.2-.4-1.1.1-2.3 0 0 .7-.2 2.4.9a8.2 8.2 0 0 1 4.3 0c1.7-1.1 2.4-.9 2.4-.9.5 1.2.2 2.1.1 2.3.6.6.9 1.4.9 2.3 0 3.3-2 4-4 4.2.3.3.5.7.5 1.2v1.7c0 .2.2.5.6.4a9.4 9.4 0 0 0 5.9-8.7A9.4 9.4 0 0 0 12 2.6Z"/></svg>
-        </span>
-        <span class="rail-count">{{ commentCount }}</span>
-      </button>
+      <!-- 作者头像 -->
+      <div v-if="authorId" class="rail-author">
+        <button class="author-avatar-btn" type="button" @click.stop="onAuthorClick">
+          <div class="author-avatar">{{ authorAvatarText }}</div>
+        </button>
+        <button
+          v-if="!isOwnVideo"
+          class="author-follow-btn"
+          :class="{ followed: authorRelation !== 'none', busy: authorBusy }"
+          type="button"
+          @click.stop="toggleFollow"
+        >
+          <span v-if="authorRelation === 'none'">＋</span>
+          <span v-else>✓</span>
+        </button>
+      </div>
 
       <button class="rail-btn" type="button" @click.stop="react(REACTION_LIKE)">
         <span class="rail-icon" :class="{ active: activeReaction === REACTION_LIKE }">
@@ -367,25 +429,24 @@ onBeforeUnmount(() => {
         </span>
       </button>
 
-      <button class="rail-btn" type="button" @click.stop="react(REACTION_DOUBLE_LIKE)">
-        <span class="rail-icon" :class="{ active: activeReaction === REACTION_DOUBLE_LIKE }">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path transform="translate(1.8 1.2) scale(0.7)" d="M12 21s-7.5-4.7-10-9.3C.6 8.5 2.5 4.6 6.1 4.6c2 0 3.4 1 4.2 2.2.3.5 1.1.5 1.4 0 .8-1.2 2.2-2.2 4.2-2.2 3.6 0 5.5 3.9 4.1 7.1C19.5 16.3 12 21 12 21Z"/>
-            <path transform="translate(-1.8 0.4) scale(0.7)" d="M12 21s-7.5-4.7-10-9.3C.6 8.5 2.5 4.6 6.1 4.6c2 0 3.4 1 4.2 2.2.3.5 1.1.5 1.4 0 .8-1.2 2.2-2.2 4.2-2.2 3.6 0 5.5 3.9 4.1 7.1C19.5 16.3 12 21 12 21Z"/>
-          </svg>
+      <button class="rail-btn" type="button" @click.stop="openComments">
+        <span class="rail-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.6A9.4 9.4 0 0 0 2.6 12c0 3.8 2.3 7.2 5.9 8.7.4.1.6-.2.6-.4v-1.5c-2.4.5-2.9-1.2-2.9-1.2-.4-1-1-1.3-1-1.3-.8-.5.1-.5.1-.5.9.1 1.3.9 1.3.9.8 1.3 2 1 2.5.7.1-.5.3-.9.6-1.1-2-.2-4-.9-4-4.2 0-.9.3-1.7.9-2.3-.1-.2-.4-1.1.1-2.3 0 0 .7-.2 2.4.9a8.2 8.2 0 0 1 4.3 0c1.7-1.1 2.4-.9 2.4-.9.5 1.2.2 2.1.1 2.3.6.6.9 1.4.9 2.3 0 3.3-2 4-4 4.2.3.3.5.7.5 1.2v1.7c0 .2.2.5.6.4a9.4 9.4 0 0 0 5.9-8.7A9.4 9.4 0 0 0 12 2.6Z"/></svg>
         </span>
-        <span class="rail-count" :class="{ active: activeReaction === REACTION_DOUBLE_LIKE }">{{ doubleLikeCount }}</span>
+        <span class="rail-count">{{ commentCount }}</span>
       </button>
 
-      <button class="rail-btn" type="button" @click.stop="react(REACTION_DISLIKE)">
-        <span class="rail-icon" :class="{ active: activeReaction === REACTION_DISLIKE }">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path transform="rotate(180 12 12)" d="M7 10v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1Zm13.8.8c-.3-1.2-1.4-2-2.7-2h-3.7a.3.3 0 0 1-.3-.4l.7-3.6a3 3 0 0 0-2.9-3.4 2 2 0 0 0-1.8 1.2l-2.5 5.2a3 3 0 0 0-.3 1.2v6.5a3 3 0 0 0 3 3h6.4a3 3 0 0 0 2.9-2.4l1.2-4.3v-1Z"/>
-          </svg>
+      <button class="rail-btn" type="button" @click.stop="onShare">
+        <span class="rail-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11Z"/></svg>
         </span>
-        <span class="rail-count" :class="{ active: activeReaction === REACTION_DISLIKE }">踩</span>
+        <span class="rail-count">分享</span>
       </button>
     </aside>
+
+    <transition name="share-toast">
+      <div v-if="shareVisible" class="share-toast">链接已复制</div>
+    </transition>
 
     <div v-if="burstVisible" class="burst">
       <svg viewBox="0 0 24 24" fill="#fe2c55">
@@ -488,7 +549,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 16px;
   right: 92px;
-  bottom: calc(26px + env(safe-area-inset-bottom));
+  bottom: calc(76px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -535,7 +596,7 @@ onBeforeUnmount(() => {
 .rail {
   position: absolute;
   right: 10px;
-  bottom: calc(24px + env(safe-area-inset-bottom));
+  bottom: calc(72px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -627,5 +688,91 @@ onBeforeUnmount(() => {
   height: 100%;
   background: linear-gradient(90deg, #25f4ee, #fe2c55);
   transition: width 0.2s linear;
+}
+
+/* 作者头像 */
+.rail-author {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.author-avatar-btn {
+  padding: 0;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.author-avatar-btn:active {
+  transform: scale(0.92);
+}
+
+.author-avatar {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fe2c55, #ff7a59);
+  border: 2px solid #fff;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.author-follow-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fe2c55;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: -14px;
+  border: 2px solid #000;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.author-follow-btn.followed {
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+}
+
+.author-follow-btn:active {
+  transform: scale(0.88);
+}
+
+.author-follow-btn.busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 分享 toast */
+.share-toast {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 24px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 14px;
+  z-index: 50;
+}
+
+.share-toast-enter-active,
+.share-toast-leave-active {
+  transition: opacity 0.2s;
+}
+
+.share-toast-enter-from,
+.share-toast-leave-to {
+  opacity: 0;
 }
 </style>

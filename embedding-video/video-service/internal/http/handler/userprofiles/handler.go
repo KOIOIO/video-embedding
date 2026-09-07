@@ -71,6 +71,29 @@ func (h *Handler) GetProfile(c *gin.Context) {
 	writeSuccess(c, profile)
 }
 
+// GetMe godoc
+// @Summary 获取当前用户资料
+// @Tags 用户资料
+// @Produce json
+// @Param X-User-ID header string true "用户ID（TODO: replace with real user authentication）"
+// @Success 200 {object} dto.SuccessResponse[model.EduUserProfile]
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/me [get]
+func (h *Handler) GetMe(c *gin.Context) {
+	// TODO: replace with real user authentication
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	profile, err := h.service.GetProfile(userID)
+	if err != nil {
+		httperrors.Write(c, httperrors.Internal("get current user profile failed"))
+		return
+	}
+	writeSuccess(c, profile)
+}
+
 // UpdateProfile godoc
 // @Summary 更新当前用户资料
 // @Tags 用户资料

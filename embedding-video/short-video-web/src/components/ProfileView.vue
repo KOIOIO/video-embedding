@@ -17,6 +17,7 @@ const avatarFailed = ref(false)
 const relation = ref('none')
 const visitReported = ref(false)
 const todayVisits = ref({ unique_visitors: 0, total_visits: 0 })
+const activeTab = ref('works') // 'works' | 'liked'
 
 const works = ref([])
 const worksTotal = ref(0)
@@ -24,6 +25,10 @@ const worksPage = ref(1)
 const worksLoading = ref(false)
 const worksLoaded = ref(false)
 const worksPageSize = 12
+
+const likedVideos = ref([])
+const likedLoading = ref(false)
+const likedLoaded = ref(false)
 
 const isOwnProfile = computed(() => Number(props.userId) === getCurrentUserId())
 const displayName = computed(() => profile.value?.nickname || `用户${props.userId}`)
@@ -186,6 +191,10 @@ watch(() => props.userId, () => {
     </div>
 
     <div v-else class="content">
+      <div class="profile-banner">
+        <div class="banner-bg"></div>
+      </div>
+
       <div class="profile-header">
         <div class="avatar-wrap">
           <img
@@ -235,37 +244,56 @@ watch(() => props.userId, () => {
 
       <div class="works-section">
         <div class="works-tabs">
-          <span class="works-tab active">作品</span>
+          <span
+            class="works-tab"
+            :class="{ active: activeTab === 'works' }"
+            @click="activeTab = 'works'"
+          >作品</span>
+          <span
+            class="works-tab"
+            :class="{ active: activeTab === 'liked' }"
+            @click="activeTab = 'liked'"
+          >喜欢</span>
         </div>
-        <div v-if="worksLoading && works.length === 0" class="works-skeleton">
-          <div v-for="i in 6" :key="i" class="skeleton-item"></div>
-        </div>
-        <div v-else-if="works.length > 0" class="works-grid">
-          <div
-            v-for="video in works"
-            :key="video.id"
-            class="work-card"
-            @click="onWorkClick(video)"
-          >
-            <div class="work-cover">
-              <img v-if="video.cover_url" :src="video.cover_url" :alt="video.title" loading="lazy" />
-              <div v-else class="work-cover-placeholder">
-                <span>{{ displayName.slice(0, 1) }}</span>
+
+        <!-- 作品 Tab -->
+        <div v-if="activeTab === 'works'">
+          <div v-if="worksLoading && works.length === 0" class="works-skeleton">
+            <div v-for="i in 6" :key="i" class="skeleton-item"></div>
+          </div>
+          <div v-else-if="works.length > 0" class="works-grid">
+            <div
+              v-for="video in works"
+              :key="video.id"
+              class="work-card"
+              @click="onWorkClick(video)"
+            >
+              <div class="work-cover">
+                <img v-if="video.cover_url" :src="video.cover_url" :alt="video.title" loading="lazy" />
+                <div v-else class="work-cover-placeholder">
+                  <span>{{ displayName.slice(0, 1) }}</span>
+                </div>
+                <span class="work-duration">{{ formatDuration(video.duration) }}</span>
               </div>
-              <span class="work-duration">{{ formatDuration(video.duration) }}</span>
+              <p class="work-title">{{ video.title }}</p>
             </div>
-            <p class="work-title">{{ video.title }}</p>
+          </div>
+          <div v-else class="works-empty">
+            <div class="works-empty-icon">🎬</div>
+            <p>暂无作品</p>
+            <button v-if="isOwnProfile" class="publish-first-btn" type="button" @click="onPublish">发布第一个视频</button>
+          </div>
+          <div v-if="hasMoreWorks" class="load-more-wrap">
+            <button class="load-more-btn" type="button" :disabled="worksLoading" @click="onLoadMore">
+              {{ worksLoading ? '加载中…' : '加载更多' }}
+            </button>
           </div>
         </div>
+
+        <!-- 喜欢 Tab -->
         <div v-else class="works-empty">
-          <div class="works-empty-icon">🎬</div>
-          <p>暂无作品</p>
-          <button v-if="isOwnProfile" class="publish-first-btn" type="button" @click="onPublish">发布第一个视频</button>
-        </div>
-        <div v-if="hasMoreWorks" class="load-more-wrap">
-          <button class="load-more-btn" type="button" :disabled="worksLoading" @click="onLoadMore">
-            {{ worksLoading ? '加载中…' : '加载更多' }}
-          </button>
+          <div class="works-empty-icon">❤️</div>
+          <p>暂无喜欢的视频</p>
         </div>
       </div>
     </div>
@@ -327,11 +355,34 @@ watch(() => props.userId, () => {
   padding: 0 16px 40px;
 }
 
+.profile-banner {
+  position: relative;
+  height: 140px;
+  margin: 0 -16px;
+  overflow: hidden;
+}
+
+.banner-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+.banner-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 50%, rgba(254, 44, 85, 0.15), transparent 60%);
+}
+
 .profile-header {
   display: flex;
   align-items: flex-start;
   gap: 18px;
-  padding: 24px 0 20px;
+  padding: 0 0 20px;
+  margin-top: -40px;
+  position: relative;
+  z-index: 1;
 }
 
 .avatar-wrap {

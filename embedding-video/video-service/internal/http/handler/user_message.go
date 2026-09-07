@@ -27,6 +27,11 @@ func (h *UserMessageHandler) GetConversations(c *gin.Context) {
 	h.inner.GetConversations(c)
 }
 
+// GetUnreadCount 获取未读消息总数。
+func (h *UserMessageHandler) GetUnreadCount(c *gin.Context) {
+	h.inner.GetUnreadCount(c)
+}
+
 // GetMessages 获取会话消息列表。
 func (h *UserMessageHandler) GetMessages(c *gin.Context) {
 	h.inner.GetMessages(c)

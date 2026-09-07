@@ -397,6 +397,7 @@ func (h *Handler) RandomPlayVideoSegment(c *gin.Context) {
 		PlayURL:          strings.TrimSpace(h.app.ResolvePlaybackURL(c.Request.Context(), item.Video)),
 		UserReacted:      item.UserReacted,
 		UserReactionType: string(item.UserReactionType),
+		AuthorID:         item.Video.UserID,
 	})
 }
 

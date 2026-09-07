@@ -62,6 +62,13 @@ export async function fetchUserProfile(userId, fetchImpl = fetch) {
   return normalizeUserProfile(data)
 }
 
+export async function fetchMe(fetchImpl = fetch) {
+  const data = await requestJson('/api/me', {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return normalizeUserProfile(data)
+}
+
 export async function updateMyProfile({ nickname, bio, location, gender } = {}, fetchImpl = fetch) {
   const data = await requestJson('/api/me/profile', {
     method: 'PUT',
@@ -187,6 +194,13 @@ export async function sendMessage(userId, content, fetchImpl = fetch) {
     body: JSON.stringify({ content: String(content || '') }),
   }, fetchImpl)
   return normalizeMessage(data?.message || data)
+}
+
+export async function fetchUnreadCount(fetchImpl = fetch) {
+  const data = await requestJson('/api/messages/unread-count', {
+    headers: authHeaders(),
+  }, fetchImpl)
+  return Number(data?.unread_count || 0) || 0
 }
 
 export async function fetchConversations(fetchImpl = fetch) {

@@ -4,6 +4,7 @@ import { fetchRandomVideoDistinct, uniqueKeyOf } from '../feed/api.js'
 import { clampIndex, pushDistinct, resolveSwipeIndex, visibleWindow } from '../feed/swipe.js'
 import { getCurrentUserId } from '../user/api.js'
 import VideoCard from './VideoCard.vue'
+import BottomNav from './BottomNav.vue'
 
 const props = defineProps({
   session: { type: Object, required: true },
@@ -174,6 +175,18 @@ function onMessages() {
   emit('navigate', { view: 'messages' })
 }
 
+function onCardNavigate(params) {
+  emit('navigate', params)
+}
+
+function onBottomNav(params) {
+  if (params.isMe) {
+    emit('navigate', { view: 'profile', userId: getCurrentUserId() })
+    return
+  }
+  emit('navigate', params)
+}
+
 bootstrap()
 onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
@@ -206,6 +219,7 @@ onBeforeUnmount(() => {
             :active="items[index] === item"
             :user-id="userId"
             @ended="onCardEnded"
+            @navigate="onCardNavigate"
           />
         </div>
       </div>
@@ -240,9 +254,7 @@ onBeforeUnmount(() => {
         ↑
       </button>
 
-      <button class="publish-fab" type="button" aria-label="发布视频" @click="onPublish">
-        <span class="publish-fab-icon">＋</span>
-      </button>
+      <BottomNav active="feed" @navigate="onBottomNav" />
     </div>
 
     <div v-else-if="loading" class="center">

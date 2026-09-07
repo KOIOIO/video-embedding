@@ -19,6 +19,7 @@ export function normalizeFeedItem(data) {
     cover_url: String(data?.cover_url || ''),
     play_url: String(data?.play_url || ''),
     user_reaction_type: userReactionType,
+    author_id: Number(data?.author_id || 0) || 0,
   }
 }
 

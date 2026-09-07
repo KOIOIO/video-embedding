@@ -60,6 +60,10 @@ function onNavigate(target) {
     if (chatUserId.value > 0) {
       status.value = 'chat'
     }
+  } else if (target?.view === 'friends') {
+    status.value = 'friends'
+  } else if (target?.view === 'feed') {
+    status.value = 'feed'
   }
 }
 
@@ -117,6 +121,10 @@ function onOpenChat(payload) {
 function onChatBack() {
   status.value = 'messages'
 }
+
+function onFriendsBack() {
+  status.value = 'feed'
+}
 </script>
 
 <template>
@@ -166,6 +174,12 @@ function onChatBack() {
     :other-user-id="chatUserId"
     @back="onChatBack"
   />
+  <div v-else-if="status === 'friends'" class="friends-placeholder">
+    <div class="friends-icon">👥</div>
+    <p class="friends-title">朋友</p>
+    <p class="friends-desc">关注的人发布的视频将在这里显示</p>
+    <button class="friends-back" type="button" @click="onFriendsBack">返回首页</button>
+  </div>
 </template>
 
 <style scoped>
@@ -196,5 +210,43 @@ function onChatBack() {
   margin: 0;
   color: var(--text-dim);
   font-size: 14px;
+}
+
+.friends-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #000;
+  color: #fff;
+}
+
+.friends-icon {
+  font-size: 48px;
+  opacity: 0.6;
+}
+
+.friends-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.friends-desc {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.friends-back {
+  margin-top: 16px;
+  padding: 10px 28px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fe2c55, #ff5470);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
 }
 </style>

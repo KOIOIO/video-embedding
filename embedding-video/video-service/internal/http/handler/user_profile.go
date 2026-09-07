@@ -23,6 +23,11 @@ func (h *UserProfileHandler) GetProfile(c *gin.Context) {
 	h.inner.GetProfile(c)
 }
 
+// GetMe 获取当前用户资料。
+func (h *UserProfileHandler) GetMe(c *gin.Context) {
+	h.inner.GetMe(c)
+}
+
 // UpdateProfile 更新当前用户资料。
 func (h *UserProfileHandler) UpdateProfile(c *gin.Context) {
 	h.inner.UpdateProfile(c)
