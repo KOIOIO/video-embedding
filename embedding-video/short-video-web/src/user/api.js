@@ -1,4 +1,4 @@
-import { readSession } from '../auth/session.js'
+import { readSession, writeSession } from '../auth/session.js'
 
 const DEMO_USER_ID_KEY = 'demo_user_id'
 const DEFAULT_USER_ID = 1001
@@ -80,6 +80,26 @@ export async function fetchMe(fetchImpl = fetch) {
     headers: authHeaders(),
   }, fetchImpl)
   return normalizeUserProfile(data)
+}
+
+/**
+ * 刷新当前用户的 profile 到全局 session（localStorage + 内存）
+ * 登录后、编辑资料后、上传头像后调用，确保首页顶部等全局显示同步更新
+ */
+export async function refreshMyProfile(fetchImpl = fetch) {
+  const profile = await fetchMe(fetchImpl)
+  const session = readSession()
+  if (session) {
+    session.profile = {
+      nickname: profile.nickname,
+      avatar_url: profile.avatar_url,
+      bio: profile.bio,
+      gender: profile.gender,
+      location: profile.location,
+    }
+    writeSession(session)
+  }
+  return profile
 }
 
 export async function updateMyProfile({ nickname, bio, location, gender } = {}, fetchImpl = fetch) {

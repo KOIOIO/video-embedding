@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { fetchUserProfile, getCurrentUserId, updateMyProfile, uploadAvatar } from '../user/api.js'
+import { fetchUserProfile, getCurrentUserId, refreshMyProfile, updateMyProfile, uploadAvatar } from '../user/api.js'
 
 const emit = defineEmits(['back', 'saved'])
 
@@ -52,6 +52,8 @@ async function onFileChange(event) {
     const result = await uploadAvatar(file)
     avatarUrl.value = result.avatar_url
     avatarFailed.value = false
+    // 头像上传后刷新全局 profile，确保首页顶部等地方显示最新头像
+    refreshMyProfile().catch(() => {})
   } catch (err) {
     errorText.value = err?.message || '头像上传失败'
   } finally {

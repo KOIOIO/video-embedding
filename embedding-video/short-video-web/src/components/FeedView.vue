@@ -29,8 +29,9 @@ let wheelLocked = false
 let touchStartY = null
 
 const userId = computed(() => props.session.admin.id)
-const username = computed(() => props.session.admin.username || '用户')
-const avatarText = computed(() => username.value.slice(0, 1).toUpperCase())
+const displayName = computed(() => props.session?.profile?.nickname || props.session?.admin?.username || '用户')
+const avatarUrl = computed(() => props.session?.profile?.avatar_url || '')
+const avatarText = computed(() => displayName.value.slice(0, 1).toUpperCase())
 
 const windowRange = computed(() => visibleWindow(index.value, items.value.length))
 const windowItems = computed(() => items.value.slice(windowRange.value[0], windowRange.value[1] + 1))
@@ -237,9 +238,12 @@ onBeforeUnmount(() => {
             <span class="msg-icon">✉</span>
           </button>
           <button class="my-profile" type="button" aria-label="我的主页" @click="onMyProfile">
-            <div class="avatar">{{ avatarText }}</div>
+            <div class="avatar">
+              <img v-if="avatarUrl" :src="avatarUrl" alt="头像" class="avatar-img" />
+              <span v-else>{{ avatarText }}</span>
+            </div>
           </button>
-          <span class="user-name">{{ username }}</span>
+          <span class="user-name">{{ displayName }}</span>
           <button class="logout" type="button" @click="onLogout">退出</button>
         </div>
       </header>
@@ -396,6 +400,14 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 700;
   color: #04252b;
+  overflow: hidden;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .my-profile {

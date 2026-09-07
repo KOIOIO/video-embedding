@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { clearSession, readSession } from './auth/session.js'
 import { loadCurrentAdmin } from './auth/api.js'
-import { getCurrentUserId } from './user/api.js'
+import { getCurrentUserId, refreshMyProfile } from './user/api.js'
 import LoginView from './components/LoginView.vue'
 import RegisterView from './components/RegisterView.vue'
 import FeedView from './components/FeedView.vue'
@@ -28,6 +28,18 @@ onMounted(async () => {
   try {
     await loadCurrentAdmin()
     session.value = saved
+    // 后台刷新 profile 到全局 session（确保首页顶部显示最新昵称/头像）
+    refreshMyProfile().then((profile) => {
+      if (session.value) {
+        session.value = { ...session.value, profile: {
+          nickname: profile.nickname,
+          avatar_url: profile.avatar_url,
+          bio: profile.bio,
+          gender: profile.gender,
+          location: profile.location,
+        } }
+      }
+    }).catch(() => {})
     status.value = 'feed'
   } catch {
     clearSession()
@@ -35,14 +47,40 @@ onMounted(async () => {
   }
 })
 
-function onLoggedIn(nextSession) {
+async function onLoggedIn(nextSession) {
   session.value = nextSession
   status.value = 'feed'
+  // 登录后刷新 profile 到全局 session
+  try {
+    const profile = await refreshMyProfile()
+    session.value = { ...session.value, profile: {
+      nickname: profile.nickname,
+      avatar_url: profile.avatar_url,
+      bio: profile.bio,
+      gender: profile.gender,
+      location: profile.location,
+    } }
+  } catch {
+    // profile 刷新失败不影响登录
+  }
 }
 
-function onRegistered(nextSession) {
+async function onRegistered(nextSession) {
   session.value = nextSession
   status.value = 'feed'
+  // 注册后刷新 profile 到全局 session
+  try {
+    const profile = await refreshMyProfile()
+    session.value = { ...session.value, profile: {
+      nickname: profile.nickname,
+      avatar_url: profile.avatar_url,
+      bio: profile.bio,
+      gender: profile.gender,
+      location: profile.location,
+    } }
+  } catch {
+    // profile 刷新失败不影响注册
+  }
 }
 
 function onGoRegister() {
@@ -93,7 +131,20 @@ function onProfileEditBack() {
   status.value = 'profile'
 }
 
-function onProfileEditSaved() {
+async function onProfileEditSaved() {
+  // 编辑资料后刷新全局 profile，确保首页顶部等地方显示最新信息
+  try {
+    const profile = await refreshMyProfile()
+    session.value = { ...session.value, profile: {
+      nickname: profile.nickname,
+      avatar_url: profile.avatar_url,
+      bio: profile.bio,
+      gender: profile.gender,
+      location: profile.location,
+    } }
+  } catch {
+    // profile 刷新失败不影响返回
+  }
   status.value = 'profile'
 }
 
