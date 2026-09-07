@@ -1,6 +1,7 @@
 <script setup>
 const props = defineProps({
   active: { type: String, default: 'feed' },
+  unreadCount: { type: Number, default: 0 },
 })
 
 const emit = defineEmits(['navigate'])
@@ -16,6 +17,12 @@ function goProfile() {
 
 function goPublish() {
   emit('navigate', { view: 'publish' })
+}
+
+function displayUnread() {
+  const n = Number(props.unreadCount) || 0
+  if (n <= 0) return ''
+  return n > 99 ? '99+' : String(n)
 }
 </script>
 
@@ -57,9 +64,12 @@ function goPublish() {
       type="button"
       @click="go('messages')"
     >
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Z"/>
-      </svg>
+      <div class="nav-icon-wrap">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Z"/>
+        </svg>
+        <span v-if="displayUnread()" class="badge">{{ displayUnread() }}</span>
+      </div>
       <span class="nav-label">消息</span>
     </button>
 
@@ -116,6 +126,53 @@ function goPublish() {
 .nav-icon {
   width: 22px;
   height: 22px;
+}
+
+.nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #fe2c55;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.nav-icon-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #fe2c55;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px #000;
 }
 
 .nav-label {

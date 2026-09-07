@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { fetchMyVisits, fetchRelation, fetchUserProfile, getCurrentUserId, recordVisit } from '../user/api.js'
-import { fetchUserVideos, formatDuration, STATUS_PUBLISHED } from '../user/videoApi.js'
+import { fetchLikedVideos, fetchUserVideos, formatDuration, STATUS_PUBLISHED } from '../user/videoApi.js'
 import FollowButton from './FollowButton.vue'
 
 const props = defineProps({
@@ -27,8 +27,11 @@ const worksLoaded = ref(false)
 const worksPageSize = 12
 
 const likedVideos = ref([])
+const likedTotal = ref(0)
+const likedPage = ref(1)
 const likedLoading = ref(false)
 const likedLoaded = ref(false)
+const likedPageSize = 12
 
 const isOwnProfile = computed(() => Number(props.userId) === getCurrentUserId())
 const displayName = computed(() => profile.value?.nickname || `用户${props.userId}`)
@@ -41,6 +44,7 @@ const genderLabel = computed(() => {
   }
 })
 const hasMoreWorks = computed(() => works.value.length < worksTotal.value)
+const hasMoreLiked = computed(() => likedVideos.value.length < likedTotal.value)
 
 async function loadProfile() {
   loading.value = true
@@ -136,6 +140,45 @@ function onLoadMore() {
   }
 }
 
+async function loadLiked(reset = false) {
+  if (likedLoading.value) return
+  if (reset) {
+    likedVideos.value = []
+    likedPage.value = 1
+    likedTotal.value = 0
+    likedLoaded.value = false
+  }
+  if (likedLoaded.value && !reset) return
+  likedLoading.value = true
+  try {
+    const result = await fetchLikedVideos(props.userId, { page: likedPage.value, pageSize: likedPageSize })
+    likedVideos.value = likedVideos.value.concat(result.list)
+    likedTotal.value = result.total
+    if (result.list.length < likedPageSize || likedVideos.value.length >= likedTotal.value) {
+      likedLoaded.value = true
+    } else {
+      likedPage.value++
+    }
+  } catch {
+    // 静默失败，显示空状态
+  } finally {
+    likedLoading.value = false
+  }
+}
+
+function onLoadMoreLiked() {
+  if (hasMoreLiked.value && !likedLoading.value) {
+    loadLiked(false)
+  }
+}
+
+function onTabChange(tab) {
+  activeTab.value = tab
+  if (tab === 'liked' && likedVideos.value.length === 0 && !likedLoaded.value) {
+    loadLiked(true)
+  }
+}
+
 function onAvatarError() {
   avatarFailed.value = true
 }
@@ -172,6 +215,11 @@ watch(() => props.userId, () => {
   worksTotal.value = 0
   worksPage.value = 1
   worksLoaded.value = false
+  likedVideos.value = []
+  likedTotal.value = 0
+  likedPage.value = 1
+  likedLoaded.value = false
+  activeTab.value = 'works'
   visitReported.value = false
   loadProfile()
   loadRelation()
@@ -256,12 +304,12 @@ watch(() => props.userId, () => {
           <span
             class="works-tab"
             :class="{ active: activeTab === 'works' }"
-            @click="activeTab = 'works'"
+            @click="onTabChange('works')"
           >作品</span>
           <span
             class="works-tab"
             :class="{ active: activeTab === 'liked' }"
-            @click="activeTab = 'liked'"
+            @click="onTabChange('liked')"
           >喜欢</span>
         </div>
 
@@ -300,9 +348,36 @@ watch(() => props.userId, () => {
         </div>
 
         <!-- 喜欢 Tab -->
-        <div v-else class="works-empty">
-          <div class="works-empty-icon">❤️</div>
-          <p>暂无喜欢的视频</p>
+        <div v-else>
+          <div v-if="likedLoading && likedVideos.length === 0" class="works-skeleton">
+            <div v-for="i in 6" :key="i" class="skeleton-item"></div>
+          </div>
+          <div v-else-if="likedVideos.length > 0" class="works-grid">
+            <div
+              v-for="video in likedVideos"
+              :key="video.id"
+              class="work-card"
+              @click="onWorkClick(video)"
+            >
+              <div class="work-cover">
+                <img v-if="video.cover_url" :src="video.cover_url" :alt="video.title" loading="lazy" />
+                <div v-else class="work-cover-placeholder">
+                  <span>{{ displayName.slice(0, 1) }}</span>
+                </div>
+                <span class="work-duration">{{ formatDuration(video.duration) }}</span>
+              </div>
+              <p class="work-title">{{ video.title }}</p>
+            </div>
+          </div>
+          <div v-else class="works-empty">
+            <div class="works-empty-icon">❤️</div>
+            <p>暂无喜欢的视频</p>
+          </div>
+          <div v-if="hasMoreLiked" class="load-more-wrap">
+            <button class="load-more-btn" type="button" :disabled="likedLoading" @click="onLoadMoreLiked">
+              {{ likedLoading ? '加载中…' : '加载更多' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>

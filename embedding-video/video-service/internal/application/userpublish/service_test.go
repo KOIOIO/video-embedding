@@ -56,6 +56,13 @@ func (m *mockRepo) ListByUserID(_ context.Context, _ uint64, _, _ int) ([]model.
 	return m.listResults, m.listTotal, nil
 }
 
+func (m *mockRepo) ListLikedVideos(_ context.Context, _ uint64, _, _ int) ([]model.EduVideoResource, int64, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
+	return m.listResults, m.listTotal, nil
+}
+
 func (m *mockRepo) UpdateStatus(_ context.Context, id uint64, status int16, errMsg string) error {
 	if m.updateErr != nil {
 		return m.updateErr

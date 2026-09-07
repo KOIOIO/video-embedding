@@ -53,6 +53,37 @@ func (r *GormUserPublishRepository) ListByUserID(ctx context.Context, userID uin
 	return list, total, nil
 }
 
+// ListLikedVideos 分页查询用户点赞/双赞的视频，按最近点赞时间倒序，同一视频只出现一次。
+func (r *GormUserPublishRepository) ListLikedVideos(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error) {
+	baseQuery := `
+		FROM edu_user_reaction ur
+		JOIN edu_video_resource r ON r.id = ur.video_id AND r.deleted = 0 AND r.is_published = true
+		WHERE ur.user_id = ? AND ur.reaction_type IN ('like', 'double_like') AND ur.deleted = 0
+		GROUP BY r.id
+	`
+	var total int64
+	countSQL := `SELECT COUNT(DISTINCT r.id) ` + baseQuery
+	if err := r.db.WithContext(ctx).Raw(countSQL, userID).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var list []model.EduVideoResource
+	offset := (page - 1) * pageSize
+	listSQL := `
+		SELECT r.id, r.user_id, r.source_type, r.title, r.description, r.video_url,
+		       r.cover_url, r.duration, r.status, r.is_published, r.is_recommend,
+		       r.view_count, r.like_count, r.double_like_count, r.dislike_count,
+		       r.error_msg, r.create_time, r.update_time, r.deleted
+		` + baseQuery + `
+		ORDER BY MAX(ur.update_time) DESC
+		LIMIT ? OFFSET ?
+	`
+	if err := r.db.WithContext(ctx).Raw(listSQL, userID, pageSize, offset).Scan(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
 // UpdateStatus 更新视频处理状态及错误信息。
 func (r *GormUserPublishRepository) UpdateStatus(ctx context.Context, id uint64, status int16, errMsg string) error {
 	updates := map[string]interface{}{"status": status}

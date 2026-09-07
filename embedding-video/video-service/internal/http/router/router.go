@@ -149,6 +149,7 @@ func New(httpApp *app.App) *gin.Engine {
 	public.POST("/api/me/avatar", userProfileHandler.UploadAvatar)
 	// 用户发布视频：公开查询作品列表
 	public.GET("/api/users/:id/videos", userPublishHandler.ListUserVideos)
+	public.GET("/api/users/:id/liked-videos", userPublishHandler.ListLikedVideos)
 	// 用户关注系统：公开查询列表与关系
 	public.GET("/api/users/:id/following", userFollowHandler.ListFollowing)
 	public.GET("/api/users/:id/followers", userFollowHandler.ListFollowers)

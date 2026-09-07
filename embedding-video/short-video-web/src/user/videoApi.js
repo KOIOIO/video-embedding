@@ -112,3 +112,19 @@ export async function fetchUserVideos(userId, { page = 1, pageSize = 12 } = {}, 
     page_size: Number(data?.page_size || pageSize) || pageSize,
   }
 }
+
+export async function fetchLikedVideos(userId, { page = 1, pageSize = 12 } = {}, fetchImpl = fetch) {
+  const id = Number(userId) || getCurrentUserId()
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  })
+  const data = await requestJson(`/api/users/${encodeURIComponent(String(id))}/liked-videos?${params.toString()}`, {}, fetchImpl)
+  const list = Array.isArray(data?.list) ? data.list.map(normalizeUserVideo) : []
+  return {
+    list,
+    total: Number(data?.total || 0) || 0,
+    page: Number(data?.page || page) || page,
+    page_size: Number(data?.page_size || pageSize) || pageSize,
+  }
+}

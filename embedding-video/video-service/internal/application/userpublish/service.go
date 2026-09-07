@@ -24,6 +24,7 @@ type Repository interface {
 	CreateVideo(ctx context.Context, video *model.EduVideoResource) error
 	GetByID(ctx context.Context, id uint64) (*model.EduVideoResource, error)
 	ListByUserID(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error)
+	ListLikedVideos(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error)
 	UpdateStatus(ctx context.Context, id uint64, status int16, errMsg string) error
 }
 
@@ -138,4 +139,15 @@ func (s *Service) ListUserVideos(ctx context.Context, userID uint64, page, pageS
 		pageSize = 12
 	}
 	return s.Repo.ListByUserID(ctx, userID, page, pageSize)
+}
+
+// ListLikedVideos 分页查询用户点赞/双赞的视频列表，按点赞时间倒序。
+func (s *Service) ListLikedVideos(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 12
+	}
+	return s.Repo.ListLikedVideos(ctx, userID, page, pageSize)
 }

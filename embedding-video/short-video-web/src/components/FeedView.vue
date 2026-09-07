@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { fetchRandomVideoDistinct, uniqueKeyOf } from '../feed/api.js'
 import { clampIndex, pushDistinct, resolveSwipeIndex, visibleWindow } from '../feed/swipe.js'
-import { getCurrentUserId } from '../user/api.js'
+import { fetchNotificationUnreadCount, fetchUnreadCount, getCurrentUserId } from '../user/api.js'
 import VideoCard from './VideoCard.vue'
 import BottomNav from './BottomNav.vue'
 
@@ -21,9 +21,11 @@ const transitioning = ref(false)
 const loading = ref(true)
 const loadError = ref('')
 const notice = ref('')
+const unreadCount = ref(0)
 
 const seenKeys = new Set()
 let noticeTimer = null
+let unreadTimer = null
 let wheelAccumulator = 0
 let wheelLocked = false
 let touchStartY = null
@@ -188,9 +190,28 @@ function onBottomNav(params) {
   emit('navigate', params)
 }
 
+async function refreshUnreadCount() {
+  try {
+    const [msgUnread, notifyUnread] = await Promise.all([
+      fetchUnreadCount().catch(() => 0),
+      fetchNotificationUnreadCount().catch(() => 0),
+    ])
+    unreadCount.value = (Number(msgUnread) || 0) + (Number(notifyUnread) || 0)
+  } catch {
+    // 静默失败
+  }
+}
+
+function startUnreadPolling() {
+  refreshUnreadCount()
+  unreadTimer = setInterval(refreshUnreadCount, 30000)
+}
+
 bootstrap()
+startUnreadPolling()
 onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
+  if (unreadTimer) clearInterval(unreadTimer)
 })
 </script>
 
@@ -258,7 +279,7 @@ onBeforeUnmount(() => {
         ↑
       </button>
 
-      <BottomNav active="feed" @navigate="onBottomNav" />
+      <BottomNav active="feed" :unread-count="unreadCount" @navigate="onBottomNav" />
     </div>
 
     <div v-else-if="loading" class="center">

@@ -32,3 +32,8 @@ func (h *UserPublishHandler) GetVideoStatus(c *gin.Context) {
 func (h *UserPublishHandler) ListUserVideos(c *gin.Context) {
 	h.inner.ListUserVideos(c)
 }
+
+// ListLikedVideos 查询用户喜欢的视频列表。
+func (h *UserPublishHandler) ListLikedVideos(c *gin.Context) {
+	h.inner.ListLikedVideos(c)
+}

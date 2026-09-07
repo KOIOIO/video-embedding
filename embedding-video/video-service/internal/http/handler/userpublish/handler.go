@@ -213,6 +213,44 @@ func (h *Handler) ListUserVideos(c *gin.Context) {
 	})
 }
 
+// ListLikedVideos 分页查询指定用户点赞/双赞的视频。
+func (h *Handler) ListLikedVideos(c *gin.Context) {
+	userID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	page := parseIntQuery(c, "page", 1)
+	pageSize := parseIntQuery(c, "page_size", 12)
+
+	videos, total, err := h.service.ListLikedVideos(c.Request.Context(), userID, page, pageSize)
+	if err != nil {
+		httperrors.Write(c, httperrors.Internal("list liked videos failed"))
+		return
+	}
+
+	list := make([]userVideoItem, 0, len(videos))
+	for _, v := range videos {
+		list = append(list, userVideoItem{
+			ID:          v.ID,
+			Title:       v.Title,
+			Description: v.Description,
+			CoverURL:    v.CoverURL,
+			Duration:    v.Duration,
+			Status:      v.Status,
+			ViewCount:   v.ViewCount,
+			CreateTime:  v.CreateTime.Format(time.RFC3339),
+		})
+	}
+
+	writeSuccess(c, listUserVideosResponse{
+		List:     list,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	})
+}
+
 func currentUserID(c *gin.Context) (uint64, bool) {
 	raw := strings.TrimSpace(c.GetHeader("X-User-ID"))
 	if raw == "" {
