@@ -18,7 +18,6 @@ def build_config(
         "model": model,
         "dataset": dataset,
         "data_path": str(dataset_path.parent),
-        "benchmark_filename": ["train", "valid", "test"],
         "field_separator": ",",
         "USER_ID_FIELD": "user_id",
         "ITEM_ID_FIELD": "item_id",
@@ -39,13 +38,14 @@ def build_config(
         "seed": 20260730,
         "reproducibility": True,
         "eval_args": {
+            "split": {"RS": [0.8, 0.1, 0.1]},
             "order": "TO",
             "group_by": "user",
             "mode": "full",
         },
         "train_neg_sample_args": {
             "distribution": "uniform",
-            "sample_num": "none",
+            "sample_num": 1,
         },
     }
 

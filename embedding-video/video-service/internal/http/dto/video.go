@@ -122,6 +122,7 @@ type RandomVideoSegmentData struct {
 	PlayURL          string `json:"play_url"`
 	UserReacted      bool   `json:"user_reacted"`
 	UserReactionType string `json:"user_reaction_type"`
+	AuthorID         uint64 `json:"author_id"`
 }
 
 type TranscodeStatusData struct {

@@ -46,6 +46,11 @@ const (
 	defaultSegmentReactionQueueKey          = "segment:reaction:queue"
 	defaultSegmentReactionCountsPrefix      = "segment:reaction:counts:"
 	defaultSegmentReactionUserPrefix        = "segment:reaction:user:"
+	defaultCommentLikeQueueKey              = "comment:like:queue"
+	defaultCommentLikeCountsPrefix          = "comment:like:counts:"
+	defaultCommentLikeUserPrefix            = "comment:like:user:"
+	defaultCommentSegmentCountPrefix        = "comment:segment:count:"
+	defaultCommentSegmentCountTTLSeconds    = 300
 	defaultTranscodeStatusPrefix            = "video:transcode:status:"
 	defaultRuntimeActiveCounterPrefix       = "video:runtime:active:"
 	defaultRandomPlayRecentPrefix           = "video:random_play:recent:"
@@ -250,6 +255,26 @@ func SegmentReactionCountsPrefix(cfg Config) string {
 
 func SegmentReactionUserPrefix(cfg Config) string {
 	return firstConfigValue(cfg.RedisKeys.SegmentReactionUser, defaultSegmentReactionUserPrefix)
+}
+
+func CommentLikeQueueKey(cfg Config) string {
+	return firstConfigValue(cfg.RedisKeys.CommentLikeQueue, defaultCommentLikeQueueKey)
+}
+
+func CommentLikeCountsPrefix(cfg Config) string {
+	return firstConfigValue(cfg.RedisKeys.CommentLikeCounts, defaultCommentLikeCountsPrefix)
+}
+
+func CommentLikeUserPrefix(cfg Config) string {
+	return firstConfigValue(cfg.RedisKeys.CommentLikeUser, defaultCommentLikeUserPrefix)
+}
+
+func CommentSegmentCountPrefix(cfg Config) string {
+	return firstConfigValue(cfg.RedisKeys.CommentSegmentCount, defaultCommentSegmentCountPrefix)
+}
+
+func CommentSegmentCountTTL(cfg Config) time.Duration {
+	return time.Duration(defaultCommentSegmentCountTTLSeconds) * time.Second
 }
 
 func TranscodeStatusPrefix(cfg Config) string {

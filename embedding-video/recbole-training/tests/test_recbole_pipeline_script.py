@@ -59,16 +59,6 @@ class RecBolePipelineScriptTest(unittest.TestCase):
         self.assertIn('PYTHON_BIN="${VENV_PYTHON}"', script)
         self.assertIn('PYTHON_BIN="${PYTHON_BIN:-python3}"', script)
 
-    def test_script_fails_closed_on_virtual_item_leaks(self) -> None:
-        script = Path("scripts/run_recbole_pipeline.sh").read_text(encoding="utf-8")
-        self.assertIn("for split in train valid test", script)
-        self.assertIn("${DATASET}.${split}.inter", script)
-        self.assertIn("${DATASET}.valid.inter", script)
-        self.assertIn("${DATASET}.test.inter", script)
-        self.assertIn("knowledge_video:", script)
-        self.assertIn("item_embeddings.csv", script)
-        self.assertIn("^[1-9][0-9]*$", script)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -178,55 +178,6 @@ func (r *GormKnowledgeVideoRepository) RecordPlayback(ctx context.Context, recor
 	return r.db.WithContext(ctx).Create(&row).Error
 }
 
-func (r *GormKnowledgeVideoRepository) UserExists(ctx context.Context, userID uint64) (bool, error) {
-	query := r.db.WithContext(ctx).Table("sys_user").Where("id = ?", userID)
-	if r.db.Migrator().HasColumn("sys_user", "deleted") {
-		query = query.Where("COALESCE(deleted, 0) = 0")
-	}
-	var count int64
-	if err := query.Count(&count).Error; err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-func (r *GormKnowledgeVideoRepository) UpsertWatchSession(ctx context.Context, report knowledgevideo.WatchSessionReport, duration int) (knowledgevideo.WatchSessionAggregate, error) {
-	result := knowledgevideo.WatchSessionAggregate{}
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		maxFunction := "GREATEST"
-		if tx.Dialector.Name() == "sqlite" {
-			maxFunction = "MAX"
-		}
-		statement := `INSERT INTO edu_knowledge_video_play_record
- (user_id, knowledge_point_id, knowledge_video_id, session_id, watch_duration, create_time, update_time)
- VALUES (?, ?, ?, ?, ?, ?, ?)
- ON CONFLICT (user_id, knowledge_video_id, session_id)
- WHERE session_id IS NOT NULL AND session_id <> ''
- DO UPDATE SET watch_duration = ` + maxFunction + `(edu_knowledge_video_play_record.watch_duration, excluded.watch_duration),
- update_time = ` + maxFunction + `(edu_knowledge_video_play_record.update_time, excluded.update_time)`
-		if err := tx.Exec(statement, report.UserID, report.KnowledgePointID, report.KnowledgeVideoID, report.SessionID, report.WatchedSeconds, report.UpdatedAt, report.UpdatedAt).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.EduKnowledgeVideoPlayRecord{}).
-			Select("watch_duration").
-			Where("user_id = ? AND knowledge_video_id = ? AND session_id = ?", report.UserID, report.KnowledgeVideoID, report.SessionID).
-			Scan(&result.SessionWatchedSeconds).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.EduKnowledgeVideoPlayRecord{}).
-			Select("COALESCE(SUM(watch_duration), 0)").
-			Where("user_id = ? AND knowledge_video_id = ? AND session_id IS NOT NULL AND session_id <> ''", report.UserID, report.KnowledgeVideoID).
-			Scan(&result.TotalWatchedSeconds).Error; err != nil {
-			return err
-		}
-		if result.TotalWatchedSeconds > duration {
-			result.TotalWatchedSeconds = duration
-		}
-		return nil
-	})
-	return result, err
-}
-
 func (r *GormKnowledgeVideoRepository) MarkTranscoding(ctx context.Context, id uint64) (bool, error) {
 	return r.updateActiveVideo(ctx, id, map[string]any{"status": int16(knowledgevideo.VideoTranscoding), "error_message": ""})
 }

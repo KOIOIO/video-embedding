@@ -133,7 +133,6 @@ def export_from_atomic_files(
     item_embeddings = (
         (segment_id, video_id, deterministic_vector(f"item:{segment_id}", embedding_size))
         for segment_id, video_id in items
-        if usable_token(segment_id)
     )
     user_embeddings = (
         (user_id, deterministic_vector(f"user:{user_id}", embedding_size))

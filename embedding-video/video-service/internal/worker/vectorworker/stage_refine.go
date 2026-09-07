@@ -160,6 +160,19 @@ func (p *productionRefineStageProcessor) ProcessRefine(ctx context.Context, task
 			ObjectKey: strings.TrimSpace(rec.ObjectKey),
 		})
 	}
+
+	// ASR fallback：当 coarse transcript 全部为空时，用 title+description 直接做 embedding 生成单 segment
+	if tasks.AllCoarseTextEmpty(coarseItems) {
+		applied, err := tasks.FallbackEmbedFromTitleDescription(ctx, p.db, p.client, task.VideoID, task.TaskID, task.EndSec, p.stageRecorder)
+		if err != nil {
+			return err
+		}
+		if applied {
+			return nil
+		}
+		return errors.New("coarse transcript list is empty and no title/description fallback available")
+	}
+
 	return processHierarchicalRefine(ctx, hierarchicalRefineInput{
 		DB:                  p.db,
 		FFmpeg:              p.ff,

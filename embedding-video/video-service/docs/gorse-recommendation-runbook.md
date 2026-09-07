@@ -1,10 +1,10 @@
 # Gorse 推荐引擎运行手册
 
-> 适用范围：仅当 `Recommendation.Engine=gorse` 时启用本手册中的主链路切换步骤。**2026-08-04 当前边界：**`configs/video.yml` 和 `configs/video_prod.yml` 使用 `recbole` 作为主推荐链路，但服务示例配置仍启用 Gorse 同步；`deployment/config/video_prod.yml` 则关闭 Gorse 同步和 writeback，并以 RecBole 为交付推荐引擎。若不部署 Gorse，先将服务配置中的 `Gorse.SyncEnabled` 设为 `false`。`Gorse.WriteBackEnabled` 只在 Gorse 主链路返回候选时生效。
+> 适用范围：仅当 `Recommendation.Engine=gorse` 时启用本手册中的主链路切换步骤。当前 `configs/video.yml` 和 `configs/video_prod.yml` 均使用 `recbole` 作为主推荐链路，但启用了 Gorse 同步；worker 会立即执行并周期执行同步，失败仅记录警告而不会退出 worker。若不部署 Gorse，先将 `Gorse.SyncEnabled` 设为 `false`。`Gorse.WriteBackEnabled` 只在 Gorse 主链路返回候选时生效。本次按 2026-07-21 的配置与代码状态复核。
 
 ## 部署边界
 
-Gorse 和业务 HTTP/worker 解耦部署。根目录 `docker-compose.yml` 运行一个官方 `zhenghaoz/gorse-in-one` `gorse` 服务，默认不向宿主机发布端口；这不是 Gorse 集群。`docker-compose.gorse.yml` 只是诊断 override，用于临时暴露 master HTTP/gRPC 端口。
+Gorse 和业务 HTTP/worker 解耦部署。根目录 `docker-compose.yml` 使用官方 `zhenghaoz/gorse-in-one` 镜像运行独立 `gorse` 服务，但默认不向宿主机发布端口。`docker-compose.gorse.yml` 只是诊断 override，用于临时暴露 Dashboard 和 master gRPC 端口。
 
 业务服务仍是 API 和数据事实源。Gorse 只负责推荐用户、物品、反馈数据集、模型训练和推荐候选服务。
 
@@ -12,10 +12,11 @@ Gorse 和业务 HTTP/worker 解耦部署。根目录 `docker-compose.yml` 运行
 
 当前本机预期已有：
 
-1. PostgreSQL，默认复用主服务的 `video-app` 数据库，并使用独立 `gorse` schema/表前缀。
-2. MinIO/S3，可选。当前默认使用 Docker volume 保存 Gorse blob/vector/model 文件；需要对象存储时再切到 MinIO/S3。
+1. Redis，默认 `127.0.0.1:6379`。
+2. PostgreSQL，默认复用主服务的 `video-app` 数据库。
+3. MinIO，可选。当前默认使用 Docker volume 保存 Gorse blob/model 文件；需要对象存储时再切到 MinIO/S3。
 
-Gorse 的 `cache_store`、`data_store` 都是 PostgreSQL；Redis 不是本手册的 Gorse 存储依赖。容器连接宿主机数据库时可使用 `host.docker.internal`。
+Gorse 容器通过 `host.docker.internal` 访问宿主机 Redis/PostgreSQL。
 
 ## PostgreSQL Schema 初始化
 
@@ -48,7 +49,7 @@ GORSE_CACHE_STORE=postgres://postgres:change-me@host.docker.internal:5432/video-
 如需修改 PostgreSQL 地址、账号、密码、库名或 schema，同步修改：
 
 1. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_DATA_STORE` 和 `GORSE_CACHE_STORE`。
-2. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` / `GORSE_SERVER_API_KEY`；两个值必须完全一致，因为 Go 客户端把前者作为 `X-API-Key` 发送，而 Gorse 服务端用后者校验。
+2. 私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` / `GORSE_SERVER_API_KEY`，如果 API key 也改了。
 3. `GORSE_DASHBOARD_USERNAME` / `GORSE_DASHBOARD_PASSWORD`，仅用于访问 Gorse 诊断 Dashboard，Go API 不读取这两个变量。
 
 ## 启动和停止
@@ -68,25 +69,18 @@ docker compose ps
 docker compose stop gorse
 ```
 
-如需删除 Gorse 本地模型/blob/cache volume，先只移除 `gorse` 容器，再确认并删除名称包含 `video_app_gorse_data` 和 `video_app_gorse_log` 的两个卷：
+删除 Gorse 本地模型/blob/cache volume：
 
 ```bash
-docker compose stop gorse
-docker compose rm -f gorse
-docker volume ls --format '{{.Name}}' | grep 'video_app_gorse_'
-docker volume rm your_project_video_app_gorse_data your_project_video_app_gorse_log
+docker compose down -v
 ```
 
-Compose project 前缀随目录或 `--project-name` 变化，必须使用上一步输出替换示例中的 `your_project`。不要运行 `docker compose down -v`：它会同时删除根 Compose 声明的 API 暂存、RecBole 数据/产物和其他具名卷。
-
-## 端口与 endpoint
+## 端口
 
 | 服务 | 默认端口 | 用途 |
 | --- | ---: | --- |
-| `gorse` | `8088` | master HTTP、推荐 REST API、Dashboard 和 admin HTTP；生产 Compose 默认仅容器网络可达 |
+| `gorse` | `8088` | 推荐 REST API、Dashboard 和 admin HTTP；生产 Compose 默认仅容器网络可达 |
 | `gorse` | `8086` | 内部 master gRPC |
-
-根 Compose 默认使用 `zhenghaoz/gorse-in-one:0.5.11`；通过 shell 或 Compose 自动读取的根 `.env` 设置 `GORSE_VERSION` 后可显式升级。服务级 `.env.local` / `.env.deploy` 由 `env_file` 注入容器，不参与镜像标签插值，因此不要把版本覆盖写在那里。升级前先在诊断环境验证，不要依赖浮动的 `latest` 标签。
 
 可通过环境变量覆盖端口：
 
@@ -97,32 +91,24 @@ GORSE_MASTER_GRPC_PORT=18086 GORSE_DASHBOARD_PORT=18088 \
 
 ## Go 服务接入
 
-本地服务配置和代码默认 endpoint 是 `http://localhost:8087`。这是服务侧默认值，不是诊断 Compose 的 Gorse master HTTP 端口。
-
-叠加 `docker-compose.gorse.yml` 从宿主机访问 Gorse 时，override 将容器 `8088` 暴露为宿主机 `8088`，因此要显式设置：
-
-```bash
-GORSE_ENDPOINT=http://localhost:8088
-```
-
-服务配置示例：
+本地配置已经默认指向宿主机端口：
 
 ```yaml
 Gorse:
-  Endpoint: "http://localhost:8087"
+  Endpoint: "http://localhost:8088"
   APIKey: ""
 ```
 
 `APIKey` 由私有 `.env.local` / `.env.deploy` 中的 `GORSE_API_KEY` 注入。
 
-根 Compose 的 API/worker 与 `gorse` 在同一网络时使用：
+生产容器如果和 `docker-compose.gorse.yml` 使用同一个 Docker Compose project/network，可使用：
 
 ```yaml
 Gorse:
   Endpoint: "http://gorse:8088"
 ```
 
-若业务服务和 Gorse 分开部署在不同主机，则把 `Gorse.Endpoint` 改成 Gorse server 的实际内网地址（通常是其 master HTTP `8088`）。
+若业务服务和 Gorse 分开部署在不同主机，则把 `Gorse.Endpoint` 改成 Gorse server 的实际内网地址。
 
 启用 Gorse 主推荐链路前，至少设置：
 
@@ -136,8 +122,6 @@ Gorse:
 ```
 
 `WriteBackEnabled` 建议等端到端验证通过后再打开。周期同步仍以 PostgreSQL 为事实源，可以修复漏写的 Gorse 反馈。
-
-交付配置 `deployment/config/video_prod.yml` 保持 `Recommendation.Engine=recbole`，并将 `Gorse.SyncEnabled=false`、`Gorse.WriteBackEnabled=false`；不要把本手册的 Gorse 主链路步骤当作服务器交付默认值。
 
 ## 数据同步
 
@@ -160,7 +144,7 @@ go run ./tools/sync_gorse_recommendation_data --config configs/video.yml
 ## 健康检查
 
 ```bash
-curl -f -H "X-API-Key: ${GORSE_API_KEY}" "${GORSE_ENDPOINT:-http://localhost:8088}/api/recommend/1?n=10"
+curl -f -H "X-API-Key: ${GORSE_API_KEY}" 'http://localhost:8088/api/recommend/1?n=10'
 ```
 
 如果用户 `1` 没有足够数据，返回空列表不一定表示服务异常。优先检查：
@@ -200,14 +184,14 @@ secret_access_key = "change-me"
 
 ```yaml
 Recommendation:
-  Engine: "recbole"
+  Engine: "knowledge_match"
 
 Gorse:
   SyncEnabled: false
   WriteBackEnabled: false
 ```
 
-上例恢复当前交付配置的 RecBole 主链路；如果切换 Gorse 之前明确使用的是其他引擎，应恢复已验证的原值，而不是硬编码 `knowledge_match`。然后重启业务 HTTP/worker。Gorse 服务可继续保留，也可单独停止：
+然后重启业务 HTTP/worker。Gorse 服务可继续保留，也可单独停止：
 
 ```bash
 docker compose stop gorse

@@ -14,6 +14,13 @@ import (
 
 	"video-service/internal/application/adminauth"
 	"video-service/internal/application/knowledgevideo"
+	"video-service/internal/application/notification"
+	"video-service/internal/application/profilevisit"
+	"video-service/internal/application/userfollow"
+	"video-service/internal/application/usermessage"
+	"video-service/internal/application/userprofile"
+	"video-service/internal/application/userpublish"
+	"video-service/internal/application/usersearch"
 	"video-service/internal/application/videoapp"
 	recommendationapp "video-service/internal/application/videoapp/recommendation"
 	"video-service/internal/config"
@@ -39,6 +46,13 @@ type App struct {
 	KnowledgeVideoMaxRequestBytes  int64
 	KnowledgeVideoRepository       knowledgevideo.WorkerRepository
 	AdminAuth                      *adminauth.Service
+	UserProfileService             *userprofile.Service
+	UserPublishService             *userpublish.Service
+	UserFollowService              *userfollow.Service
+	UserMessageService             *usermessage.Service
+	ProfileVisitService            *profilevisit.Service
+	UserSearchService              *usersearch.Service
+	NotificationService            *notification.Service
 }
 
 type HTTPRuntimeConfig struct {
@@ -139,6 +153,12 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		CountsPrefix: config.SegmentReactionCountsPrefix(cfg),
 		UserPrefix:   config.SegmentReactionUserPrefix(cfg),
 	})
+	commentLikeBuffer := infraredis.NewCommentLikeBufferWithOptions(rdb, infraredis.CommentLikeBufferOptions{
+		StreamKey:    config.CommentLikeQueueKey(cfg),
+		CountsPrefix: config.CommentLikeCountsPrefix(cfg),
+		UserPrefix:   config.CommentLikeUserPrefix(cfg),
+	})
+	commentCountCache := infraredis.NewCommentSegmentCountCache(rdb, config.CommentSegmentCountPrefix(cfg))
 	statusStore := infraredis.NewTranscodeStatusStore(rdb, config.TranscodeStatusPrefix(cfg))
 	videoapp.SetRuntimeCounters(infraredis.NewRuntimeCounterStore(rdb, config.RuntimeActiveCounterPrefix(cfg)))
 	primaryEmbedder := newRecommendationEmbedder(ctx, cfg)
@@ -166,6 +186,9 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	service.RandomPlayBucket = infraredis.NewRandomPlayBucketStore(rdb, config.RandomPlayBucketPrefix(cfg))
 	service.ReactionStore = reactionBuffer
 	service.SegmentReactionStore = segmentReactionBuffer
+	service.CommentLikeStore = commentLikeBuffer
+	service.CommentCountStore = commentCountCache
+	service.CommentCountTTL = config.CommentSegmentCountTTL(cfg)
 	knowledgeRepo := persistence.NewGormKnowledgeVideoRepository(db)
 	knowledgeQueue := infraredis.NewKnowledgeVideoTranscodeQueue(rdb, cfg.RedisKeys.KnowledgeVideoTranscodeQueue)
 	knowledgeImporter := &knowledgevideo.ImportService{
@@ -181,6 +204,28 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Batches:  knowledgeRepo,
 		Tree:     knowledgeRepo,
 	}
+
+	userProfileRepo := persistence.NewGormUserProfileRepository(db)
+	userProfileService := userprofile.NewService(userProfileRepo)
+
+	userPublishRepo := persistence.NewGormUserPublishRepository(db)
+	userPublishService := userpublish.NewService(userPublishRepo, queue, vectorQueue)
+
+	userFollowRepo := persistence.NewGormUserFollowRepository(db)
+	userFollowService := userfollow.NewService(db, userFollowRepo, userProfileRepo)
+
+	userMessageRepo := persistence.NewGormUserMessageRepository(db)
+	userMessageService := usermessage.NewService(userMessageRepo)
+
+	visitRepo := persistence.NewGormUserProfileVisitRepository(db)
+	profileVisitService := profilevisit.NewService(visitRepo)
+
+	searchRepo := persistence.NewGormUserSearchRepository(db)
+	userSearchService := usersearch.NewService(searchRepo)
+
+	notificationRepo := persistence.NewGormNotificationRepository(db)
+	notificationService := notification.NewService(notificationRepo)
+	service.MentionNotifier = notificationService
 
 	return &App{
 		DB:               db,
@@ -203,6 +248,13 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		KnowledgeVideoMaxRequestBytes:  cfg.KnowledgeVideoStorage.MaxArchiveBytes + 32<<20,
 		KnowledgeVideoRepository:       knowledgeRepo,
 		AdminAuth:                      adminAuth,
+		UserProfileService:             userProfileService,
+		UserPublishService:             userPublishService,
+		UserFollowService:              userFollowService,
+		UserMessageService:             userMessageService,
+		ProfileVisitService:            profileVisitService,
+		UserSearchService:              userSearchService,
+		NotificationService:            notificationService,
 	}, nil
 }
 

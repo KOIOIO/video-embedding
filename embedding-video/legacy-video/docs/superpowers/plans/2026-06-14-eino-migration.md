@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce Eino-backed Chat and Embedding adapters for `video-service/` while preserving the current ASR, worker, recommendation, and fallback behavior.
+**Goal:** Introduce Eino-backed Chat and Embedding adapters for `legacy-video-http/` while preserving the current ASR, worker, recommendation, and fallback behavior.
 
 **Architecture:** Keep Eino behind project-owned interfaces so worker/application code does not depend directly on Eino types. First create a provider selection seam and composition client, then wire Eino Chat/Embedding adapters into HTTP recommendation and vector worker paths, and finally migrate the small title-rewrite workflow as a low-risk Chain/Graph pilot.
 
@@ -14,14 +14,14 @@
 
 ## Context
 
-- Active backend service: `video-service/`.
+- Active backend service: `legacy-video-http/`.
 - Design spec: `legacy-video/docs/superpowers/specs/2026-06-14-eino-migration-design.md`.
-- Current hand-written model client: `video-service/internal/worker/vectorworker/client_openai.go`.
-- Current HTTP recommendation embedder: `video-service/internal/infrastructure/embedding/client.go`.
-- Current vector worker setup: `video-service/internal/worker/vectorworker/app.go`.
-- Current HTTP app setup: `video-service/internal/http/app/app.go`.
-- Current LLM segmentation flow: `video-service/internal/worker/vectorworker/hierarchical_stage_processing.go`.
-- Current refine ASR/title rewrite/embedding flow: `video-service/internal/worker/vectorworker/tasks/asr.go`.
+- Current hand-written model client: `legacy-video-http/internal/worker/vectorworker/client_openai.go`.
+- Current HTTP recommendation embedder: `legacy-video-http/internal/infrastructure/embedding/client.go`.
+- Current vector worker setup: `legacy-video-http/internal/worker/vectorworker/app.go`.
+- Current HTTP app setup: `legacy-video-http/internal/http/app/app.go`.
+- Current LLM segmentation flow: `legacy-video-http/internal/worker/vectorworker/hierarchical_stage_processing.go`.
+- Current refine ASR/title rewrite/embedding flow: `legacy-video-http/internal/worker/vectorworker/tasks/asr.go`.
 
 The plan intentionally leaves DashScope WebSocket ASR, FFmpeg, Redis Stream stage queues, GORM repositories, and HTTP routes in their current architecture.
 
@@ -29,50 +29,50 @@ The plan intentionally leaves DashScope WebSocket ASR, FFmpeg, Redis Stream stag
 
 **Create:**
 
-- `video-service/internal/infrastructure/ai/provider.go`
+- `legacy-video-http/internal/infrastructure/ai/provider.go`
   - Owns provider selection helpers and small AI interfaces shared by app/worker wiring.
-- `video-service/internal/infrastructure/ai/eino/chat.go`
+- `legacy-video-http/internal/infrastructure/ai/eino/chat.go`
   - Eino-backed Chat adapter, exposed through project-owned methods.
-- `video-service/internal/infrastructure/ai/eino/chat_test.go`
+- `legacy-video-http/internal/infrastructure/ai/eino/chat_test.go`
   - Chat adapter unit tests using an injected fake generator.
-- `video-service/internal/infrastructure/ai/eino/embedding.go`
+- `legacy-video-http/internal/infrastructure/ai/eino/embedding.go`
   - Eino-backed single-text and batch embedding adapters.
-- `video-service/internal/infrastructure/ai/eino/embedding_test.go`
+- `legacy-video-http/internal/infrastructure/ai/eino/embedding_test.go`
   - Embedding adapter unit tests using an injected fake embedder.
-- `video-service/internal/worker/vectorworker/ai_client.go`
+- `legacy-video-http/internal/worker/vectorworker/ai_client.go`
   - Vector worker AI client interfaces and composition wrapper.
-- `video-service/internal/worker/vectorworker/title_rewrite.go`
+- `legacy-video-http/internal/worker/vectorworker/title_rewrite.go`
   - Small title rewrite workflow wrapper.
-- `video-service/internal/worker/vectorworker/title_rewrite_test.go`
+- `legacy-video-http/internal/worker/vectorworker/title_rewrite_test.go`
   - Title rewrite workflow tests using a fake chat client.
 
 **Modify:**
 
-- `video-service/go.mod`
+- `legacy-video-http/go.mod`
   - Add Eino dependencies after verifying exact versions and import paths.
-- `video-service/internal/config/types.go`
+- `legacy-video-http/internal/config/types.go`
   - Add `AI.Provider`.
-- `video-service/internal/config/defaults.go`
+- `legacy-video-http/internal/config/defaults.go`
   - Add `AIProvider(cfg)` helper with safe default `legacy`.
-- `video-service/internal/config/loader_test.go`
+- `legacy-video-http/internal/config/loader_test.go`
   - Cover default and explicit AI provider behavior.
-- `video-service/configs/video.yml`
+- `legacy-video-http/configs/video.yml`
   - Add explicit `AI.Provider: "legacy"`.
-- `video-service/configs/video_prod.yml`
+- `legacy-video-http/configs/video_prod.yml`
   - Add explicit `AI.Provider: "legacy"`.
-- `video-service/internal/http/app/app.go`
+- `legacy-video-http/internal/http/app/app.go`
   - Select HTTP recommendation embedder from provider config.
-- `video-service/internal/worker/vectorworker/app.go`
+- `legacy-video-http/internal/worker/vectorworker/app.go`
   - Select vector Chat/Embedding adapters from provider config while preserving ASR.
-- `video-service/internal/worker/vectorworker/stage_coarse.go`
+- `legacy-video-http/internal/worker/vectorworker/stage_coarse.go`
   - Depend on a vector AI interface instead of concrete `*openAICompatClient`.
-- `video-service/internal/worker/vectorworker/stage_refine.go`
+- `legacy-video-http/internal/worker/vectorworker/stage_refine.go`
   - Depend on a vector AI interface instead of concrete `*openAICompatClient`.
-- `video-service/internal/worker/vectorworker/hierarchical_stage_processing.go`
+- `legacy-video-http/internal/worker/vectorworker/hierarchical_stage_processing.go`
   - Depend on a vector AI interface instead of concrete `*openAICompatClient`.
-- `video-service/internal/worker/vectorworker/task.go`
+- `legacy-video-http/internal/worker/vectorworker/task.go`
   - Keep legacy mode compiling by accepting the same vector AI interface.
-- `video-service/internal/worker/vectorworker/tasks/asr.go`
+- `legacy-video-http/internal/worker/vectorworker/tasks/asr.go`
   - Keep its existing minimal AI interface; only call through title rewrite wrapper when present.
 
 ---
@@ -80,11 +80,11 @@ The plan intentionally leaves DashScope WebSocket ASR, FFmpeg, Redis Stream stag
 ### Task 1: Calibrate Eino Dependency and API
 
 **Files:**
-- Modify: `video-service/go.mod`
+- Modify: `legacy-video-http/go.mod`
 
 - [ ] **Step 1: Inspect official Eino packages before writing adapter code**
 
-Run from `video-service/`:
+Run from `legacy-video-http/`:
 
 ```bash
 go list -m -versions github.com/cloudwego/eino
@@ -95,7 +95,7 @@ Expected: both commands print available versions. Pick the latest stable version
 
 - [ ] **Step 2: Add Eino modules**
 
-Run from `video-service/`:
+Run from `legacy-video-http/`:
 
 ```bash
 go get github.com/cloudwego/eino@latest
@@ -106,7 +106,7 @@ Expected: `go.mod` and `go.sum` are updated with CloudWeGo Eino modules.
 
 - [ ] **Step 3: Confirm concrete provider package names**
 
-Run from `video-service/`:
+Run from `legacy-video-http/`:
 
 ```bash
 go doc github.com/cloudwego/eino/components/model
@@ -133,11 +133,11 @@ Expected: PASS.
 ### Task 2: Add Provider Configuration
 
 **Files:**
-- Modify: `video-service/internal/config/types.go`
-- Modify: `video-service/internal/config/defaults.go`
-- Modify: `video-service/internal/config/loader_test.go`
-- Modify: `video-service/configs/video.yml`
-- Modify: `video-service/configs/video_prod.yml`
+- Modify: `legacy-video-http/internal/config/types.go`
+- Modify: `legacy-video-http/internal/config/defaults.go`
+- Modify: `legacy-video-http/internal/config/loader_test.go`
+- Modify: `legacy-video-http/configs/video.yml`
+- Modify: `legacy-video-http/configs/video_prod.yml`
 
 - [ ] **Step 1: Write the failing provider default tests**
 
@@ -240,7 +240,7 @@ Expected: PASS.
 ### Task 3: Add Shared AI Provider Interfaces
 
 **Files:**
-- Create: `video-service/internal/infrastructure/ai/provider.go`
+- Create: `legacy-video-http/internal/infrastructure/ai/provider.go`
 
 - [ ] **Step 1: Create provider interfaces and constants**
 
@@ -328,11 +328,11 @@ Expected: PASS.
 ### Task 4: Introduce Vector Worker AI Composition
 
 **Files:**
-- Create: `video-service/internal/worker/vectorworker/ai_client.go`
-- Modify: `video-service/internal/worker/vectorworker/stage_coarse.go`
-- Modify: `video-service/internal/worker/vectorworker/stage_refine.go`
-- Modify: `video-service/internal/worker/vectorworker/hierarchical_stage_processing.go`
-- Modify: `video-service/internal/worker/vectorworker/task.go`
+- Create: `legacy-video-http/internal/worker/vectorworker/ai_client.go`
+- Modify: `legacy-video-http/internal/worker/vectorworker/stage_coarse.go`
+- Modify: `legacy-video-http/internal/worker/vectorworker/stage_refine.go`
+- Modify: `legacy-video-http/internal/worker/vectorworker/hierarchical_stage_processing.go`
+- Modify: `legacy-video-http/internal/worker/vectorworker/task.go`
 
 - [ ] **Step 1: Add the vector AI interfaces and composition client**
 
@@ -481,8 +481,8 @@ Expected: PASS.
 ### Task 5: Add Eino Chat Adapter
 
 **Files:**
-- Create: `video-service/internal/infrastructure/ai/eino/chat.go`
-- Create: `video-service/internal/infrastructure/ai/eino/chat_test.go`
+- Create: `legacy-video-http/internal/infrastructure/ai/eino/chat.go`
+- Create: `legacy-video-http/internal/infrastructure/ai/eino/chat_test.go`
 
 - [ ] **Step 1: Write adapter tests using an injected generator**
 
@@ -678,8 +678,8 @@ Expected: PASS.
 ### Task 6: Add Eino Embedding Adapter
 
 **Files:**
-- Create: `video-service/internal/infrastructure/ai/eino/embedding.go`
-- Create: `video-service/internal/infrastructure/ai/eino/embedding_test.go`
+- Create: `legacy-video-http/internal/infrastructure/ai/eino/embedding.go`
+- Create: `legacy-video-http/internal/infrastructure/ai/eino/embedding_test.go`
 
 - [ ] **Step 1: Write adapter tests using an injected batch embed function**
 
@@ -856,8 +856,8 @@ Expected: PASS.
 ### Task 7: Wire HTTP Recommendation Embedder Provider Selection
 
 **Files:**
-- Modify: `video-service/internal/http/app/app.go`
-- Test: existing `video-service/internal/http/app/app_test.go`
+- Modify: `legacy-video-http/internal/http/app/app.go`
+- Test: existing `legacy-video-http/internal/http/app/app_test.go`
 
 - [ ] **Step 1: Add a provider factory helper in HTTP app**
 
@@ -947,8 +947,8 @@ Expected: PASS.
 ### Task 8: Wire Vector Worker Provider Selection
 
 **Files:**
-- Modify: `video-service/internal/worker/vectorworker/app.go`
-- Test: `video-service/internal/worker/vectorworker/client_openai_test.go`
+- Modify: `legacy-video-http/internal/worker/vectorworker/app.go`
+- Test: `legacy-video-http/internal/worker/vectorworker/client_openai_test.go`
 
 - [ ] **Step 1: Add provider-aware vector client factory**
 
@@ -1049,9 +1049,9 @@ Expected: PASS.
 ### Task 9: Add Title Rewrite Workflow Wrapper
 
 **Files:**
-- Create: `video-service/internal/worker/vectorworker/title_rewrite.go`
-- Create: `video-service/internal/worker/vectorworker/title_rewrite_test.go`
-- Modify: `video-service/internal/worker/vectorworker/tasks/asr.go`
+- Create: `legacy-video-http/internal/worker/vectorworker/title_rewrite.go`
+- Create: `legacy-video-http/internal/worker/vectorworker/title_rewrite_test.go`
+- Modify: `legacy-video-http/internal/worker/vectorworker/tasks/asr.go`
 
 - [ ] **Step 1: Add title rewrite wrapper tests**
 
@@ -1155,7 +1155,7 @@ Expected: PASS.
 
 - [ ] **Step 1: Run focused package tests**
 
-Run from `video-service/`:
+Run from `legacy-video-http/`:
 
 ```bash
 go test ./internal/config ./internal/infrastructure/ai ./internal/infrastructure/ai/eino ./internal/infrastructure/embedding ./internal/worker/vectorworker ./internal/worker/vectorworker/tasks ./internal/application/videoapp/recommendation ./internal/http/app
@@ -1188,7 +1188,7 @@ Append a short section to the design doc:
 ## Implementation Notes
 
 - `AI.Provider` controls whether Eino-backed adapters are selected. The default is `legacy`.
-- Eino Chat and Embedding adapters are isolated under `video-service/internal/infrastructure/ai/eino/`.
+- Eino Chat and Embedding adapters are isolated under `legacy-video-http/internal/infrastructure/ai/eino/`.
 - Vector worker ASR remains on the existing DashScope WebSocket implementation.
 - HTTP recommendation embedding remains protected by `FallbackEmbedder`.
 ```

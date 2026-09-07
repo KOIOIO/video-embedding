@@ -12,11 +12,15 @@ import (
 type Service struct {
 	Repo                 VideoRepository
 	SegmentReactionRepo  SegmentReactionRepository
+	CommentRepo          CommentRepository
 	Queue                TranscodeQueue
 	VectorQueue          VectorizeQueue
 	StatusStore          TranscodeStatusStore
 	ReactionStore        VideoReactionStore
 	SegmentReactionStore VideoReactionStore
+	CommentLikeStore     CommentLikeStore
+	CommentCountStore    CommentSegmentCountStore
+	CommentCountTTL      time.Duration
 	RecommendationEngine string
 	GorseClient          recommendationapp.GorseClient
 	GorseOptions         recommendationapp.GorseOptions
@@ -31,25 +35,30 @@ type Service struct {
 	Now                  func() time.Time
 	StatusTTL            time.Duration
 	DeleteLocal          bool
+	MentionNotifier      MentionNotifier
 }
 
 // NewService 创建应用服务，并注入运行期所需的基础设施依赖。
 func NewService(repo VideoRepository, queue TranscodeQueue, vectorQueue VectorizeQueue, statusStore TranscodeStatusStore, store ObjectStore, fs FileStorage, embedder TextEmbedder, paths Paths) *Service {
 	svc := &Service{
-		Repo:        repo,
-		Queue:       queue,
-		VectorQueue: vectorQueue,
-		StatusStore: statusStore,
-		Store:       store,
-		FS:          fs,
-		Embedder:    embedder,
-		Paths:       normalizePaths(paths),
-		Now:         time.Now,
-		StatusTTL:   24 * time.Hour,
-		DeleteLocal: true,
+		Repo:            repo,
+		Queue:           queue,
+		VectorQueue:     vectorQueue,
+		StatusStore:     statusStore,
+		Store:           store,
+		FS:              fs,
+		Embedder:        embedder,
+		Paths:           normalizePaths(paths),
+		Now:             time.Now,
+		StatusTTL:       24 * time.Hour,
+		CommentCountTTL: defaultCommentCountTTL,
+		DeleteLocal:     true,
 	}
 	if segmentRepo, ok := repo.(SegmentReactionRepository); ok {
 		svc.SegmentReactionRepo = segmentRepo
+	}
+	if commentRepo, ok := repo.(CommentRepository); ok {
+		svc.CommentRepo = commentRepo
 	}
 	return svc
 }

@@ -95,7 +95,7 @@ services:
       retries: 5
 
   gorse:
-    image: zhenghaoz/gorse-in-one:${GORSE_VERSION:-0.5.11}
+    image: zhenghaoz/gorse-in-one:${GORSE_VERSION:-latest}
     entrypoint: ["/bin/sh", "/opt/video_app/gorse-entrypoint.sh"]
     env_file:
       - ${VIDEO_APP_ENV_FILE:-.env.deploy}

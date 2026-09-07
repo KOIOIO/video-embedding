@@ -52,12 +52,3 @@ def write_metrics(path: str | Path, metrics: dict[str, Any]) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(metrics, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def merge_export_stats(metrics: dict[str, Any], path: str | Path) -> dict[str, Any]:
-    result = dict(metrics)
-    stats = read_metrics(path)
-    for key, value in stats.items():
-        if isinstance(value, (int, float)):
-            result[key] = value
-    return result

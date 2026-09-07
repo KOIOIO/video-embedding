@@ -9,8 +9,7 @@
 - `video-service/`：推荐部署的 Go HTTP 视频服务，提供上传、转码、播放、推荐、观看记录、题库查询和异步 worker。
 - `recbole-training/`：RecBole 推荐离线训练代码、atomic 数据流水线和模型产物目录。
 - `hls-web/`：Vue 3 + Vite 联调控制台，包含视频调试、推荐诊断和知识点视频三个工作区。
-- `legacy-video/`：历史 Go 后端工程，当前不作为后续 Java 对接入口。
-- `two-tower-training/`：历史双塔训练代码，已归档，仅保留迁移参考。
+- `video-embedding/`：历史 Go 后端工程，当前不作为后续 Java 对接入口。
 - `docs/`：仓库级设计文档、演示文稿等材料。
 - `deployment/`：服务器交付包，包含 standalone、cloud、intranet 三种部署拓扑及打包、校验脚本。
 
@@ -23,7 +22,6 @@
 - 标准对接入口：`video-service/cmd/httpapi`
 - 异步处理入口：`video-service/cmd/worker`
 - RecBole 训练入口：`video-service/cmd/recboletrainer`
-- 知识点视频初始化导入工具：`video-service/cmd/knowledgevideo-import`（运维初始化，不经过 HTTP/ZIP）
 - 知识点视频处理：由 `cmd/worker` 中的独立 Redis Stream worker 消费
 - 本地默认监听地址：`:8081`
 - 当前 `docker-compose.yml` 服务器部署端口：`8083`
@@ -40,21 +38,13 @@
 ├── AGENTS.md                        # AI agent 行为准则
 ├── docker-compose.yml               # 根目录便捷部署编排
 ├── docker-compose.local.yml         # 复用本地 Postgres/Redis/MinIO 的覆盖配置
-├── docker-compose.gorse.yml         # 暴露 Gorse 诊断端口的覆盖配置
-├── docker-compose.cloud.yml         # 叠加在生产栈上的端口暴露覆盖
-├── docker-compose.migrated.yml      # 隔离本地数据栈(Postgres/Redis/MinIO)
-├── docker-compose.recbole.yml       # 历史 RecBole 编排(保留兼容，勿作新入口)
-├── .env.local.example               # 本地环境变量模板
-├── .env.deploy.example              # 部署环境变量模板
-├── .env.migrated.example            # 隔离本地栈环境模板
 ├── deployment/                      # 服务器部署包、拓扑和运维脚本
-├── scripts/                         # 隔离本地栈、数据迁移与仓库校验脚本
+├── hls-web.zip                      # 前端预构建压缩包
 ├── video-vectorization-cost-report.md
 ├── docs/                            # 仓库级设计文档、演示文稿等
 ├── video-service/      # 推荐部署的 HTTP 后端，供 Java 调用
 ├── recbole-training/                # RecBole 推荐训练代码、数据与模型产物
-├── two-tower-training/              # 历史双塔训练代码(已归档)
-├── legacy-video/                    # 历史 Go 后端主工程
+├── video-embedding/           # 历史 Go 后端主工程
 └── hls-web/                         # Vue 3 + Vite 前端调试工程
 ```
 
@@ -65,7 +55,7 @@
 - English parameter reference: [`PROJECT_PARAMETERS_EN.md`](PROJECT_PARAMETERS_EN.md)
 - RecBole 训练说明：[`recbole-training/README.md`](recbole-training/README.md)
 - 前端调试工程说明：[`hls-web/README.md`](hls-web/README.md)
-- 历史后端工程说明：[`legacy-video/README.md`](legacy-video/README.md)
+- 历史后端工程说明：[`video-embedding/README.md`](video-embedding/README.md)
 - 仓库级文档说明：[`docs/README.md`](docs/README.md)
 - 接口契约：[`video-service/docs/swagger/swagger.yaml`](video-service/docs/swagger/swagger.yaml)
 - RecBole 算法交接：[`recbole-training/ALGORITHM_HANDOFF.md`](recbole-training/ALGORITHM_HANDOFF.md)
@@ -89,9 +79,6 @@
 | `VIDEO_APP_ENV_FILE` | Compose 使用的私有环境文件，默认 `.env.deploy` |
 | `VIDEO_APP_HTTP_PORT` | 宿主机暴露的后端 HTTP 端口，默认 `8083` |
 | `VIDEO_APP_WEB_PORT` | 宿主机暴露的调试前端端口，默认 `1325` |
-| `JWT_SECRET` | 管理员 JWT 签名密钥，必须替换为至少 32 个字符的随机值 |
-| `GORSE_VERSION` | Compose 镜像插值变量，默认 `0.5.11`；仅由 shell 或 Compose `.env` 提供，升级时显式设置并验证 |
-| `GORSE_API_KEY` / `GORSE_SERVER_API_KEY` | Go 客户端和 Gorse 服务端 API key，两个值必须完全一致 |
 | `GORSE_DASHBOARD_USERNAME` | 可选诊断 Dashboard 登录用户，不供 Go API 使用 |
 | `GORSE_DASHBOARD_PASSWORD` | 可选诊断 Dashboard 登录密码，生产环境必须替换示例值 |
 
@@ -99,8 +86,7 @@
 
 ```bash
 cp .env.deploy.example .env.deploy
-# 编辑 .env.deploy，填入数据库 DSN、JWT_SECRET、对象存储、Gorse 和 AI API key
-# JWT_SECRET 必须使用本部署独有的随机值，不要沿用模板占位值
+# 编辑 .env.deploy，填入数据库 DSN、对象存储、Gorse 和 AI API key
 docker compose up -d
 ```
 
@@ -117,12 +103,10 @@ docker compose logs -f api worker
 docker compose -f docker-compose.yml -f docker-compose.gorse.yml up -d
 ```
 
-Gorse 使用主 PostgreSQL 实例中的独立 schema 保存数据和缓存，向量存储与 blob 默认保存在 Gorse 自己的 SQLite/具名卷中；根 Compose 不为 Gorse 配置宿主机 Redis 连接。具体初始化、端口、同步和回滚见
+Gorse 默认使用宿主机 Redis 和主服务 PostgreSQL 的独立 schema，具体初始化、同步和回滚见
 `video-service/docs/gorse-recommendation-runbook.md`。
 
 推荐控制台的“命中效果”页通过 API 展示 PostgreSQL 中保存的 RecBole 离线评估趋势，包括 Recall@20、NDCG@20、Hit@20 和 Precision@20。
-
-知识点视频达到服务端计算的有效观看阈值后，才会作为训练期辅助信号进入 RecBole；知识点视频虚拟 item 不进入线上候选或 item embedding。训练发布前还会执行数据质量门禁，失败时保留上一版 active 模型。
 
 生产后端镜像内置 FFmpeg，`configs/video_prod.yml` 使用原生 FFmpeg，不需要挂载宿主 Docker socket。API 和 worker 共享受控具名卷作为本地转码暂存区，持久对象仍由对象存储管理。
 
@@ -131,20 +115,6 @@ Gorse 使用主 PostgreSQL 实例中的独立 schema 保存数据和缓存，向
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 ```
-
-## 隔离本地栈
-
-`docker-compose.migrated.yml` 提供一套独立的本地依赖栈(PostgreSQL + pgvector `15432`、Redis `16379`、MinIO `19000`)，适合本地调试且不影响其他环境：
-
-```bash
-./scripts/init-migrated-env.sh
-docker compose -f docker-compose.migrated.yml up -d
-./scripts/run-migrated-local.sh api       # HTTP API，默认 http://127.0.0.1:18083
-./scripts/run-migrated-local.sh worker    # 转码/向量化 worker
-./scripts/run-migrated-local.sh frontend  # 前端，默认 http://127.0.0.1:15173
-```
-
-需要把历史库数据迁入隔离栈时，编辑 `.env.migrated.local` 的 `MIGRATION_SOURCE_*` 后运行 `./scripts/migrate-local-data.sh`。仓库命名与安全校验用 `./scripts/validate-repository.sh`。
 
 ## 服务器部署包
 
@@ -170,5 +140,4 @@ docker compose -f docker-compose.migrated.yml up -d
 
 - `video-service/` 是当前推荐对接入口；新集成应优先使用标准 REST 路径，不要继续依赖历史兼容路径。
 - 根目录 compose 更偏便捷部署和联调形态，不等同于完整生产编排。
-- `legacy-video/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。
-- `two-tower-training/` 已归档，当前推荐引擎为 RecBole；不要用旧双塔脚本生成新模型版本。
+- `video-embedding/` 是历史工程，除非明确需要维护历史链路，否则不建议作为新功能入口。

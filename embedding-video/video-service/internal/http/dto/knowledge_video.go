@@ -57,25 +57,6 @@ type KnowledgeVideoPlaybackRecordResponse struct {
 	Data    KnowledgeVideoPlaybackRecordData `json:"data"`
 }
 
-type KnowledgeVideoWatchSessionRequest struct {
-	UserID         uint64 `json:"user_id"`
-	WatchedSeconds *int   `json:"watched_seconds"`
-}
-
-type KnowledgeVideoWatchSessionData struct {
-	SessionID             string  `json:"session_id"`
-	SessionWatchedSeconds int     `json:"session_watched_seconds"`
-	TotalWatchedSeconds   int     `json:"total_watched_seconds"`
-	DurationSeconds       int     `json:"duration_seconds"`
-	ProgressRatio         float64 `json:"progress_ratio"`
-	EffectiveWatch        bool    `json:"effective_watch"`
-}
-
-type KnowledgeVideoWatchSessionResponse struct {
-	Success bool                           `json:"success"`
-	Data    KnowledgeVideoWatchSessionData `json:"data"`
-}
-
 type KnowledgeVideoTreeVideo struct {
 	ID           uint64 `json:"id"`
 	BatchID      uint64 `json:"batch_id"`

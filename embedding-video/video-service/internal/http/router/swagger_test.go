@@ -146,6 +146,8 @@ func TestSwaggerDocGroupsAllStandardRoutes(t *testing.T) {
 		"GET /api/videos/{id}/play": "视频播放与转码", "GET /api/transcode-tasks/{taskId}": "视频播放与转码",
 		"POST /api/videos/{id}/reactions": "视频互动", "GET /api/videos/{id}/reaction-counts": "视频互动", "POST /api/watch-records": "视频互动",
 		"GET /api/video-segments/random-play": "视频片段", "POST /api/video-segments/{id}/reactions": "视频片段", "GET /api/video-segments/{id}/reaction-counts": "视频片段",
+		"GET /api/video-segments/{id}/comments": "视频评论", "GET /api/video-segments/{id}/comment-counts": "视频评论", "POST /api/video-segments/{id}/comments": "视频评论",
+		"GET /api/comments/{id}/replies": "视频评论", "POST /api/comments/{id}/replies": "视频评论", "POST /api/comments/{id}/reactions": "视频评论",
 		"GET /api/questions": "题目", "GET /api/questions/{id}": "题目",
 		"GET /api/recommendations": "推荐", "POST /api/recommendations/by-question": "推荐",
 		"GET /api/admin/recommendation/overview": "推荐管理", "GET /api/admin/recommendation/diagnostics": "推荐管理", "GET /api/admin/recommendation/datasources": "推荐管理", "GET /api/admin/recommendation/effects": "推荐管理", "GET /api/admin/recommendation/recbole/performance": "推荐管理",
@@ -327,6 +329,18 @@ func (routerAuthRepository) FindActiveAdminByUsername(context.Context, string) (
 
 func (routerAuthRepository) FindActiveAdminByID(_ context.Context, id uint64) (adminauth.Admin, bool, error) {
 	return adminauth.Admin{ID: id, Username: "admin"}, id == 7, nil
+}
+
+func (routerAuthRepository) FindActiveUserByUsername(context.Context, string) (adminauth.Admin, bool, error) {
+	return adminauth.Admin{ID: 7, Username: "admin"}, true, nil
+}
+
+func (routerAuthRepository) FindActiveUserByID(_ context.Context, id uint64) (adminauth.Admin, bool, error) {
+	return adminauth.Admin{ID: id, Username: "admin"}, id == 7, nil
+}
+
+func (routerAuthRepository) CreateUser(context.Context, adminauth.Admin) (uint64, error) {
+	return 7, nil
 }
 
 func authenticatedTestRouter(t *testing.T, app *appbuilder.App) (*gin.Engine, string) {

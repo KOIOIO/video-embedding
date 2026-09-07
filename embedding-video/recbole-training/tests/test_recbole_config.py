@@ -30,10 +30,6 @@ class RecBoleConfigTest(unittest.TestCase):
         cfg = config.build_config("/tmp/recbole/data/recbole_v1", dataset="video_app")
         self.assertEqual(cfg["data_path"], "/tmp/recbole/data")
 
-    def test_uses_pre_split_benchmark_files(self) -> None:
-        cfg = config.build_config("/tmp/recbole/data/recbole_v1")
-        self.assertEqual(cfg["benchmark_filename"], ["train", "valid", "test"])
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -142,6 +142,10 @@ type RedisKeysConfig struct {
 	SegmentReactionQueue         string `yaml:"SegmentReactionQueue"`
 	SegmentReactionCounts        string `yaml:"SegmentReactionCounts"`
 	SegmentReactionUser          string `yaml:"SegmentReactionUser"`
+	CommentLikeQueue             string `yaml:"CommentLikeQueue"`
+	CommentLikeCounts            string `yaml:"CommentLikeCounts"`
+	CommentLikeUser              string `yaml:"CommentLikeUser"`
+	CommentSegmentCount          string `yaml:"CommentSegmentCount"`
 	TranscodeStatus              string `yaml:"TranscodeStatus"`
 	RuntimeActiveCounter         string `yaml:"RuntimeActiveCounter"`
 	RandomPlayRecent             string `yaml:"RandomPlayRecent"`

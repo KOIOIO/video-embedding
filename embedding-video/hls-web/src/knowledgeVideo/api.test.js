@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchKnowledgeTree, pollKnowledgeVideoBatch, recordKnowledgePlayback, reportKnowledgeWatchSession, resolveKnowledgePlayback, uploadKnowledgeVideoBatch } from './api.js'
+import { fetchKnowledgeTree, pollKnowledgeVideoBatch, recordKnowledgePlayback, resolveKnowledgePlayback, uploadKnowledgeVideoBatch } from './api.js'
 
 const ok = (data, status = 200) => Promise.resolve({ ok: true, status, json: async () => ({ success: true, data }) })
 
@@ -63,15 +63,4 @@ it('records playback for the concrete knowledge video', async () => {
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ user_id: 7 }),
 	}))
-})
-
-it('puts absolute watch seconds with optional keepalive', async () => {
-	const fetchImpl = vi.fn(() => ok({ total_watched_seconds: 60 }))
-	await reportKnowledgeWatchSession(88, 'session-00000001', 7, 40, { fetchImpl, keepalive: true })
-	expect(fetchImpl).toHaveBeenCalledWith('/api/knowledge-videos/88/watch-sessions/session-00000001', {
-		method: 'PUT',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ user_id: 7, watched_seconds: 40 }),
-		keepalive: true,
-	})
 })

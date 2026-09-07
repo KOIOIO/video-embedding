@@ -11,20 +11,6 @@ import (
 
 const schemaMigrationAdvisoryLockID int64 = 2026062301
 
-var autoMigrateModels = []any{
-	&model.EduVideoResource{},
-	&model.EduVideoUserReaction{},
-	&model.EduUserReaction{},
-	&model.EduVideoSegment{},
-	&model.EduVideoVectorStage{},
-	&model.EduUserVideoRecommend{},
-	&model.EduUserVideoProfile{},
-	&model.EduRecommendExposure{},
-	&model.EduKnowledgeVideoBatch{},
-	&model.EduKnowledgeVideo{},
-	&model.EduKnowledgeVideoPlayRecord{},
-}
-
 // EnsureSchema serializes startup DDL across HTTP and worker processes.
 func EnsureSchema(db *gorm.DB) error {
 	if db == nil {
@@ -40,16 +26,30 @@ func EnsureSchema(db *gorm.DB) error {
 		if err := EnsureRecSysSchema(tx); err != nil {
 			return err
 		}
-		if err := tx.AutoMigrate(autoMigrateModels...); err != nil {
-			return err
-		}
-		if err := EnsureSchemaComments(tx); err != nil {
+		if err := tx.AutoMigrate(&model.EduVideoResource{}, &model.EduVideoUserReaction{}, &model.EduUserReaction{}, &model.EduVideoSegment{}, &model.EduVideoVectorStage{}, &model.EduUserVideoRecommend{}, &model.EduUserVideoProfile{}, &model.EduRecommendExposure{}, &model.EduKnowledgeVideoBatch{}, &model.EduKnowledgeVideo{}, &model.EduKnowledgeVideoPlayRecord{}, &model.EduVideoComment{}, &model.EduCommentLike{}, &model.EduUserProfile{}, &model.EduUserFollow{}, &model.EduUserMessage{}, &model.EduUserProfileVisit{}, &model.EduUserNotification{}); err != nil {
 			return err
 		}
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_video ON edu_video_segment(video_id);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_segment_embedding ON edu_video_segment USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_user ON edu_user_video_recommend(user_id);`).Error
 		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_video_recommend_video ON edu_user_video_recommend(video_id);`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_comment_segment_root ON edu_video_comment(video_segment_id, root_id, create_time);`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_comment_replies ON edu_video_comment(root_id, create_time) WHERE parent_id <> 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_comment_like_comment_user ON edu_comment_like(comment_id, user_id);`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_user_profile_user_active ON edu_user_profile(user_id) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_user_follow_pair_active ON edu_user_follow(follower_id, following_id) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_follow_follower ON edu_user_follow(follower_id, create_time) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_follow_following ON edu_user_follow(following_id, create_time) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_message_conversation ON edu_user_message(conversation_id, create_time) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_message_receiver_unread ON edu_user_message(receiver_id, is_read) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_message_sender ON edu_user_message(sender_id, create_time) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_user_profile_visit_daily ON edu_user_profile_visit(visitor_id, owner_id, visit_date) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_profile_visit_owner_date ON edu_user_profile_visit(owner_id, visit_date) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_video_resource_source_user ON edu_video_resource(source_type, user_id) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_sys_user_username ON sys_user(username) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_notification_user_read_create ON edu_user_notification(user_id, is_read, create_time DESC) WHERE deleted = 0;`).Error
+		_ = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_user_notification_user_deleted ON edu_user_notification(user_id, deleted);`).Error
+		_ = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uk_user_notification_comment_user_type_active ON edu_user_notification(comment_id, user_id, type) WHERE deleted = 0;`).Error
 		if err := ensureKnowledgeVideoIndexes(tx); err != nil {
 			return err
 		}
@@ -75,7 +75,6 @@ func ensureKnowledgeVideoIndexes(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_video_play_record_user_create_time ON edu_knowledge_video_play_record(user_id, create_time);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_video_play_record_knowledge_point_create_time ON edu_knowledge_video_play_record(knowledge_point_id, create_time);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_video_play_record_knowledge_video_create_time ON edu_knowledge_video_play_record(knowledge_video_id, create_time);`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS uk_knowledge_video_play_session ON edu_knowledge_video_play_record(user_id, knowledge_video_id, session_id) WHERE session_id IS NOT NULL AND session_id <> '';`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {
 			return err

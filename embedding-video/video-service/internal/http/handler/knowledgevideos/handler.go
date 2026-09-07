@@ -20,47 +20,7 @@ type Service interface {
 	GetBatch(ctx context.Context, batchID uint64) (knowledgevideo.Batch, []knowledgevideo.Video, bool, error)
 	ListPlayback(ctx context.Context, knowledgePointID uint64) (knowledgevideo.PlaybackResolution, error)
 	RecordPlayback(ctx context.Context, userID, knowledgeVideoID uint64) error
-	ReportWatchSession(ctx context.Context, input knowledgevideo.WatchSessionInput) (knowledgevideo.WatchSessionResult, error)
 	ListTree(ctx context.Context) ([]knowledgevideo.KnowledgeTreeNode, error)
-}
-
-// ReportWatchSession godoc
-// @Summary 上报知识点视频观看会话
-// @Tags 知识点视频
-// @Accept json
-// @Produce json
-// @Param knowledgeVideoId path int true "Knowledge video ID"
-// @Param sessionId path string true "Playback session ID"
-// @Param request body dto.KnowledgeVideoWatchSessionRequest true "Absolute watched seconds"
-// @Success 200 {object} dto.KnowledgeVideoWatchSessionResponse
-// @Failure 400 {object} dto.ErrorResponse
-// @Failure 404 {object} dto.ErrorResponse
-// @Failure 409 {object} dto.ErrorResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/knowledge-videos/{knowledgeVideoId}/watch-sessions/{sessionId} [put]
-func (h *Handler) ReportWatchSession(c *gin.Context) {
-	knowledgeVideoID, ok := positiveParam(c, "knowledgeVideoId")
-	if !ok {
-		return
-	}
-	var request dto.KnowledgeVideoWatchSessionRequest
-	if err := c.ShouldBindJSON(&request); err != nil || request.UserID == 0 || request.WatchedSeconds == nil {
-		httpError(c, &knowledgevideo.InvalidArgument{Field: "request"})
-		return
-	}
-	result, err := h.service.ReportWatchSession(c, knowledgevideo.WatchSessionInput{
-		UserID: request.UserID, KnowledgeVideoID: knowledgeVideoID,
-		SessionID: c.Param("sessionId"), WatchedSeconds: *request.WatchedSeconds,
-	})
-	if err != nil {
-		httpError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, dto.KnowledgeVideoWatchSessionResponse{Success: true, Data: dto.KnowledgeVideoWatchSessionData{
-		SessionID: result.SessionID, SessionWatchedSeconds: result.SessionWatchedSeconds,
-		TotalWatchedSeconds: result.TotalWatchedSeconds, DurationSeconds: result.DurationSeconds,
-		ProgressRatio: result.ProgressRatio, EffectiveWatch: result.EffectiveWatch,
-	}})
 }
 
 // Tree godoc

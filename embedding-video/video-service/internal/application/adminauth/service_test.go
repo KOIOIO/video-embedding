@@ -112,15 +112,133 @@ func TestServiceAuthenticateRejectsExpiredAndDisabledAdmin(t *testing.T) {
 	}
 }
 
+func TestServiceRegisterSuccess(t *testing.T) {
+	now := time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC)
+	repo := &authTestRepository{createdID: 42}
+	service := NewService(repo, testJWTSecret(), 8*time.Hour)
+	service.now = func() time.Time { return now }
+
+	result, err := service.Register(context.Background(), "newuser", "password123", "New User")
+	if err != nil {
+		t.Fatalf("Register() error=%v", err)
+	}
+	if result.Token == "" || result.Admin.ID != 42 || result.Admin.Username != "newuser" || result.Admin.RealName != "New User" {
+		t.Fatalf("Register() result=%+v", result)
+	}
+	if result.Admin.UserType != UserTypeNormal {
+		t.Fatalf("expected UserTypeNormal, got %d", result.Admin.UserType)
+	}
+	if result.Admin.PasswordHash != "" {
+		t.Fatal("password hash leaked in result")
+	}
+	if !result.ExpiresAt.Equal(now.Add(8 * time.Hour)) {
+		t.Fatalf("ExpiresAt=%s", result.ExpiresAt)
+	}
+	// Verify token is valid
+	authenticated, err := service.Authenticate(context.Background(), result.Token)
+	if err != nil || authenticated.ID != 42 {
+		t.Fatalf("Authenticate() after register: admin=%+v err=%v", authenticated, err)
+	}
+}
+
+func TestServiceRegisterDefaultsNicknameToUsername(t *testing.T) {
+	repo := &authTestRepository{createdID: 10}
+	service := NewService(repo, testJWTSecret(), time.Hour)
+
+	result, err := service.Register(context.Background(), "alice", "secret123", "")
+	if err != nil {
+		t.Fatalf("Register() error=%v", err)
+	}
+	if result.Admin.RealName != "alice" {
+		t.Fatalf("expected nickname default to username, got %q", result.Admin.RealName)
+	}
+}
+
+func TestServiceRegisterValidatesUsername(t *testing.T) {
+	repo := &authTestRepository{}
+	service := NewService(repo, testJWTSecret(), time.Hour)
+
+	for _, username := range []string{"ab", "user name", "user@name", strings.Repeat("x", 21), ""} {
+		_, err := service.Register(context.Background(), username, "password123", "")
+		if !errors.Is(err, ErrInvalidUsername) {
+			t.Fatalf("Register(%q) expected ErrInvalidUsername, got %v", username, err)
+		}
+	}
+	if repo.createCalls != 0 {
+		t.Fatal("CreateUser should not be called for invalid username")
+	}
+}
+
+func TestServiceRegisterValidatesPassword(t *testing.T) {
+	repo := &authTestRepository{}
+	service := NewService(repo, testJWTSecret(), time.Hour)
+
+	for _, password := range []string{"short", strings.Repeat("x", 33)} {
+		_, err := service.Register(context.Background(), "validuser", password, "")
+		if !errors.Is(err, ErrInvalidPassword) {
+			t.Fatalf("Register(password len=%d) expected ErrInvalidPassword, got %v", len(password), err)
+		}
+	}
+	if repo.createCalls != 0 {
+		t.Fatal("CreateUser should not be called for invalid password")
+	}
+}
+
+func TestServiceRegisterDuplicateUsername(t *testing.T) {
+	repo := &authTestRepository{createErr: ErrUsernameExists}
+	service := NewService(repo, testJWTSecret(), time.Hour)
+
+	_, err := service.Register(context.Background(), "existing", "password123", "")
+	if !errors.Is(err, ErrUsernameExists) {
+		t.Fatalf("expected ErrUsernameExists, got %v", err)
+	}
+}
+
+func TestServiceLoginAcceptsNormalUser(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("userpass"), bcrypt.MinCost)
+	repo := &authTestRepository{
+		admin:  Admin{ID: 99, Username: "normaluser", PasswordHash: string(hash), UserType: UserTypeNormal, Status: 1},
+		active: true,
+	}
+	service := NewService(repo, testJWTSecret(), time.Hour)
+
+	result, err := service.Login(context.Background(), "normaluser", "userpass")
+	if err != nil || result.Admin.ID != 99 || result.Admin.UserType != UserTypeNormal {
+		t.Fatalf("Login() for normal user result=%+v err=%v", result, err)
+	}
+}
+
 type authTestRepository struct {
-	admin  Admin
-	active bool
+	admin       Admin
+	active      bool
+	createdID   uint64
+	createErr   error
+	createCalls int
 }
 
 func (r *authTestRepository) FindActiveAdminByUsername(_ context.Context, username string) (Admin, bool, error) {
-	return r.admin, r.active && username == r.admin.Username, nil
+	return r.admin, r.active && username == r.admin.Username && r.admin.UserType == UserTypeAdmin, nil
 }
 
 func (r *authTestRepository) FindActiveAdminByID(_ context.Context, id uint64) (Admin, bool, error) {
+	return r.admin, r.active && id == r.admin.ID && r.admin.UserType == UserTypeAdmin, nil
+}
+
+func (r *authTestRepository) FindActiveUserByUsername(_ context.Context, username string) (Admin, bool, error) {
+	return r.admin, r.active && username == r.admin.Username, nil
+}
+
+func (r *authTestRepository) FindActiveUserByID(_ context.Context, id uint64) (Admin, bool, error) {
 	return r.admin, r.active && id == r.admin.ID, nil
+}
+
+func (r *authTestRepository) CreateUser(_ context.Context, admin Admin) (uint64, error) {
+	r.createCalls++
+	if r.createErr != nil {
+		return 0, r.createErr
+	}
+	admin.ID = r.createdID
+	r.admin = admin
+	r.active = true
+	return r.createdID, nil
 }

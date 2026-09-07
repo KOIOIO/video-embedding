@@ -105,81 +105,6 @@ func TestPlaybackRecordRejectsInvalidMissingAndNonReadyVideo(t *testing.T) {
 	}
 }
 
-func TestReportWatchSessionComputesSixtyPercentBoundary(t *testing.T) {
-	repo := &playbackRepoStub{
-		video:      Video{ID: 88, KnowledgePointID: 9, Duration: 100, Status: VideoReady},
-		videoFound: true,
-		userExists: true,
-		aggregate:  WatchSessionAggregate{SessionWatchedSeconds: 40, TotalWatchedSeconds: 60},
-	}
-	service := PlaybackService{Repo: repo, Now: func() time.Time { return time.Unix(100, 0) }}
-	got, err := service.ReportWatchSession(context.Background(), WatchSessionInput{
-		UserID: 7, KnowledgeVideoID: 88, SessionID: "session-00000001", WatchedSeconds: 40,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.SessionID != "session-00000001" || got.SessionWatchedSeconds != 40 || got.TotalWatchedSeconds != 60 || got.DurationSeconds != 100 || got.ProgressRatio != 0.6 || !got.EffectiveWatch {
-		t.Fatalf("result = %+v", got)
-	}
-	if repo.report.WatchedSeconds != 40 || !repo.report.UpdatedAt.Equal(time.Unix(100, 0)) {
-		t.Fatalf("report = %+v", repo.report)
-	}
-}
-
-func TestReportWatchSessionRejectsInvalidInput(t *testing.T) {
-	tests := []struct {
-		name  string
-		input WatchSessionInput
-		field string
-	}{
-		{name: "user", input: WatchSessionInput{KnowledgeVideoID: 88, SessionID: "session-00000001"}, field: "user_id"},
-		{name: "video", input: WatchSessionInput{UserID: 7, SessionID: "session-00000001"}, field: "knowledge_video_id"},
-		{name: "short session", input: WatchSessionInput{UserID: 7, KnowledgeVideoID: 88, SessionID: "short"}, field: "session_id"},
-		{name: "invalid session character", input: WatchSessionInput{UserID: 7, KnowledgeVideoID: 88, SessionID: "session-invalid!!"}, field: "session_id"},
-		{name: "negative seconds", input: WatchSessionInput{UserID: 7, KnowledgeVideoID: 88, SessionID: "session-00000001", WatchedSeconds: -1}, field: "watched_seconds"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := (PlaybackService{Repo: &playbackRepoStub{}}).ReportWatchSession(context.Background(), tt.input)
-			var invalid *InvalidArgument
-			if !errors.As(err, &invalid) || invalid.Field != tt.field {
-				t.Fatalf("error = %v", err)
-			}
-		})
-	}
-}
-
-func TestReportWatchSessionValidatesUserAndVideoAvailability(t *testing.T) {
-	tests := []struct {
-		name string
-		repo *playbackRepoStub
-		want any
-	}{
-		{name: "missing user", repo: &playbackRepoStub{}, want: &NotFound{}},
-		{name: "missing video", repo: &playbackRepoStub{userExists: true}, want: &NotFound{}},
-		{name: "pending video", repo: &playbackRepoStub{userExists: true, videoFound: true, video: Video{Status: VideoPending, Duration: 100}}, want: &NotReady{}},
-		{name: "zero duration", repo: &playbackRepoStub{userExists: true, videoFound: true, video: Video{Status: VideoReady}}, want: &NotReady{}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := (PlaybackService{Repo: tt.repo}).ReportWatchSession(context.Background(), WatchSessionInput{UserID: 7, KnowledgeVideoID: 88, SessionID: "session-00000001"})
-			switch tt.want.(type) {
-			case *NotFound:
-				var target *NotFound
-				if !errors.As(err, &target) {
-					t.Fatalf("error = %v", err)
-				}
-			case *NotReady:
-				var target *NotReady
-				if !errors.As(err, &target) {
-					t.Fatalf("error = %v", err)
-				}
-			}
-		})
-	}
-}
-
 type playbackRepoStub struct {
 	point       DictionaryKnowledgePoint
 	readyVideos []Video
@@ -187,9 +112,6 @@ type playbackRepoStub struct {
 	videoFound  bool
 	records     []PlayRecord
 	recordErr   error
-	userExists  bool
-	aggregate   WatchSessionAggregate
-	report      WatchSessionReport
 }
 
 func (r *playbackRepoStub) LookupKnowledgePoints(context.Context, []uint64) ([]DictionaryKnowledgePoint, error) {
@@ -213,13 +135,4 @@ func (r *playbackRepoStub) RecordPlayback(_ context.Context, record PlayRecord) 
 	}
 	r.records = append(r.records, record)
 	return nil
-}
-
-func (r *playbackRepoStub) UserExists(context.Context, uint64) (bool, error) {
-	return r.userExists, nil
-}
-
-func (r *playbackRepoStub) UpsertWatchSession(_ context.Context, report WatchSessionReport, _ int) (WatchSessionAggregate, error) {
-	r.report = report
-	return r.aggregate, nil
 }

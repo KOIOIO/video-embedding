@@ -27,6 +27,7 @@ func New(httpApp *app.App) *gin.Engine {
 		SlowRequestThreshold: httpApp.HTTP.SlowRequestThreshold,
 	}))
 	videoHandler := handler.NewVideoHandler(httpApp.Service)
+	commentHandler := handler.NewCommentHandler(httpApp.Service)
 	uploadHandler := handler.NewUploadHandler(httpApp.Service)
 	recommendHandler := handler.NewRecommendHandler(httpApp.Service)
 	recommendationAdminHandler := handler.NewRecommendationAdminHandler(httpApp.Service)
@@ -34,10 +35,24 @@ func New(httpApp *app.App) *gin.Engine {
 	objectProxyHandler := handler.NewObjectProxyHandler(httpApp.Store)
 	systemHandler := handler.NewSystemHandler(httpApp.Service)
 	authHandler := handler.NewAdminAuthHandler(httpApp.AdminAuth)
+	userProfileHandler := handler.NewUserProfileHandler(httpApp.UserProfileService, httpApp.Store)
+	userFollowHandler := handler.NewUserFollowHandler(httpApp.UserFollowService)
+	userMessageHandler := handler.NewUserMessageHandler(httpApp.UserMessageService)
+	profileVisitHandler := handler.NewProfileVisitHandler(httpApp.ProfileVisitService)
+	userSearchHandler := handler.NewUserSearchHandler(httpApp.UserSearchService)
+	notificationHandler := handler.NewNotificationHandler(httpApp.NotificationService)
+	rawURLPrefix := ""
+	if httpApp.Service != nil {
+		rawURLPrefix = httpApp.Service.Paths.RawURLPrefix
+	}
+	userPublishHandler := handler.NewUserPublishHandler(httpApp.UserPublishService, httpApp.Store, rawURLPrefix)
 	public := r.Group("")
 	adminRoutes := r.Group("")
 	adminRoutes.Use(middleware.RequireAdmin(httpApp.AdminAuth))
+	userRoutes := r.Group("")
+	userRoutes.Use(middleware.RequireUser(httpApp.AdminAuth))
 	public.POST("/api/auth/login", authHandler.Login)
+	public.POST("/api/auth/register", authHandler.Register)
 	adminRoutes.GET("/api/auth/me", authHandler.Me)
 	if httpApp.KnowledgeVideoService != nil {
 		knowledgeHandler := knowledgevideohandler.New(httpApp.KnowledgeVideoService, httpApp.KnowledgeVideoMaxRequestBytes)
@@ -47,7 +62,6 @@ func New(httpApp *app.App) *gin.Engine {
 		public.GET("/api/knowledge-points/:knowledgePointId/video", knowledgeHandler.Playback)
 		public.GET("/api/knowledge-points/:knowledgePointId/videos", knowledgeHandler.Playback)
 		public.POST("/api/knowledge-videos/:knowledgeVideoId/playbacks", knowledgeHandler.RecordPlayback)
-		public.PUT("/api/knowledge-videos/:knowledgeVideoId/watch-sessions/:sessionId", knowledgeHandler.ReportWatchSession)
 	}
 	if httpApp.KnowledgeVideoStore != nil && httpApp.KnowledgeVideoRepository != nil {
 		mediaHandler := handler.NewKnowledgeVideoMediaHandler(httpApp.KnowledgeVideoRepository, httpApp.KnowledgeVideoStore)
@@ -118,6 +132,47 @@ func New(httpApp *app.App) *gin.Engine {
 	r.GET("/api/internal/recommendations/external/recbole", videoHandler.ExternalRecBoleRecommendations)
 	r.POST("/api/video-segments/:id/reactions", videoHandler.SubmitSegmentReaction)
 	r.GET("/api/video-segments/:id/reaction-counts", videoHandler.GetSegmentReactionCounts)
+	public.GET("/api/video-segments/:id/comments", commentHandler.ListComments)
+	public.GET("/api/video-segments/:id/comment-counts", commentHandler.GetCommentCounts)
+	// 用户资料：公开查询
+	public.GET("/api/users/:id/profile", userProfileHandler.GetProfile)
+	// 用户搜索：JWT 认证保护，用于评论 @提及
+	userRoutes.GET("/api/users/search", userSearchHandler.SearchUsers)
+	// 用户通知：JWT 认证保护
+	userRoutes.GET("/api/notifications", notificationHandler.ListNotifications)
+	userRoutes.GET("/api/notifications/unread-count", notificationHandler.GetUnreadCount)
+	userRoutes.POST("/api/notifications/:id/read", notificationHandler.MarkAsRead)
+	userRoutes.POST("/api/notifications/read-all", notificationHandler.MarkAllAsRead)
+	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.GET("/api/me", userProfileHandler.GetMe)
+	public.PUT("/api/me/profile", userProfileHandler.UpdateProfile)
+	public.POST("/api/me/avatar", userProfileHandler.UploadAvatar)
+	// 用户发布视频：公开查询作品列表
+	public.GET("/api/users/:id/videos", userPublishHandler.ListUserVideos)
+	public.GET("/api/users/:id/liked-videos", userPublishHandler.ListLikedVideos)
+	// 用户关注系统：公开查询列表与关系
+	public.GET("/api/users/:id/following", userFollowHandler.ListFollowing)
+	public.GET("/api/users/:id/followers", userFollowHandler.ListFollowers)
+	public.GET("/api/users/:id/relation", userFollowHandler.GetRelation)
+	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/users/:id/follow", userFollowHandler.Follow)
+	public.DELETE("/api/users/:id/follow", userFollowHandler.Unfollow)
+	// 用户私信系统：TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/messages/:userId", userMessageHandler.SendMessage)
+	public.GET("/api/messages/conversations", userMessageHandler.GetConversations)
+	public.GET("/api/messages/unread-count", userMessageHandler.GetUnreadCount)
+	public.GET("/api/messages/:userId", userMessageHandler.GetMessages)
+	public.POST("/api/messages/:userId/read", userMessageHandler.MarkAsRead)
+	// 用户主页访问统计：TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/users/:id/visit", profileVisitHandler.RecordVisit)
+	public.GET("/api/me/visits", profileVisitHandler.GetMyVisits)
+	// TODO: replace with real user authentication middleware — currently reads X-User-ID header inside handler
+	public.POST("/api/me/videos", userPublishHandler.PublishVideo)
+	public.GET("/api/me/videos/:id/status", userPublishHandler.GetVideoStatus)
+	adminRoutes.POST("/api/video-segments/:id/comments", commentHandler.CreateComment)
+	public.GET("/api/comments/:id/replies", commentHandler.ListReplies)
+	adminRoutes.POST("/api/comments/:id/replies", commentHandler.CreateReply)
+	adminRoutes.POST("/api/comments/:id/reactions", commentHandler.ToggleCommentLike)
 	adminRoutes.POST("/api/video/publish/:id", videoHandler.SetVideoPublished)
 	adminRoutes.POST("/api/videos/:id/publish", videoHandler.SetVideoPublished)
 	adminRoutes.POST("/api/video/recommend/:id", videoHandler.SetVideoRecommend)

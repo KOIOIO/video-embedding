@@ -50,33 +50,6 @@ func TestKnowledgeVideoEnsureSchemaCreatesTablesAndNonUniqueActiveKnowledgePoint
 	}
 }
 
-func TestKnowledgeVideoEnsureSchemaCreatesPartialWatchSessionIndex(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := EnsureSchema(db); err != nil {
-		t.Fatalf("EnsureSchema() error = %v", err)
-	}
-
-	var sql string
-	if err := db.Raw(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?`, "uk_knowledge_video_play_session").Scan(&sql).Error; err != nil {
-		t.Fatal(err)
-	}
-	lower := strings.ToLower(sql)
-	if !strings.Contains(lower, "unique index") || !strings.Contains(lower, "session_id is not null") || !strings.Contains(lower, "session_id <> ''") {
-		t.Fatalf("watch session index SQL = %q", sql)
-	}
-
-	legacy := []model.EduKnowledgeVideoPlayRecord{
-		{UserID: 7, KnowledgePointID: 9, KnowledgeVideoID: 88},
-		{UserID: 7, KnowledgePointID: 9, KnowledgeVideoID: 88},
-	}
-	if err := db.Create(&legacy).Error; err != nil {
-		t.Fatalf("legacy rows should not conflict: %v", err)
-	}
-}
-
 func TestKnowledgeVideoRepositoryLookupDictionaryKnowledgePointsUsesBatchAndOptionalDeleted(t *testing.T) {
 	repo, db := newKnowledgeVideoTestRepository(t)
 	if err := db.Exec(`CREATE TABLE dict_knowledge_point (id integer primary key, name text, deleted integer)`).Error; err != nil {
@@ -232,60 +205,6 @@ func TestKnowledgeVideoRepositoryListsAllReadyVideosInIDOrderAndRecordsPlayback(
 	}
 	if record.UserID != 7 || record.KnowledgePointID != 9 || record.KnowledgeVideoID != 41 {
 		t.Fatalf("record = %+v", record)
-	}
-}
-
-func TestKnowledgeVideoRepositoryUpsertWatchSessionIsMonotonicAndCapsAggregate(t *testing.T) {
-	repo, db := newKnowledgeVideoTestRepository(t)
-	if err := db.Exec(`CREATE TABLE sys_user (id INTEGER PRIMARY KEY)`).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO sys_user (id) VALUES (7)`).Error; err != nil {
-		t.Fatal(err)
-	}
-	seedKnowledgeVideo(t, db, 88, 9, knowledgevideo.VideoReady)
-	if err := db.Model(&model.EduKnowledgeVideo{}).Where("id = ?", 88).Update("duration", 100).Error; err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 8, 3, 10, 0, 0, 0, time.UTC)
-	reports := []knowledgevideo.WatchSessionReport{
-		{UserID: 7, KnowledgePointID: 9, KnowledgeVideoID: 88, SessionID: "session-00000001", WatchedSeconds: 37, UpdatedAt: now},
-		{UserID: 7, KnowledgePointID: 9, KnowledgeVideoID: 88, SessionID: "session-00000001", WatchedSeconds: 20, UpdatedAt: now.Add(time.Minute)},
-		{UserID: 7, KnowledgePointID: 9, KnowledgeVideoID: 88, SessionID: "session-00000002", WatchedSeconds: 90, UpdatedAt: now.Add(2 * time.Minute)},
-	}
-	var got knowledgevideo.WatchSessionAggregate
-	for _, report := range reports {
-		var err error
-		got, err = repo.UpsertWatchSession(context.Background(), report, 100)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got.SessionWatchedSeconds != 90 || got.TotalWatchedSeconds != 100 {
-		t.Fatalf("aggregate = %+v", got)
-	}
-	var first model.EduKnowledgeVideoPlayRecord
-	if err := db.Where("session_id = ?", "session-00000001").First(&first).Error; err != nil {
-		t.Fatal(err)
-	}
-	if first.WatchDuration != 37 || first.UpdateTime == nil || !first.UpdateTime.Equal(now.Add(time.Minute)) {
-		t.Fatalf("first session = %+v", first)
-	}
-}
-
-func TestKnowledgeVideoRepositoryUserExists(t *testing.T) {
-	repo, db := newKnowledgeVideoTestRepository(t)
-	if err := db.Exec(`CREATE TABLE sys_user (id INTEGER PRIMARY KEY, deleted INTEGER)`).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO sys_user (id, deleted) VALUES (7, 0), (8, 1)`).Error; err != nil {
-		t.Fatal(err)
-	}
-	for id, want := range map[uint64]bool{7: true, 8: false, 9: false} {
-		got, err := repo.UserExists(context.Background(), id)
-		if err != nil || got != want {
-			t.Fatalf("UserExists(%d) = %v, %v", id, got, err)
-		}
 	}
 }
 
