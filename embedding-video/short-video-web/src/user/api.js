@@ -4,6 +4,12 @@ const DEMO_USER_ID_KEY = 'demo_user_id'
 const DEFAULT_USER_ID = 1001
 
 export function getCurrentUserId() {
+  // 优先从登录 session（JWT）取用户ID，确保登录后身份正确切换
+  const session = readSession()
+  const sessionId = Number(session?.admin?.id || 0)
+  if (sessionId > 0) return sessionId
+
+  // fallback：开发调试用的 demo_user_id（X-User-ID 模拟模式）
   try {
     const raw = localStorage.getItem(DEMO_USER_ID_KEY)
     const value = Number(raw)

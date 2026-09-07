@@ -166,7 +166,16 @@ onMounted(() => {
 })
 
 watch(() => props.userId, () => {
+  // user_id 变化时重置所有状态并重新加载
+  profile.value = null
+  works.value = []
+  worksTotal.value = 0
+  worksPage.value = 1
+  worksLoaded.value = false
   visitReported.value = false
+  loadProfile()
+  loadRelation()
+  loadWorks(true)
   reportVisit()
   loadMyVisits()
 })

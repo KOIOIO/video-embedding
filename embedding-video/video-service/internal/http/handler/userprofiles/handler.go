@@ -15,6 +15,7 @@ import (
 	"video-service/internal/http/dto"
 	httperrors "video-service/internal/http/errors"
 	"video-service/internal/infrastructure/objectstorage"
+	"video-service/middleware"
 )
 
 const (
@@ -166,12 +167,17 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 }
 
 func currentUserID(c *gin.Context) (uint64, bool) {
+	// 优先从 JWT context 取用户ID（正式认证方式）
+	if userID, ok := middleware.UserID(c); ok && userID > 0 {
+		return userID, true
+	}
+	// fallback：从 X-User-ID header 取（开发调试用，TODO: 移除）
 	raw := strings.TrimSpace(c.GetHeader("X-User-ID"))
 	if raw == "" {
 		httperrors.Write(c, &httperrors.APIError{
 			Status:  http.StatusUnauthorized,
 			Code:    "unauthorized",
-			Message: "X-User-ID header is required",
+			Message: "authentication required",
 		})
 		return 0, false
 	}
