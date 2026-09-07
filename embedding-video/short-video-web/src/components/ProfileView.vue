@@ -99,18 +99,6 @@ function onShowFollowers() {
   emit('show-list', { type: 'followers', userId: props.userId })
 }
 
-async function loadProfile() {
-  loading.value = true
-  loadError.value = ''
-  try {
-    profile.value = await fetchUserProfile(props.userId)
-  } catch {
-    loadError.value = '加载用户资料失败'
-  } finally {
-    loading.value = false
-  }
-}
-
 async function loadWorks(reset = false) {
   if (worksLoading.value) return
   if (reset) {
