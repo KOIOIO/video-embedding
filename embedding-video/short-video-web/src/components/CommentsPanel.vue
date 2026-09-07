@@ -49,17 +49,16 @@ const inputPlaceholder = computed(() => {
 })
 
 // --- @提及 渲染 ---
-// 将评论内容中的 @昵称 替换为可点击 span，使用 mentions 数组中的 user_id 跳转
+// 将评论内容中的 @昵称 替换为红色 span，有 user_id 的可点击跳转，没有的仅高亮
 function renderContentWithMentions(content, mentions) {
   if (!content) return []
-  if (!Array.isArray(mentions) || mentions.length === 0) {
-    return [{ type: 'text', text: content }]
-  }
-  // 构建 nickname -> user_id 映射
+  // 构建 nickname -> user_id 映射（mentions 可能为空，此时所有 @ 仅高亮不可点击）
   const mentionMap = {}
-  for (const m of mentions) {
-    if (m && m.nickname && m.user_id) {
-      mentionMap[m.nickname] = m.user_id
+  if (Array.isArray(mentions)) {
+    for (const m of mentions) {
+      if (m && m.nickname && m.user_id) {
+        mentionMap[m.nickname] = m.user_id
+      }
     }
   }
   const regex = /@([\u4e00-\u9fa5a-zA-Z0-9_]+)/g
@@ -74,7 +73,8 @@ function renderContentWithMentions(content, mentions) {
     if (mentionMap[nick]) {
       parts.push({ type: 'mention', text: '@' + nick, userId: mentionMap[nick] })
     } else {
-      parts.push({ type: 'text', text: match[0] })
+      // 没有匹配到 user_id 的 @ 也高亮为红色，但不可点击
+      parts.push({ type: 'mention-plain', text: '@' + nick })
     }
     lastIndex = regex.lastIndex
   }
@@ -407,6 +407,7 @@ watch(
               <p class="comment-content">
                 <template v-for="(part, idx) in renderContentWithMentions(comment.content, comment.mentions)" :key="idx">
                   <span v-if="part.type === 'mention'" class="mention-link" @click.stop="onMentionClick(part.userId)">{{ part.text }}</span>
+                  <span v-else-if="part.type === 'mention-plain'" class="mention-link mention-plain">{{ part.text }}</span>
                   <span v-else>{{ part.text }}</span>
                 </template>
               </p>
@@ -459,6 +460,7 @@ watch(
                   <span class="reply-content">
                     <template v-for="(part, idx) in renderContentWithMentions(reply.content, reply.mentions)" :key="idx">
                       <span v-if="part.type === 'mention'" class="mention-link" @click.stop="onMentionClick(part.userId)">{{ part.text }}</span>
+                      <span v-else-if="part.type === 'mention-plain'" class="mention-link mention-plain">{{ part.text }}</span>
                       <span v-else>{{ part.text }}</span>
                     </template>
                   </span>
@@ -721,6 +723,15 @@ watch(
 .mention-link:hover {
   opacity: 0.8;
   text-decoration: underline;
+}
+
+.mention-link.mention-plain {
+  cursor: default;
+}
+
+.mention-link.mention-plain:hover {
+  opacity: 1;
+  text-decoration: none;
 }
 
 .comment-username {

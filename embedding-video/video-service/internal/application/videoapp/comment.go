@@ -85,6 +85,11 @@ func (s *Service) CreateComment(ctx context.Context, segmentID uint64, userID ui
 	s.bumpSegmentCommentCount(ctx, segmentID)
 	view := CommentView{Comment: comment, Username: s.usernameOf(ctx, userID)}
 	s.createMentionNotifications(ctx, userID, view.Username, segmentID, id, content)
+	// 装饰新评论，补充昵称/头像/@提及信息，确保前端立即显示正确
+	decorated := []CommentView{view}
+	if err := s.decorateCommentViews(ctx, userID, decorated); err == nil {
+		view = decorated[0]
+	}
 	return view, nil
 }
 
@@ -129,6 +134,11 @@ func (s *Service) CreateReply(ctx context.Context, commentID uint64, userID uint
 	s.bumpSegmentCommentCount(ctx, parent.VideoSegmentID)
 	view := CommentView{Comment: reply, Username: s.usernameOf(ctx, userID)}
 	s.createMentionNotifications(ctx, userID, view.Username, parent.VideoSegmentID, id, content)
+	// 装饰新回复，补充昵称/头像/@提及信息
+	decorated := []CommentView{view}
+	if err := s.decorateCommentViews(ctx, userID, decorated); err == nil {
+		view = decorated[0]
+	}
 	return view, nil
 }
 
@@ -383,13 +393,19 @@ func (s *Service) decorateCommentViews(ctx context.Context, viewerID uint64, vie
 
 	attach := func(views []CommentView) error {
 		for i := range views {
-			views[i].Username = names[views[i].UserID]
 			if info, ok := displayInfo[views[i].UserID]; ok {
+				views[i].Username = info.Username
 				views[i].Nickname = info.Nickname
 				views[i].AvatarURL = info.AvatarURL
+			} else {
+				views[i].Username = names[views[i].UserID]
 			}
 			if views[i].ReplyToUserID != 0 {
-				views[i].ReplyToUsername = names[views[i].ReplyToUserID]
+				if info, ok := displayInfo[views[i].ReplyToUserID]; ok {
+					views[i].ReplyToUsername = info.Username
+				} else {
+					views[i].ReplyToUsername = names[views[i].ReplyToUserID]
+				}
 			}
 			views[i].Mentions = parseMentionsForContent(views[i].Content, nicknameToUserID)
 			seedUserReaction := reactionTypes[views[i].ID]
