@@ -132,6 +132,7 @@ SELECT
   r.is_published AS is_published,
   r.is_recommend AS is_recommend,
   r.view_count AS view_count,
+  COALESCE(cc.comment_count, 0) AS comment_count,
   r.create_time AS create_time,
   r.update_time AS update_time,
   COALESCE(ur.reaction_type = 'dislike' AND ur.deleted = 0, false) AS user_disliked,
@@ -139,6 +140,12 @@ SELECT
   COALESCE(w.is_watched, false) AS user_watched
 FROM edu_video_segment s
 JOIN edu_video_resource r ON r.id = s.video_id
+LEFT JOIN (
+  SELECT video_segment_id, COUNT(*) AS comment_count
+  FROM edu_video_comment
+  WHERE deleted = 0
+  GROUP BY video_segment_id
+) cc ON cc.video_segment_id = s.id
 LEFT JOIN edu_user_reaction ur
   ON ur.user_id = ?
  AND ur.video_segment_id = s.id

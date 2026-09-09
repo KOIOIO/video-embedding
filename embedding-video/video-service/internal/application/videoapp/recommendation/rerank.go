@@ -3,6 +3,7 @@ package recommendation
 import (
 	"math"
 	"sort"
+	"time"
 )
 
 type ProfileCandidate struct {
@@ -95,8 +96,35 @@ func BuildRecBoleRankedItems(candidates []RecBoleCandidate, limit int) []ResultI
 func profileRerankScore(candidate ProfileCandidate) float64 {
 	return 0.65*distanceToScore(candidate.Distance) +
 		0.25*distanceToScore(candidate.ProfileDistance) +
-		0.10*popularityScore(candidate.LikeCount, candidate.DoubleLikeCount, candidate.ViewCount) -
+		0.10*popularityScore(candidate.LikeCount, candidate.DoubleLikeCount, candidate.ViewCount) +
+		commentCountBoost(candidate.CommentCount) +
+		newVideoBoost(candidate.CreateTime) -
 		penaltyScore(candidate)
+}
+
+func commentCountBoost(commentCount int) float64 {
+	if commentCount <= 0 {
+		return 0
+	}
+	boost := float64(commentCount) * 0.01
+	if boost > 0.5 {
+		return 0.5
+	}
+	return boost
+}
+
+func newVideoBoost(createTime time.Time) float64 {
+	if createTime.IsZero() {
+		return 0
+	}
+	days := time.Since(createTime).Hours() / 24
+	if days >= 7 {
+		return 0
+	}
+	if days < 0 {
+		days = 0
+	}
+	return 0.1 * (1 - days/7)
 }
 
 func distanceToScore(distance float64) float64 {
