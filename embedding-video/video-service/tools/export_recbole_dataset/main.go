@@ -68,6 +68,9 @@ type itemRow struct {
 	ContentSummary  string
 	KnowledgeTags   string
 	VideoTitle      string
+	CommentCount    int
+	AuthorUserID    uint64
+	CreateTime      time.Time
 }
 
 type userFeatureRow struct {
@@ -86,6 +89,9 @@ type userFeatureRow struct {
 	StudentWordCount        int
 	EnglishReadingCount     int
 	EnglishListeningCount   int
+	FollowingCount          int
+	FollowerCount           int
+	PublishedVideoCount     int
 	QuestionSearchKnowledge string
 	RecentKnowledgePointIDs string
 }
@@ -327,6 +333,26 @@ events AS (
   JOIN valid_segments vs ON vs.video_segment_id = extracted.video_segment_id
   WHERE COALESCE(qs.deleted, 0) = 0
     AND extracted.video_segment_id > 0
+
+  UNION ALL
+
+  SELECT c.user_id, vs.video_id, c.video_segment_id, 'comment' AS source,
+         '' AS reaction_type, FALSE AS clicked, FALSE AS watched, 0 AS watch_duration,
+         vs.segment_duration, c.create_time AS event_time
+  FROM public.edu_video_comment c
+  JOIN valid_segments vs ON vs.video_segment_id = c.video_segment_id
+  WHERE c.deleted = 0
+
+  UNION ALL
+
+  SELECT r.user_id, vs.video_id, vs.video_segment_id, 'user_publish' AS source,
+         '' AS reaction_type, FALSE AS clicked, FALSE AS watched, 0 AS watch_duration,
+         vs.segment_duration, r.create_time AS event_time
+  FROM public.edu_video_resource r
+  JOIN valid_segments vs ON vs.video_id = r.id
+  WHERE r.deleted = 0
+    AND r.source_type = 'user_publish'
+    AND r.user_id > 0
 )
 SELECT e.user_id,
        e.video_id,
@@ -431,6 +457,10 @@ func interactionFromEvent(event interactionEvent) (interactionRow, bool) {
 		default:
 			row.Rating, row.Weight = 0.1, 0.2
 		}
+	case "comment":
+		row.Rating, row.Weight = 2.5, 2.5
+	case "user_publish":
+		row.Rating, row.Weight = 4.0, 4.0
 	default:
 		return interactionRow{}, false
 	}
@@ -457,6 +487,9 @@ func loadItems(ctx context.Context, db *sql.DB) ([]itemRow, error) {
 			&item.ContentSummary,
 			&item.KnowledgeTags,
 			&item.VideoTitle,
+			&item.CommentCount,
+			&item.AuthorUserID,
+			&item.CreateTime,
 		); err != nil {
 			return nil, err
 		}
@@ -467,6 +500,12 @@ func loadItems(ctx context.Context, db *sql.DB) ([]itemRow, error) {
 
 func buildItemQuery() string {
 	return `
+WITH comment_stats AS (
+  SELECT video_segment_id, COUNT(*) AS comment_count
+  FROM public.edu_video_comment
+  WHERE deleted = 0
+  GROUP BY video_segment_id
+)
 SELECT s.id AS video_segment_id,
        s.video_id,
        GREATEST(COALESCE(s.end_time, 0) - COALESCE(s.start_time, 0), 1) AS segment_duration,
@@ -476,9 +515,13 @@ SELECT s.id AS video_segment_id,
        COALESCE(s.dislike_count, 0) AS dislike_count,
        COALESCE(s.content_summary, '') AS content_summary,
        COALESCE(array_to_string(s.knowledge_tags, '|'), '') AS knowledge_tags,
-       COALESCE(r.title, '') AS video_title
+       COALESCE(r.title, '') AS video_title,
+       COALESCE(cs.comment_count, 0) AS comment_count,
+       COALESCE(r.user_id, 0) AS author_user_id,
+       COALESCE(r.create_time, '1970-01-01'::timestamp) AS create_time
 FROM public.edu_video_segment s
 JOIN public.edu_video_resource r ON r.id = s.video_id
+LEFT JOIN comment_stats cs ON cs.video_segment_id = s.id
 WHERE s.deleted = 0
   AND s.status = 1
   AND s.id > 0
@@ -512,6 +555,9 @@ func loadUserFeatures(ctx context.Context, db *sql.DB) ([]userFeatureRow, error)
 			&user.StudentWordCount,
 			&user.EnglishReadingCount,
 			&user.EnglishListeningCount,
+			&user.FollowingCount,
+			&user.FollowerCount,
+			&user.PublishedVideoCount,
 			&user.QuestionSearchKnowledge,
 			&user.RecentKnowledgePointIDs,
 		); err != nil {
@@ -591,6 +637,26 @@ english_listening AS (
   FROM public.english_listening_session
   WHERE user_id > 0
   GROUP BY user_id
+),
+following AS (
+  SELECT follower_id AS user_id, COUNT(*) AS following_count
+  FROM public.edu_user_follow
+  WHERE deleted = 0
+  GROUP BY follower_id
+),
+followers AS (
+  SELECT following_id AS user_id, COUNT(*) AS follower_count
+  FROM public.edu_user_follow
+  WHERE deleted = 0
+  GROUP BY following_id
+),
+published_videos AS (
+  SELECT user_id, COUNT(*) AS published_video_count
+  FROM public.edu_video_resource
+  WHERE deleted = 0
+    AND source_type = 'user_publish'
+    AND user_id > 0
+  GROUP BY user_id
 )
 SELECT vu.user_id,
        vu.grade_id,
@@ -607,6 +673,9 @@ SELECT vu.user_id,
        COALESCE(sw.student_word_count, 0) AS student_word_count,
        COALESCE(er.english_reading_count, 0) AS english_reading_count,
        COALESCE(el.english_listening_count, 0) AS english_listening_count,
+       COALESCE(fg.following_count, 0) AS following_count,
+       COALESCE(fr.follower_count, 0) AS follower_count,
+       COALESCE(pv.published_video_count, 0) AS published_video_count,
        COALESCE(qs.question_search_knowledge, '') AS question_search_knowledge,
        COALESCE(a.recent_knowledge_point_ids, '') AS recent_knowledge_point_ids
 FROM valid_users vu
@@ -619,6 +688,9 @@ LEFT JOIN special_practice sp ON sp.user_id = vu.user_id
 LEFT JOIN student_words sw ON sw.user_id = vu.user_id
 LEFT JOIN english_reading er ON er.user_id = vu.user_id
 LEFT JOIN english_listening el ON el.user_id = vu.user_id
+LEFT JOIN following fg ON fg.user_id = vu.user_id
+LEFT JOIN followers fr ON fr.user_id = vu.user_id
+LEFT JOIN published_videos pv ON pv.user_id = vu.user_id
 ORDER BY vu.user_id`
 }
 
@@ -668,6 +740,9 @@ func writeItems(out io.Writer, rows []itemRow) error {
 		"content_summary:token_seq",
 		"knowledge_tags:token_seq",
 		"video_title:token_seq",
+		"comment_count:float",
+		"author_user_id:token",
+		"create_time:token",
 	}); err != nil {
 		return err
 	}
@@ -683,6 +758,9 @@ func writeItems(out io.Writer, rows []itemRow) error {
 			row.ContentSummary,
 			row.KnowledgeTags,
 			row.VideoTitle,
+			strconv.Itoa(row.CommentCount),
+			strconv.FormatUint(row.AuthorUserID, 10),
+			row.CreateTime.Format(time.RFC3339),
 		}); err != nil {
 			return err
 		}
@@ -709,6 +787,9 @@ func writeUsers(out io.Writer, rows []userFeatureRow) error {
 		"student_word_count:float",
 		"english_reading_count:float",
 		"english_listening_count:float",
+		"following_count:float",
+		"follower_count:float",
+		"published_video_count:float",
 		"question_search_knowledge:token_seq",
 		"recent_knowledge_point_ids:token_seq",
 	}); err != nil {
@@ -731,6 +812,9 @@ func writeUsers(out io.Writer, rows []userFeatureRow) error {
 			strconv.Itoa(row.StudentWordCount),
 			strconv.Itoa(row.EnglishReadingCount),
 			strconv.Itoa(row.EnglishListeningCount),
+			strconv.Itoa(row.FollowingCount),
+			strconv.Itoa(row.FollowerCount),
+			strconv.Itoa(row.PublishedVideoCount),
 			row.QuestionSearchKnowledge,
 			row.RecentKnowledgePointIDs,
 		}); err != nil {

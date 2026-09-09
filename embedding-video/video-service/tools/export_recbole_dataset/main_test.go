@@ -62,6 +62,10 @@ func TestBuildInteractionQueryUsesVideoAndQuestionSearchSignals(t *testing.T) {
 		"edu_recommend_exposure",
 		"edu_question_search_record",
 		"recommend_videos_json",
+		"edu_video_comment",
+		"'comment' AS source",
+		"'user_publish' AS source",
+		"source_type = 'user_publish'",
 	} {
 		if !strings.Contains(query, fragment) {
 			t.Fatalf("query missing %q:\n%s", fragment, query)
@@ -98,9 +102,31 @@ func TestBuildUserFeatureQueryUsesFullSystemSignals(t *testing.T) {
 		"edu_student_word_record",
 		"english_reading_history",
 		"english_listening_session",
+		"edu_user_follow",
+		"following_count",
+		"follower_count",
+		"published_video_count",
+		"source_type = 'user_publish'",
 	} {
 		if !strings.Contains(query, fragment) {
 			t.Fatalf("query missing %q:\n%s", fragment, query)
+		}
+	}
+}
+
+func TestBuildItemQueryIncludesSocialAndAuthorFields(t *testing.T) {
+	query := buildItemQuery()
+	for _, fragment := range []string{
+		"comment_stats",
+		"edu_video_comment",
+		"comment_count",
+		"author_user_id",
+		"r.user_id",
+		"r.create_time",
+		"LEFT JOIN comment_stats",
+	} {
+		if !strings.Contains(query, fragment) {
+			t.Fatalf("item query missing %q:\n%s", fragment, query)
 		}
 	}
 }
@@ -160,6 +186,20 @@ func TestInteractionFromEventMapsRatingsConservatively(t *testing.T) {
 				UserID: 7, VideoSegmentID: 101, Source: "segment_reaction", ReactionType: "dislike", EventTime: now,
 			},
 			wantRating: 0.0,
+		},
+		{
+			name: "comment",
+			event: interactionEvent{
+				UserID: 7, VideoSegmentID: 101, Source: "comment", EventTime: now,
+			},
+			wantRating: 2.5,
+		},
+		{
+			name: "user_publish",
+			event: interactionEvent{
+				UserID: 7, VideoSegmentID: 101, Source: "user_publish", EventTime: now,
+			},
+			wantRating: 4.0,
 		},
 	}
 	for _, tc := range tests {
