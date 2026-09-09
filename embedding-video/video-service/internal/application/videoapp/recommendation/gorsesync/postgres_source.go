@@ -275,22 +275,6 @@ english_listening AS (
   WHERE COALESCE(els.deleted, 0) = 0
     AND els.user_id > 0
   GROUP BY els.user_id
-),
-english_storybook AS (
-  SELECT ess.user_id,
-         COUNT(*) AS storybook_count
-  FROM public.english_storybook_session ess
-  WHERE COALESCE(ess.deleted, 0) = 0
-    AND ess.user_id > 0
-  GROUP BY ess.user_id
-),
-student_profile AS (
-  SELECT sps.student_id AS user_id,
-         COUNT(*) AS profile_count
-  FROM public.student_profile_snapshot sps
-  WHERE COALESCE(sps.deleted, 0) = 0
-    AND sps.student_id > 0
-  GROUP BY sps.student_id
 )
 SELECT vu.user_id,
        vu.grade_id,
@@ -299,7 +283,7 @@ SELECT vu.user_id,
        CONCAT_WS('|',
          NULLIF(sp.practice_subjects, ''),
          CASE WHEN COALESCE(wr.word_count, 0) > 0 OR COALESCE(wsd.word_study_count, 0) > 0 THEN 'word' END,
-         CASE WHEN COALESCE(er.reading_count, 0) > 0 OR COALESCE(el.listening_count, 0) > 0 OR COALESCE(es.storybook_count, 0) > 0 THEN 'english' END
+         CASE WHEN COALESCE(er.reading_count, 0) > 0 OR COALESCE(el.listening_count, 0) > 0 THEN 'english' END
        ) AS recent_subjects,
        CONCAT_WS('|',
          NULLIF(m.weak_knowledge, ''),
@@ -322,9 +306,7 @@ SELECT vu.user_id,
          CASE WHEN COALESCE(wr.weak_word_count, 0) > 0 THEN 'word:weak' END,
          CASE WHEN COALESCE(er.reading_count, 0) > 0 THEN 'english:reading' END,
          CASE WHEN COALESCE(el.listening_count, 0) > 0 THEN 'english:listening' END,
-         CASE WHEN COALESCE(el.listening_count, 0) > 0 AND COALESCE(el.listening_score_rate, 0) < 0.6 THEN 'english:listening_low_score' END,
-         CASE WHEN COALESCE(es.storybook_count, 0) > 0 THEN 'english:storybook' END,
-         CASE WHEN COALESCE(sps.profile_count, 0) > 0 THEN 'profile:available' END
+         CASE WHEN COALESCE(el.listening_count, 0) > 0 AND COALESCE(el.listening_score_rate, 0) < 0.6 THEN 'english:listening_low_score' END
        ) AS learning_labels
 FROM valid_users vu
 LEFT JOIN mastery m ON m.user_id = vu.user_id
@@ -337,8 +319,6 @@ LEFT JOIN word_record wr ON wr.user_id = vu.user_id
 LEFT JOIN word_study wsd ON wsd.user_id = vu.user_id
 LEFT JOIN english_reading er ON er.user_id = vu.user_id
 LEFT JOIN english_listening el ON el.user_id = vu.user_id
-LEFT JOIN english_storybook es ON es.user_id = vu.user_id
-LEFT JOIN student_profile sps ON sps.user_id = vu.user_id
 ORDER BY vu.user_id`, userIDColumn, userIDColumn, userIDColumn)
 }
 

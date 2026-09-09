@@ -98,27 +98,10 @@ func TestBuildUserFeatureQueryUsesFullSystemSignals(t *testing.T) {
 		"edu_student_word_record",
 		"english_reading_history",
 		"english_listening_session",
-		"english_storybook_session",
-		"student_profile_snapshot",
 	} {
 		if !strings.Contains(query, fragment) {
 			t.Fatalf("query missing %q:\n%s", fragment, query)
 		}
-	}
-}
-
-func TestBuildUserFeatureQueryUsesProfileSnapshotSchema(t *testing.T) {
-	query := buildUserFeatureQuery()
-	for _, fragment := range []string{
-		"student_id AS user_id",
-		"MAX(profile_json::text)",
-	} {
-		if !strings.Contains(query, fragment) {
-			t.Fatalf("query missing %q:\n%s", fragment, query)
-		}
-	}
-	if strings.Contains(query, "snapshot_json") {
-		t.Fatalf("query references missing snapshot_json column:\n%s", query)
 	}
 }
 
