@@ -6,7 +6,30 @@ import (
 	"testing"
 
 	"gorm.io/gorm/schema"
+
+	"video-service/internal/model"
 )
+
+var autoMigrateModels = []interface{}{
+	&model.EduVideoResource{},
+	&model.EduVideoUserReaction{},
+	&model.EduUserReaction{},
+	&model.EduVideoSegment{},
+	&model.EduVideoVectorStage{},
+	&model.EduUserVideoRecommend{},
+	&model.EduUserVideoProfile{},
+	&model.EduRecommendExposure{},
+	&model.EduKnowledgeVideoBatch{},
+	&model.EduKnowledgeVideo{},
+	&model.EduKnowledgeVideoPlayRecord{},
+	&model.EduVideoComment{},
+	&model.EduCommentLike{},
+	&model.EduUserProfile{},
+	&model.EduUserFollow{},
+	&model.EduUserMessage{},
+	&model.EduUserProfileVisit{},
+	&model.EduUserNotification{},
+}
 
 func TestSchemaCommentDefinitionsCoverAllMigratedModels(t *testing.T) {
 	definitions := commentDefinitionsByTable(t)
@@ -70,8 +93,8 @@ func TestSchemaCommentStatementsIncludeEveryDefinition(t *testing.T) {
 	if len(statements) != expected {
 		t.Fatalf("SchemaCommentStatements() returned %d statements, want %d", len(statements), expected)
 	}
-	if expected != 185 {
-		t.Fatalf("schema comment registry covers %d objects, want 14 tables and 171 columns", expected)
+	if expected != 255 {
+		t.Fatalf("schema comment registry covers %d objects, want 21 tables and 234 columns", expected)
 	}
 	for _, statement := range statements {
 		if !strings.HasPrefix(statement, "COMMENT ON ") {

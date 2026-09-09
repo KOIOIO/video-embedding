@@ -11,6 +11,10 @@ const (
 	SourceSegmentReaction SourceType = "segment_reaction"
 	SourceVideoReaction   SourceType = "video_reaction"
 	SourceWatch           SourceType = "watch"
+	SourceComment         SourceType = "comment"
+	SourceCommentLike     SourceType = "comment_like"
+	SourceProfileVisit    SourceType = "profile_visit"
+	SourceUserPublish     SourceType = "user_publish"
 )
 
 type ReactionType string
@@ -110,6 +114,14 @@ func eventWeight(event WeightedEvent) float64 {
 		return videoReactionWeight(event.ReactionType)
 	case SourceWatch:
 		return watchWeight(event.WatchDuration, event.SegmentDuration)
+	case SourceComment:
+		return 2.5
+	case SourceCommentLike:
+		return 1.0
+	case SourceProfileVisit:
+		return 0.5
+	case SourceUserPublish:
+		return 4.0
 	default:
 		return 0
 	}

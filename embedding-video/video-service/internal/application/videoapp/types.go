@@ -90,6 +90,7 @@ type RecommendCandidate struct {
 	IsPublished    bool
 	IsRecommend    bool
 	ViewCount      int
+	CommentCount   int
 	CreateTime     time.Time
 	UpdateTime     time.Time
 }

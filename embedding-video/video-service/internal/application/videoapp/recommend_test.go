@@ -224,6 +224,18 @@ func (s *stubVideoRepository) HydrateRecommendedSegmentsByID(ctx context.Context
 	return nil, nil
 }
 
+func (s *stubVideoRepository) FindFollowingAuthorsRecentVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+
+func (s *stubVideoRepository) FindFollowingUsersLikedVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+
+func (s *stubVideoRepository) FindHotVideos(context.Context, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+
 func TestRandomPlayVideoSegmentReturnsRepositoryResult(t *testing.T) {
 	svc := NewService(&stubVideoRepository{
 		findRandomPlayableSegmentFunc: func(context.Context) (RecommendResultItem, bool, error) {

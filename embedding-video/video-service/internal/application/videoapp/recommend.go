@@ -419,6 +419,7 @@ func (a recommendationRepositoryAdapter) FindRecommendedSegmentsForProfileRerank
 				IsPublished:    item.IsPublished,
 				IsRecommend:    item.IsRecommend,
 				ViewCount:      item.ViewCount,
+				CommentCount:   item.CommentCount,
 				CreateTime:     item.CreateTime,
 				UpdateTime:     item.UpdateTime,
 			},
@@ -556,6 +557,7 @@ func mapRecommendCandidatesToRecommendation(items []RecommendCandidate) []recomm
 			IsPublished:    item.IsPublished,
 			IsRecommend:    item.IsRecommend,
 			ViewCount:      item.ViewCount,
+			CommentCount:   item.CommentCount,
 			CreateTime:     item.CreateTime,
 			UpdateTime:     item.UpdateTime,
 		})
@@ -684,6 +686,30 @@ func (a recommendationRepositoryAdapter) MarkRecommendationExposureWatched(ctx c
 
 func (a recommendationRepositoryAdapter) IncrementViewCount(ctx context.Context, id uint64) (int, bool, error) {
 	return a.repo.IncrementViewCount(ctx, id)
+}
+
+func (a recommendationRepositoryAdapter) FindFollowingAuthorsRecentVideos(ctx context.Context, userID uint64, limit int) ([]recommendationapp.Candidate, error) {
+	items, err := a.repo.FindFollowingAuthorsRecentVideos(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return mapRecommendCandidatesToRecommendation(items), nil
+}
+
+func (a recommendationRepositoryAdapter) FindFollowingUsersLikedVideos(ctx context.Context, userID uint64, limit int) ([]recommendationapp.Candidate, error) {
+	items, err := a.repo.FindFollowingUsersLikedVideos(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return mapRecommendCandidatesToRecommendation(items), nil
+}
+
+func (a recommendationRepositoryAdapter) FindHotVideos(ctx context.Context, limit int) ([]recommendationapp.Candidate, error) {
+	items, err := a.repo.FindHotVideos(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	return mapRecommendCandidatesToRecommendation(items), nil
 }
 
 func mapRecommendItemsFromApp(items []recommendationapp.ResultItem) []RecommendResultItem {

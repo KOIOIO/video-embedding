@@ -966,6 +966,123 @@ func (r *GormVideoRepository) FindRecommendedSegmentsForRecBole(ctx context.Cont
 	return rows, err
 }
 
+func (r *GormVideoRepository) FindFollowingAuthorsRecentVideos(ctx context.Context, userID uint64, limit int) ([]videoapp.RecommendCandidate, error) {
+	if userID == 0 || limit <= 0 {
+		return nil, nil
+	}
+	rows := make([]videoapp.RecommendCandidate, 0, limit)
+	err := r.db.WithContext(ctx).Raw(`
+SELECT
+  s.id AS video_segment_id,
+  s.video_id AS video_id,
+  s.start_time AS start_time_sec,
+  s.end_time AS end_time_sec,
+  0 AS distance,
+  CASE WHEN TRIM(COALESCE(s.content_summary, '')) <> '' THEN s.content_summary ELSE r.title END AS segment_title,
+  r.video_url AS video_url,
+  r.cover_url AS cover_url,
+  r.status AS status,
+  r.is_published AS is_published,
+  r.is_recommend AS is_recommend,
+  r.view_count AS view_count,
+  r.create_time AS create_time,
+  r.update_time AS update_time
+FROM public.edu_user_follow f
+JOIN public.edu_video_resource r ON r.user_id = f.following_id
+JOIN public.edu_video_segment s ON s.video_id = r.id
+WHERE f.follower_id = ?
+  AND f.deleted = 0
+  AND r.deleted = 0
+  AND r.source_type = 'user_publish'
+  AND r.is_published = true
+  AND s.deleted = 0
+  AND s.status = 1
+ORDER BY r.create_time DESC
+LIMIT ?`, userID, limit).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *GormVideoRepository) FindFollowingUsersLikedVideos(ctx context.Context, userID uint64, limit int) ([]videoapp.RecommendCandidate, error) {
+	if userID == 0 || limit <= 0 {
+		return nil, nil
+	}
+	rows := make([]videoapp.RecommendCandidate, 0, limit)
+	err := r.db.WithContext(ctx).Raw(`
+SELECT
+  s.id AS video_segment_id,
+  s.video_id AS video_id,
+  s.start_time AS start_time_sec,
+  s.end_time AS end_time_sec,
+  0 AS distance,
+  CASE WHEN TRIM(COALESCE(s.content_summary, '')) <> '' THEN s.content_summary ELSE r.title END AS segment_title,
+  r.video_url AS video_url,
+  r.cover_url AS cover_url,
+  r.status AS status,
+  r.is_published AS is_published,
+  r.is_recommend AS is_recommend,
+  r.view_count AS view_count,
+  r.create_time AS create_time,
+  r.update_time AS update_time
+FROM public.edu_user_follow f
+JOIN public.edu_user_reaction ur ON ur.user_id = f.following_id
+JOIN public.edu_video_segment s ON s.id = ur.video_segment_id
+JOIN public.edu_video_resource r ON r.id = s.video_id
+WHERE f.follower_id = ?
+  AND f.deleted = 0
+  AND ur.deleted = 0
+  AND ur.reaction_type IN ('like', 'double_like')
+  AND s.deleted = 0
+  AND s.status = 1
+  AND r.deleted = 0
+ORDER BY
+  CASE ur.reaction_type WHEN 'double_like' THEN 0 ELSE 1 END,
+  ur.update_time DESC
+LIMIT ?`, userID, limit).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *GormVideoRepository) FindHotVideos(ctx context.Context, limit int) ([]videoapp.RecommendCandidate, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows := make([]videoapp.RecommendCandidate, 0, limit)
+	err := r.db.WithContext(ctx).Raw(`
+SELECT
+  s.id AS video_segment_id,
+  s.video_id AS video_id,
+  s.start_time AS start_time_sec,
+  s.end_time AS end_time_sec,
+  0 AS distance,
+  CASE WHEN TRIM(COALESCE(s.content_summary, '')) <> '' THEN s.content_summary ELSE r.title END AS segment_title,
+  r.video_url AS video_url,
+  r.cover_url AS cover_url,
+  r.status AS status,
+  r.is_published AS is_published,
+  r.is_recommend AS is_recommend,
+  r.view_count AS view_count,
+  r.create_time AS create_time,
+  r.update_time AS update_time
+FROM public.edu_video_segment s
+JOIN public.edu_video_resource r ON r.id = s.video_id
+LEFT JOIN (
+  SELECT video_segment_id, COUNT(*) AS comment_count
+  FROM public.edu_video_comment
+  WHERE deleted = 0
+  GROUP BY video_segment_id
+) c ON c.video_segment_id = s.id
+WHERE s.deleted = 0
+  AND s.status = 1
+  AND r.deleted = 0
+  AND r.is_published = true
+ORDER BY (
+  COALESCE(s.like_count, 0) * 2 +
+  COALESCE(s.double_like_count, 0) * 3 +
+  COALESCE(c.comment_count, 0) * 3
+) DESC
+LIMIT ?`, limit).Scan(&rows).Error
+	return rows, err
+}
+
 func (r *GormVideoRepository) HydrateRecommendedSegmentsByID(ctx context.Context, userID uint64, ids []uint64) ([]videoapp.RecommendCandidate, error) {
 	ids = uniqueUint64s(ids)
 	if len(ids) == 0 {

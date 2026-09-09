@@ -32,6 +32,7 @@ type Candidate struct {
 	IsPublished    bool
 	IsRecommend    bool
 	ViewCount      int
+	CommentCount   int
 	CreateTime     time.Time
 	UpdateTime     time.Time
 }
@@ -46,6 +47,9 @@ const (
 	StrategyRecBole            = "recbole"
 	StrategyGorse              = "gorse"
 	StrategyKnowledgeMatch     = "knowledge_match"
+	StrategySocialFollowing    = "social_following"
+	StrategySocialFriendLiked  = "social_friend_liked"
+	StrategySocialHot          = "social_hot"
 	GorseModelVersion          = "gorse"
 	KnowledgeMatchModelVersion = "knowledge_match_v1"
 	EngineKnowledgeMatch       = "knowledge_match"
@@ -192,6 +196,9 @@ type Repository interface {
 	HasWatchedVideoForQuestion(ctx context.Context, userID uint64, questionID uint64, videoID uint64) (bool, error)
 	SaveWatchRecord(ctx context.Context, userID uint64, videoID uint64, questionID uint64, segmentID uint64, isWatched bool, watchDuration int, now time.Time) (bool, error)
 	IncrementViewCount(ctx context.Context, id uint64) (int, bool, error)
+	FindFollowingAuthorsRecentVideos(ctx context.Context, userID uint64, limit int) ([]Candidate, error)
+	FindFollowingUsersLikedVideos(ctx context.Context, userID uint64, limit int) ([]Candidate, error)
+	FindHotVideos(ctx context.Context, limit int) ([]Candidate, error)
 }
 
 type ExposureRepository interface {
@@ -370,17 +377,31 @@ func (s Service) RandomPlay(ctx context.Context, input RandomPlayInput) ([]Resul
 	}
 	limit := normalizeRandomPlayLimit(input.Limit)
 
+	var mainItems []ResultItem
+
 	if s.recommendationEngine() == EngineGorse && !s.GorseOptions.ShadowMode {
 		if items, ok, err := s.recommendByGorse(ctx, input.UserID, limit); err != nil {
 			return nil, err
 		} else if ok {
-			return items, nil
+			mainItems = items
 		}
 	}
-	if s.recommendationEngine() == EngineRecBole {
-		return s.randomPlayByRecBole(ctx, input.UserID, limit)
+	if mainItems == nil && s.recommendationEngine() == EngineRecBole {
+		items, err := s.randomPlayByRecBole(ctx, input.UserID, limit)
+		if err != nil {
+			return nil, err
+		}
+		mainItems = items
 	}
-	return s.recommendByKnowledgeMatch(ctx, input.UserID, limit)
+	if mainItems == nil {
+		items, err := s.recommendByKnowledgeMatch(ctx, input.UserID, limit)
+		if err != nil {
+			return nil, err
+		}
+		mainItems = items
+	}
+
+	return s.fuseSocialRecall(ctx, input.UserID, mainItems, limit)
 }
 
 func (s Service) PreviewRandomPlay(ctx context.Context, input RandomPlayInput) ([]ResultItem, error) {
@@ -410,6 +431,104 @@ func normalizeRandomPlayLimit(limit int) int {
 		return 50
 	}
 	return limit
+}
+
+const socialRecallRatio = 0.3
+
+func (s Service) fuseSocialRecall(ctx context.Context, userID uint64, mainItems []ResultItem, limit int) ([]ResultItem, error) {
+	if userID == 0 {
+		return mainItems, nil
+	}
+
+	socialBudget := 0
+	if len(mainItems) == 0 {
+		socialBudget = limit
+	} else {
+		socialBudget = int(float64(limit) * socialRecallRatio)
+		if socialBudget < 1 {
+			socialBudget = 1
+		}
+	}
+	if socialBudget <= 0 {
+		return mainItems, nil
+	}
+
+	fetchLimit := socialBudget * 3
+	following, err := s.Repo.FindFollowingAuthorsRecentVideos(ctx, userID, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+	friendLiked, err := s.Repo.FindFollowingUsersLikedVideos(ctx, userID, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+	hot, err := s.Repo.FindHotVideos(ctx, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	following = s.filterRecentCandidates(ctx, userID, following)
+	friendLiked = s.filterRecentCandidates(ctx, userID, friendLiked)
+	hot = s.filterRecentCandidates(ctx, userID, hot)
+
+	existingIDs := make(map[uint64]bool, len(mainItems))
+	for _, item := range mainItems {
+		if item.VideoSegmentID > 0 {
+			existingIDs[item.VideoSegmentID] = true
+		}
+	}
+
+	now := s.Now()
+	requestID := s.newRequestID()
+	var socialFront []ResultItem
+	var socialBack []ResultItem
+	usedIDs := make(map[uint64]bool)
+	exposures := make([]ExposureRecord, 0, socialBudget)
+
+	appendSocial := func(c Candidate, strategy string, score float64, front bool) bool {
+		if c.VideoSegmentID == 0 || existingIDs[c.VideoSegmentID] || usedIDs[c.VideoSegmentID] {
+			return false
+		}
+		if len(socialFront)+len(socialBack) >= socialBudget {
+			return false
+		}
+		usedIDs[c.VideoSegmentID] = true
+		item := withRecommendationSource(buildResultItem(0, c, score, false, 0), strategy, "")
+		if front {
+			socialFront = append(socialFront, item)
+		} else {
+			socialBack = append(socialBack, item)
+		}
+		s.markRecentReturned(ctx, userID, c.VideoSegmentID)
+		_ = s.Repo.SaveUserVideoRecommendation(ctx, userID, 0, c.VideoID, c.VideoSegmentID, score, now)
+		rank := len(socialFront) + len(mainItems) + len(socialBack)
+		exposures = append(exposures, buildExposureRecord(requestID, userID, 0, c.VideoID, c.VideoSegmentID, rank, score, strategy, "", now))
+		return true
+	}
+
+	for _, c := range following {
+		appendSocial(c, StrategySocialFollowing, 0.8, true)
+	}
+	for _, c := range friendLiked {
+		appendSocial(c, StrategySocialFriendLiked, 0.6, true)
+	}
+	for _, c := range hot {
+		appendSocial(c, StrategySocialHot, 0.4, false)
+	}
+
+	if len(exposures) > 0 {
+		_ = s.saveRecommendationExposures(ctx, exposures)
+	}
+
+	if len(socialFront) == 0 && len(socialBack) == 0 {
+		return mainItems, nil
+	}
+
+	result := make([]ResultItem, 0, len(socialFront)+len(mainItems)+len(socialBack))
+	result = append(result, socialFront...)
+	result = append(result, mainItems...)
+	result = append(result, socialBack...)
+	return result, nil
 }
 
 func (s Service) randomPlayByRecBole(ctx context.Context, userID uint64, limit int) ([]ResultItem, error) {

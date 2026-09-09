@@ -345,6 +345,15 @@ func (*workerTestRepo) HasWatchedVideoForQuestion(context.Context, uint64, uint6
 func (*workerTestRepo) SaveWatchRecord(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error) {
 	panic("unexpected call")
 }
+func (*workerTestRepo) FindFollowingAuthorsRecentVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*workerTestRepo) FindFollowingUsersLikedVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*workerTestRepo) FindHotVideos(context.Context, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 
 type fakeObjectStore struct{}
 
