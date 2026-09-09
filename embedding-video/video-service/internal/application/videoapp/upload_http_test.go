@@ -574,6 +574,15 @@ func (*uploadHTTPTestRepo) HasWatchedVideoForQuestion(context.Context, uint64, u
 func (*uploadHTTPTestRepo) SaveWatchRecord(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error) {
 	panic("unexpected call")
 }
+func (*uploadHTTPTestRepo) FindFollowingAuthorsRecentVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*uploadHTTPTestRepo) FindFollowingUsersLikedVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*uploadHTTPTestRepo) FindHotVideos(context.Context, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 func (r *uploadHTTPTestRepo) GetArchiveProcessingProgress(_ context.Context, videoIDs []uint64) (ArchiveProcessingProgress, error) {
 	r.progressVideoIDs = append([]uint64(nil), videoIDs...)
 	return r.archiveProgress, nil

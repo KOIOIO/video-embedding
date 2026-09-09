@@ -1019,6 +1019,9 @@ type fakeRepository struct {
 	knowledgeUserID                             uint64
 	knowledgeLimit                              int
 	knowledgeWeakLimit                          int
+	socialFollowingCandidates                   []Candidate
+	socialFriendLikedCandidates                 []Candidate
+	socialHotCandidates                         []Candidate
 }
 
 func (r *fakeRepository) GetSegmentEmbeddingDim(context.Context) (int, error) {
@@ -1165,6 +1168,18 @@ func (r *fakeRepository) MarkRecommendationExposureWatched(_ context.Context, us
 func (r *fakeRepository) IncrementViewCount(_ context.Context, id uint64) (int, bool, error) {
 	r.incrementedVideoID = id
 	return 1, true, nil
+}
+
+func (r *fakeRepository) FindFollowingAuthorsRecentVideos(_ context.Context, _ uint64, _ int) ([]Candidate, error) {
+	return r.socialFollowingCandidates, nil
+}
+
+func (r *fakeRepository) FindFollowingUsersLikedVideos(_ context.Context, _ uint64, _ int) ([]Candidate, error) {
+	return r.socialFriendLikedCandidates, nil
+}
+
+func (r *fakeRepository) FindHotVideos(_ context.Context, _ int) ([]Candidate, error) {
+	return r.socialHotCandidates, nil
 }
 
 type fakeEmbedder struct {

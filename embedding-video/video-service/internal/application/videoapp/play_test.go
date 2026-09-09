@@ -304,6 +304,15 @@ func (*playTestRepo) HasWatchedVideoForQuestion(context.Context, uint64, uint64,
 func (*playTestRepo) SaveWatchRecord(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error) {
 	panic("unexpected call")
 }
+func (*playTestRepo) FindFollowingAuthorsRecentVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*playTestRepo) FindFollowingUsersLikedVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*playTestRepo) FindHotVideos(context.Context, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 
 type playTestStatusStore struct {
 	getStatus TranscodeStatus

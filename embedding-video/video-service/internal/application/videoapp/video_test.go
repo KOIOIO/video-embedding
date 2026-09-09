@@ -651,6 +651,15 @@ func (*videoTestRepo) HasWatchedVideoForQuestion(context.Context, uint64, uint64
 func (*videoTestRepo) SaveWatchRecord(context.Context, uint64, uint64, uint64, uint64, bool, int, time.Time) (bool, error) {
 	panic("unexpected call")
 }
+func (*videoTestRepo) FindFollowingAuthorsRecentVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*videoTestRepo) FindFollowingUsersLikedVideos(context.Context, uint64, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
+func (*videoTestRepo) FindHotVideos(context.Context, int) ([]RecommendCandidate, error) {
+	return nil, nil
+}
 func (s *videoTestReactionStore) HasCounts(context.Context, uint64) (bool, error) {
 	return s.hasCounts, nil
 }

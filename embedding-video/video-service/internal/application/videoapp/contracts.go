@@ -40,6 +40,9 @@ type VideoRepository interface {
 	GetVideoIDBySegmentID(ctx context.Context, segmentID uint64) (uint64, error)
 	HasWatchedVideoForQuestion(ctx context.Context, userID uint64, questionID uint64, videoID uint64) (bool, error)
 	SaveWatchRecord(ctx context.Context, userID uint64, videoID uint64, questionID uint64, segmentID uint64, isWatched bool, watchDuration int, now time.Time) (bool, error)
+	FindFollowingAuthorsRecentVideos(ctx context.Context, userID uint64, limit int) ([]RecommendCandidate, error)
+	FindFollowingUsersLikedVideos(ctx context.Context, userID uint64, limit int) ([]RecommendCandidate, error)
+	FindHotVideos(ctx context.Context, limit int) ([]RecommendCandidate, error)
 }
 
 type VideoUploadPermissionRepository interface {
