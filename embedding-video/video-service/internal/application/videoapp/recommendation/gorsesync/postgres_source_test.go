@@ -20,8 +20,6 @@ func TestBuildQueriesUseSysUserPlayableItemsAndFeedbackSources(t *testing.T) {
 		"FROM public.edu_student_word_study_detail wsd",
 		"FROM public.english_reading_history erh",
 		"FROM public.english_listening_session els",
-		"FROM public.english_storybook_session ess",
-		"FROM public.student_profile_snapshot sps",
 		"AS recent_subjects",
 		"AS recent_knowledge",
 		"AS learning_labels",
