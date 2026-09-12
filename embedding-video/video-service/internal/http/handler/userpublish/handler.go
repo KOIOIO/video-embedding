@@ -206,7 +206,7 @@ func (h *Handler) ListUserVideos(c *gin.Context) {
 			Duration:    v.Duration,
 			Status:      v.Status,
 			ViewCount:   v.ViewCount,
-			PlayURL:     publishedPlayURL(v),
+			PlayURL:     h.publishedPlayURL(v),
 			CreateTime:  v.CreateTime.Format(time.RFC3339),
 		})
 	}
@@ -246,7 +246,7 @@ func (h *Handler) ListLikedVideos(c *gin.Context) {
 			Duration:    v.Duration,
 			Status:      v.Status,
 			ViewCount:   v.ViewCount,
-			PlayURL:     publishedPlayURL(v),
+			PlayURL:     h.publishedPlayURL(v),
 			CreateTime:  v.CreateTime.Format(time.RFC3339),
 		})
 	}
@@ -259,12 +259,37 @@ func (h *Handler) ListLikedVideos(c *gin.Context) {
 	})
 }
 
-// publishedPlayURL 仅当视频已发布（转码完成）时返回可播放的 HLS 地址。
-func publishedPlayURL(v model.EduVideoResource) string {
+// publishedPlayURL 仅当视频已发布（转码完成）时返回可播放地址：
+// 用户发布视频的 VideoURL 已直接存 HLS；知识视频（admin_import）的 VideoURL
+// 是 raw mp4，按与 feed 一致的规则推导出对应 HLS 播放地址。
+func (h *Handler) publishedPlayURL(v model.EduVideoResource) string {
 	if v.Status != int16(domainvideo.StatusDone) {
 		return ""
 	}
-	return v.VideoURL
+	value := strings.TrimSpace(v.VideoURL)
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, ".m3u8") {
+		return value
+	}
+	rawPrefix := strings.TrimRight(h.rawURLPrefix, "/")
+	prefix := strings.TrimRight(h.hlsURLPrefix, "/")
+	if strings.HasPrefix(value, rawPrefix+"/") {
+		value = strings.TrimPrefix(value, rawPrefix+"/")
+	} else {
+		value = strings.TrimPrefix(value, "/videos/")
+		value = strings.TrimPrefix(value, "raw/")
+	}
+	value = strings.TrimPrefix(value, "/")
+	parts := strings.Split(value, "/")
+	if len(parts) < 4 {
+		return ""
+	}
+	datePath := strings.Join(parts[:3], "/")
+	fileName := parts[3]
+	base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	return prefix + "/" + datePath + "/" + base + "/" + hlsMasterName
 }
 
 func currentUserID(c *gin.Context) (uint64, bool) {

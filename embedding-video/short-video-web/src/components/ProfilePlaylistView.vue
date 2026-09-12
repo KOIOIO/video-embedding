@@ -24,6 +24,9 @@ const total = ref(0)
 const loadingMore = ref(false)
 const loadMoreFailed = ref(false)
 
+let wheelAccumulator = 0
+let wheelLocked = false
+
 const windowRange = computed(() => visibleWindow(index.value, list.value.length))
 const windowItems = computed(() => list.value.slice(windowRange.value[0], windowRange.value[1] + 1))
 const hasMore = computed(() => list.value.length < total.value)
@@ -92,9 +95,16 @@ function animateTo(targetIndex) {
 
 function onWheel(event) {
   if (transitioning.value) return
+  if (wheelLocked) return
   if (Math.abs(event.deltaY) < 4) return
-  const delta = event.deltaY > 0 ? 1 : -1
-  if (delta > 0) goNext()
+  wheelAccumulator += event.deltaY
+  if (Math.abs(wheelAccumulator) < SWIPE_THRESHOLD) return
+  wheelAccumulator = 0
+  wheelLocked = true
+  window.setTimeout(() => {
+    wheelLocked = false
+  }, 420)
+  if (event.deltaY > 0) goNext()
   else goPrev()
 }
 
@@ -146,6 +156,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   touchStartY = null
+  wheelAccumulator = 0
+  wheelLocked = false
 })
 </script>
 
