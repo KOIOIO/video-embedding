@@ -89,8 +89,6 @@ type userFeatureRow struct {
 	StudentWordCount        int
 	EnglishReadingCount     int
 	EnglishListeningCount   int
-	EnglishStorybookCount   int
-	ProfileSnapshotFeatures string
 	FollowingCount          int
 	FollowerCount           int
 	PublishedVideoCount     int
@@ -557,8 +555,6 @@ func loadUserFeatures(ctx context.Context, db *sql.DB) ([]userFeatureRow, error)
 			&user.StudentWordCount,
 			&user.EnglishReadingCount,
 			&user.EnglishListeningCount,
-			&user.EnglishStorybookCount,
-			&user.ProfileSnapshotFeatures,
 			&user.FollowingCount,
 			&user.FollowerCount,
 			&user.PublishedVideoCount,
@@ -642,19 +638,6 @@ english_listening AS (
   WHERE user_id > 0
   GROUP BY user_id
 ),
-english_storybook AS (
-  SELECT user_id, COUNT(*) AS english_storybook_count
-  FROM public.english_storybook_session
-  WHERE user_id > 0
-  GROUP BY user_id
-),
-profile_snapshot AS (
-  SELECT student_id AS user_id, COALESCE(MAX(profile_json::text), '') AS profile_snapshot_features
-  FROM public.student_profile_snapshot
-  WHERE student_id > 0
-    AND COALESCE(deleted, 0) = 0
-  GROUP BY student_id
-),
 following AS (
   SELECT follower_id AS user_id, COUNT(*) AS following_count
   FROM public.edu_user_follow
@@ -690,8 +673,6 @@ SELECT vu.user_id,
        COALESCE(sw.student_word_count, 0) AS student_word_count,
        COALESCE(er.english_reading_count, 0) AS english_reading_count,
        COALESCE(el.english_listening_count, 0) AS english_listening_count,
-       COALESCE(es.english_storybook_count, 0) AS english_storybook_count,
-       COALESCE(ps.profile_snapshot_features, '') AS profile_snapshot_features,
        COALESCE(fg.following_count, 0) AS following_count,
        COALESCE(fr.follower_count, 0) AS follower_count,
        COALESCE(pv.published_video_count, 0) AS published_video_count,
@@ -707,8 +688,6 @@ LEFT JOIN special_practice sp ON sp.user_id = vu.user_id
 LEFT JOIN student_words sw ON sw.user_id = vu.user_id
 LEFT JOIN english_reading er ON er.user_id = vu.user_id
 LEFT JOIN english_listening el ON el.user_id = vu.user_id
-LEFT JOIN english_storybook es ON es.user_id = vu.user_id
-LEFT JOIN profile_snapshot ps ON ps.user_id = vu.user_id
 LEFT JOIN following fg ON fg.user_id = vu.user_id
 LEFT JOIN followers fr ON fr.user_id = vu.user_id
 LEFT JOIN published_videos pv ON pv.user_id = vu.user_id
@@ -808,8 +787,6 @@ func writeUsers(out io.Writer, rows []userFeatureRow) error {
 		"student_word_count:float",
 		"english_reading_count:float",
 		"english_listening_count:float",
-		"english_storybook_count:float",
-		"profile_snapshot_features:token_seq",
 		"following_count:float",
 		"follower_count:float",
 		"published_video_count:float",
@@ -835,8 +812,6 @@ func writeUsers(out io.Writer, rows []userFeatureRow) error {
 			strconv.Itoa(row.StudentWordCount),
 			strconv.Itoa(row.EnglishReadingCount),
 			strconv.Itoa(row.EnglishListeningCount),
-			strconv.Itoa(row.EnglishStorybookCount),
-			row.ProfileSnapshotFeatures,
 			strconv.Itoa(row.FollowingCount),
 			strconv.Itoa(row.FollowerCount),
 			strconv.Itoa(row.PublishedVideoCount),
