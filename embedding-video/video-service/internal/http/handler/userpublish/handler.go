@@ -12,9 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"video-service/internal/application/userpublish"
+	domainvideo "video-service/internal/domain/video"
 	"video-service/internal/http/dto"
 	httperrors "video-service/internal/http/errors"
 	"video-service/internal/infrastructure/objectstorage"
+	"video-service/internal/model"
 )
 
 const (
@@ -63,12 +65,14 @@ type videoStatusResponse struct {
 
 type userVideoItem struct {
 	ID          uint64 `json:"id"`
+	UserID      uint64 `json:"author_id"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	CoverURL    string `json:"cover_url"`
 	Duration    int    `json:"duration"`
 	Status      int16  `json:"status"`
 	ViewCount   int    `json:"view_count"`
+	PlayURL     string `json:"play_url"`
 	CreateTime  string `json:"create_time"`
 }
 
@@ -113,10 +117,10 @@ func (h *Handler) PublishVideo(c *gin.Context) {
 		return
 	}
 
-	relativePath := strings.TrimPrefix(objectKey, "raw/")
-	videoURL := h.rawURLPrefix + "/" + relativePath
 	hlsObjectPrefix := fmt.Sprintf("%s/%d/%d", hlsObjectDir, userID, timestamp)
 	hlsURL := fmt.Sprintf("%s/%s/%d/%d/%s", h.hlsURLPrefix, "user-publish", userID, timestamp, hlsMasterName)
+	// VideoURL 直接存 HLS 播放地址（用户主页作品/喜欢列表可直接播放），原始文件由 RawKey 指向 raw 对象
+	videoURL := hlsURL
 
 	video, err := h.service.PublishVideo(
 		c.Request.Context(),
@@ -195,12 +199,14 @@ func (h *Handler) ListUserVideos(c *gin.Context) {
 	for _, v := range videos {
 		list = append(list, userVideoItem{
 			ID:          v.ID,
+			UserID:      v.UserID,
 			Title:       v.Title,
 			Description: v.Description,
 			CoverURL:    v.CoverURL,
 			Duration:    v.Duration,
 			Status:      v.Status,
 			ViewCount:   v.ViewCount,
+			PlayURL:     publishedPlayURL(v),
 			CreateTime:  v.CreateTime.Format(time.RFC3339),
 		})
 	}
@@ -233,12 +239,14 @@ func (h *Handler) ListLikedVideos(c *gin.Context) {
 	for _, v := range videos {
 		list = append(list, userVideoItem{
 			ID:          v.ID,
+			UserID:      v.UserID,
 			Title:       v.Title,
 			Description: v.Description,
 			CoverURL:    v.CoverURL,
 			Duration:    v.Duration,
 			Status:      v.Status,
 			ViewCount:   v.ViewCount,
+			PlayURL:     publishedPlayURL(v),
 			CreateTime:  v.CreateTime.Format(time.RFC3339),
 		})
 	}
@@ -249,6 +257,14 @@ func (h *Handler) ListLikedVideos(c *gin.Context) {
 		Page:     page,
 		PageSize: pageSize,
 	})
+}
+
+// publishedPlayURL 仅当视频已发布（转码完成）时返回可播放的 HLS 地址。
+func publishedPlayURL(v model.EduVideoResource) string {
+	if v.Status != int16(domainvideo.StatusDone) {
+		return ""
+	}
+	return v.VideoURL
 }
 
 func currentUserID(c *gin.Context) (uint64, bool) {

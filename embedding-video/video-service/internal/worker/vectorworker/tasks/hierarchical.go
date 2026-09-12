@@ -101,6 +101,7 @@ func IsUniformSegments(segs []llmSegment) (bool, UniformStats) {
 
 // NormalizeLLMSegments 清洗并规范化 LLM 生成的细分段结果。
 // 这里会负责裁剪越界时间、限制相邻重叠、合并过短分段，并重新生成连续的 segment_index。
+// 注意：maxSec 已不再作为分段最大时长约束（分段长度完全由 LLM 按内容逻辑决定），参数保留仅为兼容调用方。
 func NormalizeLLMSegments(llmOut string, durationSec int, minSec int, maxSec int) ([]llmSegment, error) {
 	if durationSec <= 0 {
 		return nil, errors.New("durationSec must be > 0")
@@ -108,12 +109,7 @@ func NormalizeLLMSegments(llmOut string, durationSec int, minSec int, maxSec int
 	if minSec <= 0 {
 		minSec = 20
 	}
-	if maxSec <= 0 {
-		maxSec = 180
-	}
-	if maxSec < minSec {
-		maxSec = minSec
-	}
+	_ = maxSec // maxSec 不再作为分段最大时长约束，保留参数以兼容调用方
 	overlapSec := calcAllowedSegmentOverlapSec(minSec)
 
 	rawJSON, ok := ExtractFirstJSONObject(llmOut)
@@ -361,8 +357,8 @@ func BuildHierarchicalSegmentationRetryPrompt(durationSec int, coarseSegmentSec 
 	b.WriteString("要求：\n")
 	b.WriteString(fmt.Sprintf("- 视频总时长（秒）：%d\n", durationSec))
 	b.WriteString(fmt.Sprintf("- 粗分段步长（秒）：%d（不中断，0->duration）\n", coarseSegmentSec))
-	b.WriteString(fmt.Sprintf("- 输出分段最小长度（秒）：%d\n", refineMinSec))
-	b.WriteString(fmt.Sprintf("- 输出分段最大长度（秒）：%d\n", refineMaxSec))
+	b.WriteString(fmt.Sprintf("- 输出分段最小长度（秒）：%d（避免碎片化，过短分段会被后处理合并）\n", refineMinSec))
+	b.WriteString("- 不设置分段最大时长限制：分段长度完全由内容逻辑决定，一个知识单元持续多久，该分段就持续多久，即使超过常见时长上限也不要在中途硬切\n")
 	b.WriteString("- 重新分段前，请先自检上一版结果是否存在以下问题：同一个知识点被拆成多个过碎小段；定义和关键解释被切开；完整解题步骤被切成前后两半；上一段结论和下一段新主题混在一起；分段表面不等距但本质仍按时间切分\n")
 	b.WriteString("- 分段边界必须依据内容主题/转折点（例如讲解对象变化、步骤切换、定义/举例/总结切换）\n")
 	b.WriteString("- 一个分段应尽量对应一个完整的知识单元，例如：一个定义、一个定理、一组连续推导、一个完整解题步骤、一个完整例题阶段、一个总结结论\n")
@@ -438,11 +434,11 @@ func BuildHierarchicalSegmentationPrompt(durationSec int, coarseSegmentSec int, 
 	b.WriteString("要求：\n")
 	b.WriteString(fmt.Sprintf("- 视频总时长（秒）：%d\n", durationSec))
 	b.WriteString(fmt.Sprintf("- 粗分段步长（秒）：%d（不中断，0->duration）\n", coarseSegmentSec))
-	b.WriteString(fmt.Sprintf("- 输出分段最小长度（秒）：%d\n", refineMinSec))
-	b.WriteString(fmt.Sprintf("- 输出分段最大长度（秒）：%d\n", refineMaxSec))
+	b.WriteString(fmt.Sprintf("- 输出分段最小长度（秒）：%d（避免碎片化，过短分段会被后处理合并）\n", refineMinSec))
+	b.WriteString("- 不设置分段最大时长限制：分段长度完全由视频内容逻辑决定，一个知识单元/讲解主题持续多久，该分段就持续多久，即使明显超过常见的 60-90 秒时长上限也不要在中途硬切\n")
 	b.WriteString("- 分段边界以内容主题/转折为主，不要为了\"看起来规整\"而等距切分（例如固定每 120 秒一段）\n")
 	b.WriteString("- 一个分段应尽量对应一个完整的知识单元，例如：一个定义、一个定理、一组连续推导、一个完整解题步骤、一个完整例题阶段、一个总结结论\n")
-	b.WriteString("- 如果同一段内容仍在围绕同一个知识点展开解释，不要仅因为时长接近上限就切开\n")
+	b.WriteString("- 如果同一段内容仍在围绕同一个知识点展开解释，不要因为任何时长原因切开；只有当讲解对象、步骤或目标真正切换时才切分\n")
 	b.WriteString("- 如果一个知识点已经讲完，并且开始进入新的定义、步骤、例子、结论或分析目标，应优先在这里切分\n")
 	b.WriteString("- 分段结束位置优先落在 ASR 文本里一整句话说完的位置，不要把一句话截成前后两半\n")
 	b.WriteString("- 如果主题切换点出现在一句话中间，当前分段应延续到这句话自然结束，再进入下一个分段\n")

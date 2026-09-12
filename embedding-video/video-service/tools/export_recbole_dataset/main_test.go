@@ -102,8 +102,6 @@ func TestBuildUserFeatureQueryUsesFullSystemSignals(t *testing.T) {
 		"edu_student_word_record",
 		"english_reading_history",
 		"english_listening_session",
-		"english_storybook_session",
-		"student_profile_snapshot",
 		"edu_user_follow",
 		"following_count",
 		"follower_count",
@@ -114,20 +112,35 @@ func TestBuildUserFeatureQueryUsesFullSystemSignals(t *testing.T) {
 			t.Fatalf("query missing %q:\n%s", fragment, query)
 		}
 	}
+	// 已删除的无关表不应再出现在特征查询中
+	for _, removed := range []string{
+		"english_storybook_session",
+		"student_profile_snapshot",
+		"profile_json",
+	} {
+		if strings.Contains(query, removed) {
+			t.Fatalf("query still references removed table/column %q:\n%s", removed, query)
+		}
+	}
 }
 
-func TestBuildUserFeatureQueryUsesProfileSnapshotSchema(t *testing.T) {
+func TestBuildUserFeatureQueryUsesCurrentSchemaSignals(t *testing.T) {
 	query := buildUserFeatureQuery()
 	for _, fragment := range []string{
-		"student_id AS user_id",
-		"MAX(profile_json::text)",
+		"grade_id",
+		"class_id",
+		"user_type",
+		"edu_user_knowledge_mastery",
+		"edu_knowledge_answer_record",
+		"recent_knowledge_point_ids",
+		"question_search_knowledge",
 	} {
 		if !strings.Contains(query, fragment) {
 			t.Fatalf("query missing %q:\n%s", fragment, query)
 		}
 	}
-	if strings.Contains(query, "snapshot_json") {
-		t.Fatalf("query references missing snapshot_json column:\n%s", query)
+	if strings.Contains(query, "profile_json") || strings.Contains(query, "snapshot_json") {
+		t.Fatalf("query references removed profile snapshot schema:\n%s", query)
 	}
 }
 

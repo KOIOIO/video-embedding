@@ -7,7 +7,7 @@ export const STATUS_PUBLISHED = 3
 export const STATUS_FAILED = 4
 
 export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024 // 500MB
-export const MAX_DURATION_SECONDS = 180 // 3分钟
+export const MAX_DURATION_SECONDS = Infinity // 上传时长已解禁，不限时长
 
 const ALLOWED_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm']
 
@@ -36,12 +36,14 @@ function authHeaders(extra = {}) {
 export function normalizeUserVideo(data) {
   return {
     id: Number(data?.id || 0) || 0,
+    author_id: Number(data?.author_id || data?.user_id || 0) || 0,
     title: String(data?.title || ''),
     description: String(data?.description || ''),
     cover_url: String(data?.cover_url || ''),
     duration: Number(data?.duration || 0) || 0,
     status: Number(data?.status || 0) || 0,
     view_count: Number(data?.view_count || 0) || 0,
+    play_url: String(data?.play_url || ''),
     create_time: String(data?.create_time || ''),
   }
 }

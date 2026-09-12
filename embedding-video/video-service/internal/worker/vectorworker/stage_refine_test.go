@@ -86,7 +86,7 @@ func TestRefineStageAllowsEmptyCoarseForShortVideo(t *testing.T) {
 		VideoID: 9,
 		RawKey:  "raw/short.mp4",
 		Stage:   VectorStageRefine,
-		EndSec:  194,
+		EndSec:  44,
 	})
 	if err != nil {
 		t.Fatalf("Handle returned error: %v", err)
@@ -94,8 +94,8 @@ func TestRefineStageAllowsEmptyCoarseForShortVideo(t *testing.T) {
 	if !processor.called {
 		t.Fatal("expected processor to be called")
 	}
-	if processor.task.EndSec != 194 {
-		t.Fatalf("processor EndSec = %d, want 194", processor.task.EndSec)
+	if processor.task.EndSec != 44 {
+		t.Fatalf("processor EndSec = %d, want 44", processor.task.EndSec)
 	}
 	if len(repo.complete) != 1 || repo.complete[0].Stage != VectorStageRefine {
 		t.Fatalf("refine not complete: %+v", repo.complete)

@@ -55,10 +55,14 @@ export async function fetchRandomVideoDistinct(userId, seenKeys, { maxAttempts =
 }
 
 export async function submitReaction({ userId, item, reactionType, fetchImpl = fetch }) {
-  const segmentId = Number(item?.video_segment_id || 0)
-  if (!segmentId) throw new Error('video_segment_id is required')
   if (!VALID_REACTION_TYPES.has(reactionType)) throw new Error('reaction_type must be one of like, double_like, dislike')
-  const data = await requestJson(`/api/video-segments/${encodeURIComponent(String(segmentId))}/reactions`, {
+  const segmentId = Number(item?.video_segment_id || 0)
+  const videoId = Number(item?.id || item?.video_id || 0)
+  const url = segmentId > 0
+    ? `/api/video-segments/${encodeURIComponent(String(segmentId))}/reactions`
+    : `/api/videos/${encodeURIComponent(String(videoId))}/reactions`
+  if (segmentId <= 0 && videoId <= 0) throw new Error('video_segment_id or video id is required')
+  const data = await requestJson(url, {
     method: 'POST',
     body: JSON.stringify({
       user_id: Number(userId),
@@ -75,8 +79,12 @@ export async function submitReaction({ userId, item, reactionType, fetchImpl = f
 
 export async function fetchReactionCounts(item, fetchImpl = fetch) {
   const segmentId = Number(item?.video_segment_id || 0)
-  if (!segmentId) throw new Error('video_segment_id is required')
-  const data = await requestJson(`/api/video-segments/${encodeURIComponent(String(segmentId))}/reaction-counts`, {}, fetchImpl)
+  const videoId = Number(item?.id || item?.video_id || 0)
+  const url = segmentId > 0
+    ? `/api/video-segments/${encodeURIComponent(String(segmentId))}/reaction-counts`
+    : `/api/videos/${encodeURIComponent(String(videoId))}/reaction-counts`
+  if (segmentId <= 0 && videoId <= 0) throw new Error('video_segment_id or video id is required')
+  const data = await requestJson(url, {}, fetchImpl)
   return {
     like_count: Number(data?.like_count || 0) || 0,
     double_like_count: Number(data?.double_like_count || 0) || 0,

@@ -13,13 +13,16 @@ import FollowListView from './components/FollowListView.vue'
 import MessageListView from './components/MessageListView.vue'
 import ChatView from './components/ChatView.vue'
 import VideoView from './components/VideoView.vue'
+import ProfilePlaylistView from './components/ProfilePlaylistView.vue'
 
 const status = ref('checking')
 const session = ref(null)
 const profileUserId = ref(getCurrentUserId())
+const profileTab = ref('works')
 const followListParams = ref({ userId: 0, type: 'following' })
 const chatUserId = ref(0)
 const videoParams = ref({ videoId: 0, segmentId: 0, commentId: 0 })
+const playlistParams = ref({ userId: 0, tabType: 'works', videos: [], startIndex: 0, ownerName: '' })
 
 onMounted(async () => {
   const saved = readSession()
@@ -127,6 +130,15 @@ function onNavigate(target) {
     if (videoParams.value.segmentId > 0) {
       status.value = 'video'
     }
+  } else if (target?.view === 'profile-play') {
+    playlistParams.value = {
+      userId: Number(target.userId) || profileUserId.value,
+      tabType: target.tabType === 'liked' ? 'liked' : 'works',
+      videos: Array.isArray(target.videos) ? target.videos : [],
+      startIndex: Math.max(0, Number(target.startIndex) || 0),
+      ownerName: String(target.ownerName || ''),
+    }
+    status.value = 'profile-play'
   }
 }
 
@@ -166,6 +178,14 @@ function onProfilePublish() {
 function onProfileShowList(params) {
   followListParams.value = { userId: Number(params?.userId) || profileUserId.value, type: params?.type || 'following' }
   status.value = 'follow-list'
+}
+
+function onProfileTabChange(tab) {
+  profileTab.value = tab === 'liked' ? 'liked' : 'works'
+}
+
+function onPlaylistBack() {
+  status.value = 'profile'
 }
 
 function onFollowListBack() {
@@ -223,11 +243,22 @@ function onFriendsBack() {
   <ProfileView
     v-else-if="status === 'profile'"
     :user-id="profileUserId"
+    :initial-tab="profileTab"
+    @tab-change="onProfileTabChange"
     @back="onProfileBack"
     @edit="onProfileEdit"
     @publish="onProfilePublish"
     @show-list="onProfileShowList"
     @navigate="onNavigate"
+  />
+  <ProfilePlaylistView
+    v-else-if="status === 'profile-play'"
+    :user-id="playlistParams.userId"
+    :tab-type="playlistParams.tabType"
+    :videos="playlistParams.videos"
+    :start-index="playlistParams.startIndex"
+    :owner-name="playlistParams.ownerName"
+    @back="onPlaylistBack"
   />
   <FollowListView
     v-else-if="status === 'follow-list'"

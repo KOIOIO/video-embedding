@@ -16,7 +16,6 @@ import (
 const (
 	MaxTitleLength       = 200
 	MaxDescriptionLength = 2000
-	MaxUserPublishDurationSec = 180
 )
 
 // Repository 定义用户发布视频所需的仓储能力。

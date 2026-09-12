@@ -112,7 +112,7 @@ describe('feed api', () => {
     ).rejects.toThrow('reaction_type must be one of like, double_like, dislike')
     await expect(
       submitReaction({ userId: 7, item: {}, reactionType: 'like', fetchImpl: vi.fn() }),
-    ).rejects.toThrow('video_segment_id is required')
+    ).rejects.toThrow('video_segment_id or video id is required')
   })
 
   it('fetches reaction counts', async () => {

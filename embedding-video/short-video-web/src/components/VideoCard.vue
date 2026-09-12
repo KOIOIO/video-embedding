@@ -48,6 +48,7 @@ const authorAvatarText = computed(() => {
 })
 
 const isHlsSrc = computed(() => String(props.item.play_url || '').toLowerCase().includes('.m3u8'))
+const isSegmentVideo = computed(() => Number(props.item.video_segment_id || 0) > 0)
 const segmentMode = computed(() => {
   const start = Number(props.item.start_time_sec || 0)
   const end = Number(props.item.end_time_sec || 0)
@@ -284,6 +285,7 @@ async function loadReactionCounts() {
 }
 
 async function loadCommentCount() {
+  if (!Number(props.item.video_segment_id || 0)) return
   try {
     commentCount.value = await fetchCommentCounts(props.item.video_segment_id)
   } catch {
@@ -461,7 +463,7 @@ onBeforeUnmount(() => {
         <span class="rail-count" :class="{ active: activeReaction === REACTION_DISLIKE }">{{ dislikeCount || '倒赞' }}</span>
       </button>
 
-      <button class="rail-btn" type="button" @click.stop="openComments">
+      <button v-if="isSegmentVideo" class="rail-btn" type="button" @click.stop="openComments">
         <span class="rail-icon">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.6A9.4 9.4 0 0 0 2.6 12c0 3.8 2.3 7.2 5.9 8.7.4.1.6-.2.6-.4v-1.5c-2.4.5-2.9-1.2-2.9-1.2-.4-1-1-1.3-1-1.3-.8-.5.1-.5.1-.5.9.1 1.3.9 1.3.9.8 1.3 2 1 2.5.7.1-.5.3-.9.6-1.1-2-.2-4-.9-4-4.2 0-.9.3-1.7.9-2.3-.1-.2-.4-1.1.1-2.3 0 0 .7-.2 2.4.9a8.2 8.2 0 0 1 4.3 0c1.7-1.1 2.4-.9 2.4-.9.5 1.2.2 2.1.1 2.3.6.6.9 1.4.9 2.3 0 3.3-2 4-4 4.2.3.3.5.7.5 1.2v1.7c0 .2.2.5.6.4a9.4 9.4 0 0 0 5.9-8.7A9.4 9.4 0 0 0 12 2.6Z"/></svg>
         </span>
@@ -491,7 +493,7 @@ onBeforeUnmount(() => {
     </div>
 
     <CommentsPanel
-      v-if="showComments"
+      v-if="showComments && isSegmentVideo"
       :segment-id="item.video_segment_id"
       :user-id="userId"
       :highlight-comment-id="highlightCommentId"

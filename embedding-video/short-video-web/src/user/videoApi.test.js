@@ -65,12 +65,14 @@ describe('normalizeUserVideo', () => {
     })
     expect(v).toEqual({
       id: 5,
+      author_id: 0,
       title: '  测试  ',
       description: 'desc',
       cover_url: '/cover.jpg',
       duration: 120,
       status: 3,
       view_count: 10,
+      play_url: '',
       create_time: '2026-01-01T00:00:00Z',
     })
   })

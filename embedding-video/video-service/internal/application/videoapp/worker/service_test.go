@@ -322,52 +322,6 @@ func (r *recordingRepo) UpdateStatusByID(_ context.Context, _ uint64, status dom
 }
 func (r *recordingRepo) UpdateCoverByID(context.Context, uint64, string) (bool, error) { return true, nil }
 
-func TestRunOnceMarksFailedWhenDurationExceedsLimit(t *testing.T) {
-	queue := &fakeQueue{
-		msg: QueueMessage{
-			MessageID: "dur-0",
-			Task: Task{
-				VideoID:         99,
-				RawKey:          "raw/long.mp4",
-				HLSObjectPrefix: "hls/99",
-				TaskID:          "task-99",
-				HLSURL:          "/videos/hls/99/master.m3u8",
-			},
-		},
-	}
-	statusStore := &recordingStatusStore{}
-	repo := &recordingRepo{}
-	svc := newTestService(queue)
-	svc.StatusStore = statusStore
-	svc.Repo = repo
-	svc.Transcoder = fakeTranscoder{durationSec: 200} // > 180
-
-	if err := svc.RunOnce(context.Background()); err != nil {
-		t.Fatalf("RunOnce returned error: %v", err)
-	}
-
-	// Should be acked (not retried / dead-lettered)
-	if len(queue.acked) != 1 || queue.acked[0] != "dur-0" {
-		t.Fatalf("acked = %#v, want [dur-0]", queue.acked)
-	}
-	if len(queue.requeued) > 0 {
-		t.Fatalf("requeued = %#v, want empty", queue.requeued)
-	}
-	// Last status should be Failed
-	foundFailed := false
-	for _, s := range repo.statuses {
-		if s == domainvideo.StatusFailed {
-			foundFailed = true
-		}
-	}
-	if !foundFailed {
-		t.Fatalf("repo statuses = %#v, want StatusFailed", repo.statuses)
-	}
-	if len(repo.errMsgs) == 0 || !strings.Contains(repo.errMsgs[len(repo.errMsgs)-1], "exceeds") {
-		t.Fatalf("last errMsg = %q, want contains 'exceeds'", repo.errMsgs)
-	}
-}
-
 func TestRunOnceContinuesWhenDurationWithinLimit(t *testing.T) {
 	queue := &fakeQueue{
 		msg: QueueMessage{

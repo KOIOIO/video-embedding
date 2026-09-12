@@ -6,9 +6,10 @@ import FollowButton from './FollowButton.vue'
 
 const props = defineProps({
   userId: { type: Number, required: true },
+  initialTab: { type: String, default: 'works' },
 })
 
-const emit = defineEmits(['back', 'edit', 'publish', 'show-list', 'navigate'])
+const emit = defineEmits(['back', 'edit', 'publish', 'show-list', 'navigate', 'tab-change'])
 
 const profile = ref(null)
 const loading = ref(true)
@@ -17,9 +18,7 @@ const avatarFailed = ref(false)
 const relation = ref('none')
 const visitReported = ref(false)
 const todayVisits = ref({ unique_visitors: 0, total_visits: 0 })
-const activeTab = ref('works') // 'works' | 'liked'
-
-const works = ref([])
+const activeTab = ref('works') // 'works' | 'liked'const works = ref([])
 const worksTotal = ref(0)
 const worksPage = ref(1)
 const worksLoading = ref(false)
@@ -174,6 +173,7 @@ function onLoadMoreLiked() {
 
 function onTabChange(tab) {
   activeTab.value = tab
+  emit('tab-change', tab)
   if (tab === 'liked' && likedVideos.value.length === 0 && !likedLoaded.value) {
     loadLiked(true)
   }
@@ -196,14 +196,28 @@ function onPublish() {
 }
 
 function onWorkClick(video) {
-  // 第一版简单提示，后续阶段完善播放
-  alert(`播放视频：${video.title}`)
+  const list = activeTab.value === 'liked' ? likedVideos.value : works.value
+  const startIndex = Math.max(0, list.findIndex((v) => v.id === video.id))
+  emit('navigate', {
+    view: 'profile-play',
+    userId: props.userId,
+    tabType: activeTab.value,
+    videos: list,
+    startIndex,
+    ownerName: displayName.value,
+  })
 }
 
 onMounted(() => {
+  if (props.initialTab === 'liked') {
+    activeTab.value = 'liked'
+  }
   loadProfile()
   loadRelation()
   loadWorks(true)
+  if (activeTab.value === 'liked') {
+    loadLiked(true)
+  }
   reportVisit()
   loadMyVisits()
 })
@@ -219,11 +233,14 @@ watch(() => props.userId, () => {
   likedTotal.value = 0
   likedPage.value = 1
   likedLoaded.value = false
-  activeTab.value = 'works'
+  activeTab.value = props.initialTab === 'liked' ? 'liked' : 'works'
   visitReported.value = false
   loadProfile()
   loadRelation()
   loadWorks(true)
+  if (activeTab.value === 'liked') {
+    loadLiked(true)
+  }
   reportVisit()
   loadMyVisits()
 })

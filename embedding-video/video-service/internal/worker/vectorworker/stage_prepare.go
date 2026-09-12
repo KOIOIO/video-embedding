@@ -19,7 +19,9 @@ import (
 )
 
 const vectorStageCoarseSegment = "vector.coarse.segment"
-const shortVideoSingleSegmentThresholdSec = 195
+// 短视频单段阈值：仅当视频极短（内容几乎不可能包含多个知识单元）时才整体作为单段处理，
+// 其余视频一律走 hierarchical 逻辑分段（分段长度由内容逻辑决定，不受时长上限约束）。
+const shortVideoSingleSegmentThresholdSec = 45
 
 type prepareRepository interface {
 	VideoExists(context.Context, uint64) (bool, error)

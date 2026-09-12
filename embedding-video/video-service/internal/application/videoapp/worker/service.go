@@ -79,8 +79,6 @@ type Transcoder interface {
 	ProbeDurationSeconds(ctx context.Context, inputPath string) (int, error)
 }
 
-const MaxUserPublishDurationSec = 180
-
 type ObjectStore interface {
 	PutFile(ctx context.Context, objectKey string, filePath string, contentType string) error
 }
@@ -205,20 +203,7 @@ func (s Service) runTask(taskCtx context.Context, msg QueueMessage) error {
 		return s.handleTaskFailure(taskCtx, msg, start, "download", err)
 	}
 
-	// 用户发布视频时长校验：>180s 标记失败，不继续转码
-	if durationSec, probeErr := s.Transcoder.ProbeDurationSeconds(taskCtx, localInput); probeErr == nil && durationSec > MaxUserPublishDurationSec {
-		errMsg := fmt.Sprintf("video duration %ds exceeds %ds limit", durationSec, MaxUserPublishDurationSec)
-		_ = s.StatusStore.Set(taskCtx, task.TaskID, domainvideo.StatusFailed, task.HLSURL, s.StatusTTL)
-		_ = s.Repo.UpdateStatusByID(taskCtx, task.VideoID, domainvideo.StatusFailed, errMsg)
-		zap.L().Warn("user_publish_duration_exceeded",
-			zap.Uint64("video_id", task.VideoID),
-			zap.Int("duration_sec", durationSec))
-		_ = s.FS.RemoveAll(localOutputDir)
-		_ = s.FS.Remove(localInput)
-		_ = s.Queue.Ack(taskCtx, msg.MessageID)
-		return nil
-	}
-
+	// 用户发布视频时长限制已解除（解禁上传时长），任意时长视频直接进入 HLS 转码
 	if err := s.Transcoder.ConvertToHLS(taskCtx, localInput, localOutputDir); err != nil {
 		_ = s.FS.RemoveAll(localOutputDir)
 		_ = s.FS.Remove(localInput)

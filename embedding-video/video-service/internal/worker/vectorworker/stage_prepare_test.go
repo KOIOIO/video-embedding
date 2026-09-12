@@ -68,7 +68,7 @@ func TestPrepareStageShortVideoSkipsCoarseAndEnqueuesRefine(t *testing.T) {
 	repo := &prepareRepo{foundVideo: true}
 	coarseQueue := &recordingStageQueue{}
 	refineQueue := &recordingStageQueue{}
-	handler := newPrepareStageHandlerWithRefine(repo, prepareProbe{duration: 194}, coarseQueue, refineQueue, 40)
+	handler := newPrepareStageHandlerWithRefine(repo, prepareProbe{duration: 44}, coarseQueue, refineQueue, 40)
 
 	err := handler.Handle(context.Background(), VectorStageTask{
 		TaskID:  "task-short",
@@ -88,8 +88,8 @@ func TestPrepareStageShortVideoSkipsCoarseAndEnqueuesRefine(t *testing.T) {
 	if len(refineQueue.enqueued) != 1 || refineQueue.enqueued[0].Stage != VectorStageRefine {
 		t.Fatalf("refine task not enqueued: %+v", refineQueue.enqueued)
 	}
-	if refineQueue.enqueued[0].EndSec != 194 {
-		t.Fatalf("refine EndSec = %d, want 194", refineQueue.enqueued[0].EndSec)
+	if refineQueue.enqueued[0].EndSec != 44 {
+		t.Fatalf("refine EndSec = %d, want 44", refineQueue.enqueued[0].EndSec)
 	}
 	if len(repo.complete) != 1 || repo.complete[0].Stage != VectorStagePrepare {
 		t.Fatalf("prepare not complete: %+v", repo.complete)

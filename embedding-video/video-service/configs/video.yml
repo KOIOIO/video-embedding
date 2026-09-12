@@ -131,7 +131,7 @@ VectorWorker:
   Mode: "hierarchical"
   CoarseSegmentSec: 40          # 拉大粗切基础分片，减少硬性切分点
   RefineMinSegmentSec: 12
-  RefineMaxSegmentSec: 90       # 放宽上限，允许连贯内容更长
+  RefineMaxSegmentSec: 0        # 已解除分段最大时长限制：0 表示不约束，分段完全由 LLM 按内容逻辑切分
   LLMModel: "qwen3.8-max"
   LLMTimeoutMinutes: 5
   TailAlignmentConfigured: true

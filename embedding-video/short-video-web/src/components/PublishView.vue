@@ -188,7 +188,7 @@ onBeforeUnmount(() => {
           <input ref="fileInput" type="file" accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,.mp4,.mov,.avi,.webm" class="hidden-input" @change="onFileSelected" />
         </div>
         <p v-if="durationExceeded" class="duration-warning">
-          视频时长不能超过3分钟（{{ MAX_DURATION_SECONDS }}秒），当前 {{ durationLabel }}
+          视频时长超出上传限制，当前 {{ durationLabel }}
         </p>
       </div>
 
