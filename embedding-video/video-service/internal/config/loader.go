@@ -89,11 +89,6 @@ func loadDotEnv() {
 	if path, err := findUpward(".env", 6); err == nil {
 		loadEnvFile(path)
 	}
-	// 兼容 .env.local：vite 前端常用该文件存放本地密钥，Go 工具链默认不读取，
-	// 若不显式加载会导致 ASR/Embedding/LLM 使用环境变量或 yaml 中的旧 key。
-	if path, err := findUpward(".env.local", 6); err == nil {
-		loadEnvFile(path)
-	}
 	envFile := firstEnv("VIDEO_APP_ENV_FILE")
 	if envFile == "" {
 		return
