@@ -133,7 +133,7 @@ VectorWorker:
   RefineMinSegmentSec: 12
   RefineMaxSegmentSec: 0        # 已解除分段最大时长限制：0 表示不约束，分段完全由 LLM 按内容逻辑切分
   LLMModel: "qwen3.8-max"
-  LLMTimeoutMinutes: 5
+  LLMTimeoutMinutes: 15
   TailAlignmentConfigured: true
   TailAlignmentEnabled: true
   TailAlignmentMaxExtendSec: 6  # 结尾顺延6秒收全语句
