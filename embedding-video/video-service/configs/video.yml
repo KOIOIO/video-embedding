@@ -190,7 +190,7 @@ asr:
       - fun-asr-realtime-2025-11-07
       - fun-asr-realtime-2025-09-15
   base-url: "https://ws-5bxrmz94j154q2n2.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-  ws-url: "wss://ws-5bxrmz94j154q2n2.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference/"
+  ws-url: "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
   api-key: ""
 
 embedding:
