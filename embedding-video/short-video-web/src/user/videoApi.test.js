@@ -66,6 +66,7 @@ describe('normalizeUserVideo', () => {
     expect(v).toEqual({
       id: 5,
       author_id: 0,
+      author_avatar_url: '',
       title: '  测试  ',
       description: 'desc',
       cover_url: '/cover.jpg',

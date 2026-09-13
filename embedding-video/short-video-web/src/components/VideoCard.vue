@@ -49,11 +49,58 @@ const authorAvatarText = computed(() => {
 
 const isHlsSrc = computed(() => String(props.item.play_url || '').toLowerCase().includes('.m3u8'))
 const isSegmentVideo = computed(() => Number(props.item.video_segment_id || 0) > 0)
-const segmentMode = computed(() => {
-  const start = Number(props.item.start_time_sec || 0)
-  const end = Number(props.item.end_time_sec || 0)
-  return end > start
-})
+const videoId = computed(() => Number(props.item.video_id || props.item.id || 0))
+
+// 分段标记：加载该视频向量化后的全部分段（起止时间 + 内容总结）
+const segments = ref([])
+const videoDuration = ref(0)
+const currentTime = ref(0)
+const activeSegment = computed(
+  () =>
+    segments.value.find(
+      (seg) => currentTime.value >= seg.start_sec && currentTime.value < seg.end_sec,
+    ) || null,
+)
+
+function fmtSec(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0))
+  const m = Math.floor(s / 60)
+  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+function segLeft(seg) {
+  const d = videoDuration.value || 1
+  return Math.min(100, Math.max(0, (seg.start_sec / d) * 100))
+}
+
+async function loadSegments() {
+  if (!videoId.value) return
+  try {
+    const payload = await fetch(`/api/videos/${videoId.value}/segments`).then((r) => r.json())
+    const list = payload?.data?.segments || []
+    segments.value = list
+      .filter((s) => Number(s.end_sec) > Number(s.start_sec))
+      .map((s) => ({
+        segment_id: Number(s.segment_id || 0),
+        index: Number(s.index || 0),
+        start_sec: Number(s.start_sec || 0),
+        end_sec: Number(s.end_sec || 0),
+        summary: String(s.summary || '').trim(),
+      }))
+  } catch {
+    segments.value = []
+  }
+}
+
+function seekToSegment(seg) {
+  const video = videoEl.value
+  if (!video || !seg) return
+  try {
+    video.currentTime = seg.start_sec
+    void tryPlay()
+  } catch {
+  }
+}
 
 let hls = null
 let burstTimer = null
@@ -69,16 +116,9 @@ function emitEnded() {
 function onTimeUpdate() {
   const video = videoEl.value
   if (!video || !video.duration) return
-  if (segmentMode.value) {
-    const start = Number(props.item.start_time_sec || 0)
-    const end = Number(props.item.end_time_sec || 0)
-    progress.value = Math.min(1, Math.max(0, (video.currentTime - start) / (end - start)))
-    if (video.currentTime >= end) {
-      video.pause()
-      emitEnded()
-    }
-    return
-  }
+  videoDuration.value = video.duration
+  currentTime.value = video.currentTime
+  // 完整播放：进度条按整片视频计算
   progress.value = Math.min(1, Math.max(0, video.currentTime / video.duration))
 }
 
@@ -113,9 +153,12 @@ function setupPlayer() {
   const src = props.item.play_url
 
   video.onloadedmetadata = () => {
-    if (segmentMode.value) {
+    videoDuration.value = video.duration
+    // 推荐片段入口：从片段起点开始播放，但视频为完整播放，可自由拖动
+    const start = Number(props.item.start_time_sec || 0)
+    if (start > 0 && start < video.duration) {
       try {
-        video.currentTime = Number(props.item.start_time_sec || 0)
+        video.currentTime = start
       } catch {
       }
     }
@@ -130,7 +173,7 @@ function setupPlayer() {
     playing.value = false
   }
   video.onended = () => {
-    if (!segmentMode.value) emitEnded()
+    emitEnded()
   }
   video.onerror = () => {
     errorText.value = '视频加载失败'
@@ -354,10 +397,14 @@ onMounted(() => {
   loadReactionCounts()
   loadCommentCount()
   loadAuthorRelation()
+  loadSegments()
   if (props.active) setupPlayer()
   if (props.highlightCommentId > 0) {
     setTimeout(() => openComments(), 300)
   }
+})
+watch(() => videoId.value, () => {
+  loadSegments()
 })
 onBeforeUnmount(() => {
   destroyPlayer()
@@ -414,7 +461,14 @@ onBeforeUnmount(() => {
       <!-- 作者头像 -->
       <div v-if="authorId" class="rail-author">
         <button class="author-avatar-btn" type="button" @click.stop="onAuthorClick">
-          <div class="author-avatar">{{ authorAvatarText }}</div>
+          <img
+            v-if="props.item.author_avatar_url"
+            :src="props.item.author_avatar_url"
+            :alt="`用户${authorId}`"
+            class="author-avatar-img"
+            @error="$event.target.style.display = 'none'"
+          />
+          <div v-else class="author-avatar">{{ authorAvatarText }}</div>
         </button>
         <button
           v-if="!isOwnVideo"
@@ -490,6 +544,25 @@ onBeforeUnmount(() => {
 
     <div class="progress-track">
       <div class="progress-fill" :style="{ width: `${progress * 100}%` }"></div>
+      <button
+        v-for="seg in segments"
+        :key="seg.segment_id"
+        class="segment-mark"
+        :class="{ active: activeSegment && activeSegment.segment_id === seg.segment_id }"
+        :style="{ left: `${segLeft(seg)}%` }"
+        type="button"
+        :aria-label="`跳转到 ${fmtSec(seg.start_sec)}：${seg.summary}`"
+        @click.stop="seekToSegment(seg)"
+      ></button>
+    </div>
+
+    <div
+      v-if="activeSegment"
+      class="segment-summary"
+      @click.stop="seekToSegment(activeSegment)"
+    >
+      <span class="segment-time">{{ fmtSec(activeSegment.start_sec) }} - {{ fmtSec(activeSegment.end_sec) }}</span>
+      <span class="segment-text">{{ activeSegment.summary || '本段暂无总结' }}</span>
     </div>
 
     <CommentsPanel
@@ -726,6 +799,63 @@ onBeforeUnmount(() => {
   transition: width 0.2s linear;
 }
 
+/* 进度条分段标记（抖音式） */
+.segment-mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateX(-1.5px);
+  cursor: pointer;
+  transition: width 0.15s, background 0.15s, top 0.15s, bottom 0.15s;
+}
+
+.segment-mark.active {
+  width: 6px;
+  top: -6px;
+  bottom: -6px;
+  background: #25f4ee;
+  transform: translateX(-3px);
+  box-shadow: 0 0 6px rgba(37, 244, 238, 0.8);
+}
+
+.segment-summary {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 12px;
+  line-height: 1.4;
+  color: #fff;
+  cursor: pointer;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.segment-time {
+  color: #25f4ee;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.segment-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 作者头像 */
 .rail-author {
   display: flex;
@@ -756,6 +886,15 @@ onBeforeUnmount(() => {
   font-size: 18px;
   font-weight: 700;
   color: #fff;
+}
+
+.author-avatar-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  object-fit: cover;
+  display: block;
 }
 
 .author-follow-btn {

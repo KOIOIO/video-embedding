@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -53,7 +54,14 @@ func dashscopeWSRecognizeWav(ctx context.Context, wsURL string, apiKey string, m
 	header := http.Header{}
 	header.Set("Authorization", "bearer "+apiKey)
 
-	dialer := websocket.DefaultDialer
+	// 强制 IPv4：本机 IPv6 到阿里云 ASR 网关的链路不稳定（持续 broken pipe），
+	// IPv4 连接与传输均正常。
+	dialer := &websocket.Dialer{
+		Proxy: http.ProxyFromEnvironment,
+		NetDial: func(network, addr string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 15 * time.Second}).DialContext(ctx, "tcp4", addr)
+		},
+	}
 	conn, _, err := dialer.DialContext(ctx, wsURL, header)
 	if err != nil {
 		zap.L().Error("vectorize_asr_ws_dial_failed",

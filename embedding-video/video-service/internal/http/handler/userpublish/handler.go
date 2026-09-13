@@ -64,16 +64,17 @@ type videoStatusResponse struct {
 }
 
 type userVideoItem struct {
-	ID          uint64 `json:"id"`
-	UserID      uint64 `json:"author_id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	CoverURL    string `json:"cover_url"`
-	Duration    int    `json:"duration"`
-	Status      int16  `json:"status"`
-	ViewCount   int    `json:"view_count"`
-	PlayURL     string `json:"play_url"`
-	CreateTime  string `json:"create_time"`
+	ID              uint64 `json:"id"`
+	UserID          uint64 `json:"author_id"`
+	AuthorAvatarURL string `json:"author_avatar_url"`
+	Title           string `json:"title"`
+	Description     string `json:"description"`
+	CoverURL        string `json:"cover_url"`
+	Duration        int    `json:"duration"`
+	Status          int16  `json:"status"`
+	ViewCount       int    `json:"view_count"`
+	PlayURL         string `json:"play_url"`
+	CreateTime      string `json:"create_time"`
 }
 
 type listUserVideosResponse struct {
@@ -196,18 +197,20 @@ func (h *Handler) ListUserVideos(c *gin.Context) {
 	}
 
 	list := make([]userVideoItem, 0, len(videos))
+	avatarMap, _ := h.service.ListAvatarURLs(c.Request.Context(), collectUserIDs(videos))
 	for _, v := range videos {
 		list = append(list, userVideoItem{
-			ID:          v.ID,
-			UserID:      v.UserID,
-			Title:       v.Title,
-			Description: v.Description,
-			CoverURL:    v.CoverURL,
-			Duration:    v.Duration,
-			Status:      v.Status,
-			ViewCount:   v.ViewCount,
-			PlayURL:     h.publishedPlayURL(v),
-			CreateTime:  v.CreateTime.Format(time.RFC3339),
+			ID:              v.ID,
+			UserID:          v.UserID,
+			AuthorAvatarURL: avatarMap[v.UserID],
+			Title:           v.Title,
+			Description:     v.Description,
+			CoverURL:        v.CoverURL,
+			Duration:        v.Duration,
+			Status:          v.Status,
+			ViewCount:       v.ViewCount,
+			PlayURL:         h.publishedPlayURL(v),
+			CreateTime:      v.CreateTime.Format(time.RFC3339),
 		})
 	}
 
@@ -236,18 +239,20 @@ func (h *Handler) ListLikedVideos(c *gin.Context) {
 	}
 
 	list := make([]userVideoItem, 0, len(videos))
+	avatarMap, _ := h.service.ListAvatarURLs(c.Request.Context(), collectUserIDs(videos))
 	for _, v := range videos {
 		list = append(list, userVideoItem{
-			ID:          v.ID,
-			UserID:      v.UserID,
-			Title:       v.Title,
-			Description: v.Description,
-			CoverURL:    v.CoverURL,
-			Duration:    v.Duration,
-			Status:      v.Status,
-			ViewCount:   v.ViewCount,
-			PlayURL:     h.publishedPlayURL(v),
-			CreateTime:  v.CreateTime.Format(time.RFC3339),
+			ID:              v.ID,
+			UserID:          v.UserID,
+			AuthorAvatarURL: avatarMap[v.UserID],
+			Title:           v.Title,
+			Description:     v.Description,
+			CoverURL:        v.CoverURL,
+			Duration:        v.Duration,
+			Status:          v.Status,
+			ViewCount:       v.ViewCount,
+			PlayURL:         h.publishedPlayURL(v),
+			CreateTime:      v.CreateTime.Format(time.RFC3339),
 		})
 	}
 
@@ -257,6 +262,23 @@ func (h *Handler) ListLikedVideos(c *gin.Context) {
 		Page:     page,
 		PageSize: pageSize,
 	})
+}
+
+// collectUserIDs 收集视频作者 ID 并去重。
+func collectUserIDs(videos []model.EduVideoResource) []uint64 {
+	seen := make(map[uint64]struct{}, len(videos))
+	ids := make([]uint64, 0, len(videos))
+	for _, v := range videos {
+		if v.UserID == 0 {
+			continue
+		}
+		if _, ok := seen[v.UserID]; ok {
+			continue
+		}
+		seen[v.UserID] = struct{}{}
+		ids = append(ids, v.UserID)
+	}
+	return ids
 }
 
 // publishedPlayURL 仅当视频已发布（转码完成）时返回可播放地址：

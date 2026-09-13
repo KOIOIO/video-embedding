@@ -25,6 +25,7 @@ type Repository interface {
 	ListByUserID(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error)
 	ListLikedVideos(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error)
 	UpdateStatus(ctx context.Context, id uint64, status int16, errMsg string) error
+	GetAvatarURLs(ctx context.Context, userIDs []uint64) (map[uint64]string, error)
 }
 
 // TranscodeQueue 抽象转码任务投递能力。
@@ -149,4 +150,12 @@ func (s *Service) ListLikedVideos(ctx context.Context, userID uint64, page, page
 		pageSize = 12
 	}
 	return s.Repo.ListLikedVideos(ctx, userID, page, pageSize)
+}
+
+// ListAvatarURLs 批量查询用户头像地址。
+func (s *Service) ListAvatarURLs(ctx context.Context, userIDs []uint64) (map[uint64]string, error) {
+	if len(userIDs) == 0 {
+		return map[uint64]string{}, nil
+	}
+	return s.Repo.GetAvatarURLs(ctx, userIDs)
 }

@@ -237,3 +237,16 @@ func (h *VideoHandler) ExternalRecBoleRecommendations(c *gin.Context) {
 func (h *VideoHandler) GetTranscodeStatus(c *gin.Context) {
 	h.inner.GetTranscodeStatus(c)
 }
+
+// ListVideoSegments godoc
+// @Summary 查询视频的分段标记列表（用于播放进度条）
+// @Tags 视频片段
+// @Produce json
+// @Param id path int true "视频ID"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/videos/{id}/segments [get]
+func (h *VideoHandler) ListVideoSegments(c *gin.Context) {
+	h.inner.ListVideoSegments(c)
+}

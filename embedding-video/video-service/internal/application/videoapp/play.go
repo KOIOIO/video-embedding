@@ -2,6 +2,9 @@ package videoapp
 
 import (
 	"context"
+	"errors"
+
+	"video-service/internal/model"
 
 	playbackapp "video-service/internal/application/videoapp/playback"
 	domainvideo "video-service/internal/domain/video"
@@ -29,6 +32,20 @@ func (s *Service) GetTranscodeStatus(ctx context.Context, taskID string) (Transc
 		return TranscodeStatus{}, ok, err
 	}
 	return TranscodeStatus{Status: status.Status, HLSURL: status.HLSURL}, true, nil
+}
+
+// SegmentListRepository 提供按视频查询全部分段的能力（可选能力）。
+type SegmentListRepository interface {
+	ListSegmentsByVideoID(ctx context.Context, videoID uint64) ([]model.EduVideoSegment, error)
+}
+
+// ListSegmentsByVideo 返回指定视频的全部分段（按开始时间升序），用于播放进度条标记。
+func (s *Service) ListSegmentsByVideo(ctx context.Context, videoID uint64) ([]model.EduVideoSegment, error) {
+	repo, ok := s.Repo.(SegmentListRepository)
+	if !ok {
+		return nil, errors.New("segment list is not supported by repository")
+	}
+	return repo.ListSegmentsByVideoID(ctx, videoID)
 }
 
 func newPlaybackService(s *Service) playbackapp.Service {

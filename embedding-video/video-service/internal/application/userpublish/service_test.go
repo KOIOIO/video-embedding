@@ -21,6 +21,11 @@ type mockRepo struct {
 	listTotal   int64
 }
 
+// GetAvatarURLs mock 实现：直接返回空头像映射。
+func (m *mockRepo) GetAvatarURLs(_ context.Context, userIDs []uint64) (map[uint64]string, error) {
+	return make(map[uint64]string, len(userIDs)), nil
+}
+
 func newMockRepo() *mockRepo {
 	return &mockRepo{
 		videos: make(map[uint64]*model.EduVideoResource),

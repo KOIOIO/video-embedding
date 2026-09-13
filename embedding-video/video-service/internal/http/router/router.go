@@ -129,6 +129,7 @@ func New(httpApp *app.App) *gin.Engine {
 	r.GET("/api/videos/:id/reaction-counts", videoHandler.GetVideoReactionCounts)
 	r.GET("/api/video-segment/random-play", videoHandler.RandomPlayVideoSegment)
 	r.GET("/api/video-segments/random-play", videoHandler.RandomPlayVideoSegment)
+	r.GET("/api/videos/:id/segments", videoHandler.ListVideoSegments)
 	r.GET("/api/internal/recommendations/external/recbole", videoHandler.ExternalRecBoleRecommendations)
 	r.POST("/api/video-segments/:id/reactions", videoHandler.SubmitSegmentReaction)
 	r.GET("/api/video-segments/:id/reaction-counts", videoHandler.GetSegmentReactionCounts)

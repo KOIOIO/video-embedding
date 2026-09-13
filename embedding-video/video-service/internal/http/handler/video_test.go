@@ -17,6 +17,7 @@ import (
 	"video-service/internal/application/videoapp"
 	domainvideo "video-service/internal/domain/video"
 	"video-service/internal/http/handler"
+	"video-service/internal/model"
 )
 
 func init() {
@@ -217,6 +218,10 @@ func (s *stubVideoApp) ExternalRecBoleItemIDs(ctx context.Context, input videoap
 	if s.externalRecBoleFunc != nil {
 		return s.externalRecBoleFunc(ctx, input)
 	}
+	return nil, nil
+}
+
+func (s *stubVideoApp) ListSegmentsByVideo(ctx context.Context, videoID uint64) ([]model.EduVideoSegment, error) {
 	return nil, nil
 }
 

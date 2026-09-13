@@ -37,6 +37,7 @@ export function normalizeUserVideo(data) {
   return {
     id: Number(data?.id || 0) || 0,
     author_id: Number(data?.author_id || data?.user_id || 0) || 0,
+    author_avatar_url: String(data?.author_avatar_url || ''),
     title: String(data?.title || ''),
     description: String(data?.description || ''),
     cover_url: String(data?.cover_url || ''),

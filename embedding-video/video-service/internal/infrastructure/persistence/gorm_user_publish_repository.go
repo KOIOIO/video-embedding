@@ -36,6 +36,29 @@ func (r *GormUserPublishRepository) GetByID(ctx context.Context, id uint64) (*mo
 	return &m, nil
 }
 
+// GetAvatarURLs 批量查询指定用户的头像地址。
+func (r *GormUserPublishRepository) GetAvatarURLs(ctx context.Context, userIDs []uint64) (map[uint64]string, error) {
+	result := make(map[uint64]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	rows := make([]struct {
+		UserID    uint64 `gorm:"column:user_id"`
+		AvatarURL string `gorm:"column:avatar_url"`
+	}, 0, len(userIDs))
+	if err := r.db.WithContext(ctx).
+		Table("edu_user_profile").
+		Select("user_id, avatar_url").
+		Where("user_id IN ? AND COALESCE(deleted, 0) = 0", userIDs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.UserID] = row.AvatarURL
+	}
+	return result, nil
+}
+
 // ListByUserID 按用户ID分页查询已发布的用户作品，按创建时间倒序。
 func (r *GormUserPublishRepository) ListByUserID(ctx context.Context, userID uint64, page, pageSize int) ([]model.EduVideoResource, int64, error) {
 	var total int64

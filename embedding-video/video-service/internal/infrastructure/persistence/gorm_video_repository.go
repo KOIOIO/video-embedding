@@ -812,6 +812,16 @@ func (r *GormVideoRepository) GetSegmentReactionCounts(ctx context.Context, segm
 	}, true, nil
 }
 
+// ListSegmentsByVideoID 返回指定视频的全部分段，按开始时间升序。
+func (r *GormVideoRepository) ListSegmentsByVideoID(ctx context.Context, videoID uint64) ([]model.EduVideoSegment, error) {
+	var list []model.EduVideoSegment
+	err := r.db.WithContext(ctx).
+		Where("video_id = ? AND deleted = 0", videoID).
+		Order("start_time ASC, id ASC").
+		Find(&list).Error
+	return list, err
+}
+
 // GetSegmentEmbeddingDim 查询当前片段向量的维度。
 func (r *GormVideoRepository) GetSegmentEmbeddingDim(ctx context.Context) (int, error) {
 	var d int

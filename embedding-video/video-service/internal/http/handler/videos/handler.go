@@ -13,6 +13,7 @@ import (
 	domainvideo "video-service/internal/domain/video"
 	"video-service/internal/http/dto"
 	httperrors "video-service/internal/http/errors"
+	"video-service/internal/model"
 )
 
 type Handler struct {
@@ -35,6 +36,7 @@ type videoApp interface {
 	GetSegmentReactionCounts(ctx context.Context, segmentID uint64) (videoapp.VideoReactionCounts, bool, error)
 	RandomPlayVideoSegment(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) (videoapp.RecommendResultItem, bool, error)
 	ExternalRecBoleItemIDs(ctx context.Context, input videoapp.RandomPlayVideoSegmentInput) ([]uint64, error)
+	ListSegmentsByVideo(ctx context.Context, videoID uint64) ([]model.EduVideoSegment, error)
 	GetTranscodeStatus(ctx context.Context, taskID string) (videoapp.TranscodeStatus, bool, error)
 }
 
@@ -426,6 +428,44 @@ func (h *Handler) ExternalRecBoleRecommendations(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, formatExternalItemIDs(ids))
+}
+
+// videoSegmentItem 播放进度条分段标记的数据结构。
+type videoSegmentItem struct {
+	SegmentID  uint64 `json:"segment_id"`
+	Index      int    `json:"index"`
+	StartSec   int    `json:"start_sec"`
+	EndSec     int    `json:"end_sec"`
+	Summary    string `json:"summary"`
+	LikeCount  int    `json:"like_count"`
+	DislikeCnt int    `json:"dislike_count"`
+}
+
+// ListVideoSegments 返回指定视频的全部分段（按开始时间升序），供前端进度条打标记。
+func (h *Handler) ListVideoSegments(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		httperrors.Write(c, httperrors.InvalidArgument("invalid video id"))
+		return
+	}
+	segments, err := h.app.ListSegmentsByVideo(c.Request.Context(), id)
+	if err != nil {
+		writeAppError(c, err, "list video segments failed")
+		return
+	}
+	items := make([]videoSegmentItem, 0, len(segments))
+	for _, s := range segments {
+		items = append(items, videoSegmentItem{
+			SegmentID:  s.ID,
+			Index:      s.SegmentIndex,
+			StartSec:   s.StartTimeSec,
+			EndSec:     s.EndTimeSec,
+			Summary:    strings.TrimSpace(s.ContentSummary),
+			LikeCount:  s.LikeCount,
+			DislikeCnt: s.DislikeCount,
+		})
+	}
+	writeSuccess(c, gin.H{"video_id": id, "segments": items})
 }
 
 func (h *Handler) GetTranscodeStatus(c *gin.Context) {
