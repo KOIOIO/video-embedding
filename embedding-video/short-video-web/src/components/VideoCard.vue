@@ -788,46 +788,49 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.22);
+  bottom: calc(56px + env(safe-area-inset-bottom));
+  height: 5px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
 }
 
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #25f4ee, #fe2c55);
+  border-radius: 3px;
   transition: width 0.2s linear;
 }
 
 /* 进度条分段标记（抖音式） */
 .segment-mark {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 3px;
+  top: -5px;
+  bottom: -5px;
+  width: 4px;
   padding: 0;
   border: none;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.8);
-  transform: translateX(-1.5px);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.55);
+  transform: translateX(-2px);
   cursor: pointer;
-  transition: width 0.15s, background 0.15s, top 0.15s, bottom 0.15s;
+  transition: width 0.15s, background 0.15s, top 0.15s, bottom 0.15s, box-shadow 0.15s;
 }
 
 .segment-mark.active {
-  width: 6px;
-  top: -6px;
-  bottom: -6px;
+  width: 7px;
+  top: -8px;
+  bottom: -8px;
   background: #25f4ee;
-  transform: translateX(-3px);
-  box-shadow: 0 0 6px rgba(37, 244, 238, 0.8);
+  transform: translateX(-3.5px);
+  box-shadow: 0 0 8px rgba(37, 244, 238, 0.9);
 }
 
 .segment-summary {
   position: absolute;
   left: 12px;
   right: 12px;
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: calc(74px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 8px;
