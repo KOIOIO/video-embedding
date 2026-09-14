@@ -2,6 +2,8 @@
 
 This project exports RecBole atomic files from `video-service`, trains a RecBole embedding model, gates offline metrics, imports embeddings into PostgreSQL schema `recsys`, and publishes an active model version.
 
+Training interaction data includes not only exposure / watch / reaction signals but also social behaviors (follow, like, comment, publish), so the learned embeddings reflect the user's social graph and content preferences. See `ALGORITHM_HANDOFF.md` for the full feature/behavior contract.
+
 Default pipeline (run from this directory):
 
 ```bash

@@ -1,60 +1,77 @@
-# video-embedding
+# video-embedding（hengshui-tablet-video-rpc）
 
-视频向量化与推荐服务仓库，包含 Go HTTP 后端、异步转码/向量化 worker、Vue 调试前端、Gorse 推荐引擎配置和双塔推荐离线训练代码。
+短视频推荐与社交平台仓库：Go HTTP 后端 + 异步转码/向量化 worker + 抖音风格 Vue 客户端 + 联调控制台 + RecBole 推荐离线训练。
 
-这个仓库不是单一可运行应用。当前主工程在 [`embedding-video/video-service/`](embedding-video/video-service/)，前端调试工程在 [`embedding-video/hls-web/`](embedding-video/hls-web/)，离线训练工程在 [`embedding-video/two-tower-training/`](embedding-video/two-tower-training/)。
+主工程统一在 [`embedding-video/`](embedding-video/) 下：
+
+- [`embedding-video/video-service/`](embedding-video/video-service/)：Go HTTP 后端（httpapi `:8081`）、统一 worker（转码 + 向量化 + RecBole 训练调度）。
+- [`embedding-video/short-video-web/`](embedding-video/short-video-web/)：抖音风格短视频客户端（`:5174`），面向最终用户的完整产品前端。
+- [`embedding-video/hls-web/`](embedding-video/hls-web/)：视频与推荐统一联调控制台（`:5173`）。
+- [`embedding-video/recbole-training/`](embedding-video/recbole-training/)：RecBole 推荐离线训练（现役推荐引擎）。
+- [`embedding-video/two-tower-training/`](embedding-video/two-tower-training/)：历史双塔训练（已归档，由 RecBole 替代）。
 
 ## 项目能做什么
 
-- 上传视频、ZIP 归档视频和大文件分片上传。
-- 使用 FFmpeg 转码为 HLS，并生成播放地址和封面。
-- 对视频内容做 ASR、分段、摘要、embedding 向量化。
-- 按题目文本召回相关视频片段。
-- 记录曝光、观看和 reaction 行为，用于推荐和训练样本。
-- 通过 Gorse 和双塔 embedding 提供个性化视频片段推荐。
-- 提供 Vue 前端用于本地上传、播放、推荐和接口联调。
+**视频内容处理**
+
+- 用户视频发布：上传 → FFmpeg 转码 HLS → 生成封面与播放地址。
+- 向量化（hierarchical 模式）：ASR 转写 → 按内容逻辑分段（LLM）→ 片段摘要 + embedding 向量 → 落库 `edu_video_segment`。
+- 播放进度条分段标记：`GET /api/videos/:id/segments` 返回每个片段的时间区间与摘要，前端在进度条上标记并可点击跳转。
+- 大文件分片断点续传、ZIP 批量导入、知识点视频 ZIP + XLSX 批量导入。
+
+**用户与社交体系**
+
+- 用户注册 / 登录（JWT）、资料与头像上传、个人主页访问统计。
+- 关注 / 取关、好友关系、用户搜索。
+- 私信会话 + 未读数 + 轮询，消息/通知红点显示总数。
+- 评论两级体系（Redis 缓冲 + worker 异步落库），点赞 / 双赞 / 踩，@提及搜索与通知跳转。
+- 点赞后主页「喜欢」列表同步显示对应视频，作品 / 喜欢列表支持 HLS 连续播放。
+
+**推荐引擎**
+
+- 社交召回通道（关注 / 点赞 / 评论 / 观看行为）+ 热门加权 + 新视频扶持 + 用户发布纳入推荐池。
+- RecBole 离线训练（BPR 等模型），社交行为纳入训练数据，发布门禁 + active model_version 管理。
+- 推荐链路具备 AI provider 异常降级与向量化异步补偿。
 
 ## 目录结构
 
 ```text
 .
-├── README.md                         # 当前入口文档
+├── README.md                    # 当前入口文档
 └── embedding-video/
-    ├── README.md                     # 仓库内部更详细的说明
-    ├── docker-compose.yml            # 本地/联调 Docker 编排
-    ├── .env.local.example            # 本地环境变量模板
-    ├── .env.deploy.example           # 部署环境变量模板
-    ├── video-service/                # Go HTTP API、worker、工具命令
-    ├── hls-web/                      # Vue 3 + Vite 调试前端
-    ├── two-tower-training/           # 双塔推荐训练流水线
-    ├── gorse/                        # Gorse 本地配置和镜像构建文件
-    ├── docs/                         # 仓库级设计文档
-    └── legacy-video/                 # 历史 Go 工程，不建议作为新入口
+    ├── README.md                # 仓库内部详细说明
+    ├── docker-compose*.yml      # 本地/联调/云/RecBole/迁移 Docker 编排
+    ├── .env.local.example       # 本地环境变量模板（私有 .env.local 不入库）
+    ├── video-service/           # Go HTTP API、统一 worker、训练调度、工具命令
+    ├── short-video-web/         # 抖音风格短视频客户端（Vue 3 + Vite, :5174）
+    ├── hls-web/                 # 视频与推荐统一联调控制台（Vue 3 + Vite, :5173）
+    ├── recbole-training/        # RecBole 推荐离线训练流水线
+    ├── two-tower-training/      # 历史双塔训练（已归档）
+    ├── gorse/                   # Gorse 可选集成配置（当前推荐引擎为 RecBole）
+    ├── docs/                    # 仓库级设计文档
+    ├── deployment/              # 服务器部署包（standalone / cloud / intranet）
+    └── legacy-video/            # 历史 Go 工程，不建议作为新入口
 ```
 
 ## 环境要求
 
-推荐先使用 Docker Compose 启动完整联调环境。
+- Docker 与 Docker Compose（推荐方式启动基础设施）
+- Go 1.26.1（本地运行后端）
+- Node.js 22 + npm（本地运行前端）
+- Python 3 + PyTorch + RecBole（仅 RecBole 训练需要）
+- 可选：`DASHSCOPE_API_KEY`（ASR / Embedding / LLM 统一使用百炼标准端点，向量化能力必需）
 
-- Docker 和 Docker Compose
-- Go 1.26.1 或兼容版本，本地直接运行后端时需要
-- Node.js 22 和 npm，本地直接运行前端时需要
-- Python 3，本地运行双塔训练时需要
-- 可选：`DASHSCOPE_API_KEY`、`OPENAI_API_KEY`、`EMBEDDING_API_KEY`、`ASR_API_KEY`，启用向量化和 AI 能力时需要
-
-## Clone 后快速启动
-
-下面方式会启动 PostgreSQL + pgvector、Redis、MinIO、Gorse、Go 后端和可选前端。
+## Clone 后快速启动（Docker Compose）
 
 ```bash
 git clone <repo-url> video-embedding
 cd video-embedding/embedding-video
 
 cp .env.local.example .env.local
-printf 'HSTV_ENV_FILE=.env.local\n' > .env
+printf 'VIDEO_APP_ENV_FILE=.env.local\n' > .env
 ```
 
-编辑 `.env.local`，至少建议确认这些值：
+编辑 `.env.local`，至少确认：
 
 ```dotenv
 VIDEO_PROJECT_ROOT=/你的绝对路径/video-embedding/embedding-video
@@ -65,149 +82,106 @@ RUSTFS_ACCESS_KEY=minioadmin
 RUSTFS_SECRET_KEY=minioadmin
 ```
 
-如果要完整跑向量化 worker，再补充 AI API Key：
+向量化能力需要补充 AI Key（百炼标准端点）：
 
 ```dotenv
 DASHSCOPE_API_KEY=
-OPENAI_API_KEY=
-EMBEDDING_API_KEY=
-ASR_API_KEY=
 ```
 
-启动基础设施和后端：
+启动基础设施与后端：
 
 ```bash
-docker compose --env-file .env.local up -d postgres redis minio gorse_master gorse_server gorse_worker backend
+docker compose --env-file .env.local up -d postgres redis minio
+docker compose --env-file .env.local up -d api worker
 ```
 
-启动调试前端：
+启动前端（可选）：
 
 ```bash
-docker compose --env-file .env.local --profile frontend up -d frontend
+docker compose --env-file .env.local up -d frontend
 ```
 
-启动后常用地址：
+常用地址：
 
 | 服务 | 地址 |
 | --- | --- |
-| 后端健康检查 | `http://localhost:8083/healthz` |
-| Swagger | `http://localhost:8083/swagger/index.html` |
-| 调试前端 | `http://localhost:1325` |
+| 后端健康检查 | `http://localhost:8081/healthz` |
+| Swagger | `http://localhost:8081/swagger/index.html` |
+| 抖音风格客户端 | `http://localhost:5174` |
+| 联调控制台 | `http://localhost:5173` |
 | MinIO Console | `http://localhost:9001` |
-| Gorse Dashboard | `http://localhost:8088` |
 
-查看日志：
+## 本地分进程启动（开发调试）
 
-```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-```
-
-停止服务：
+用 Docker 只启动依赖，本地分别运行各服务：
 
 ```bash
-docker compose --profile frontend down
+cd embedding-video
+docker compose --env-file .env.local up -d postgres redis minio
+# 本地 .env.local 中 POSTGRES_DSN 改用 host=localhost 与本机暴露端口
 ```
 
-如果要同时清理本地容器卷数据：
-
-```bash
-docker compose --profile frontend down -v
-```
-
-## 本地分进程启动
-
-如果你想用本机 Go 和 Node 调试代码，可以只用 Docker 启动依赖服务，然后分别运行后端、worker 和前端。
-
-1. 准备环境变量：
-
-```bash
-cd video-embedding/embedding-video
-cp .env.local.example .env.local
-printf 'HSTV_ENV_FILE=.env.local\n' > .env
-```
-
-确认 `.env.local` 中 `REDIS_PASSWORD=redis123`，并按需填写 AI API Key。
-
-本地 `go run` 连接的是宿主机暴露端口，所以需要把 `.env.local` 中的数据库 DSN 改成本机地址：
-
-```dotenv
-POSTGRES_DSN=host=localhost user=postgres password=postgres dbname=video_embedding port=5432 sslmode=disable TimeZone=Asia/Shanghai
-```
-
-2. 启动依赖服务：
-
-```bash
-docker compose --env-file .env.local up -d postgres redis minio gorse_master gorse_server gorse_worker
-```
-
-3. 启动 HTTP API：
+1. HTTP API：
 
 ```bash
 cd video-service
-CONFIG_FILE=configs/video.yml HTTP_ADDR=:8081 go run ./cmd/httpapi
+go run ./cmd/httpapi          # 默认 :8081，自动加载 .env -> .env.local
 ```
 
-4. 新开终端启动 worker：
+2. Worker（转码 + 向量化 + 训练调度）：
 
 ```bash
-cd video-embedding/embedding-video/video-service
-CONFIG_FILE=configs/video.yml go run ./cmd/worker
+cd video-service
+go run ./cmd/worker
 ```
 
-5. 新开终端启动前端：
+3. 抖音风格客户端：
 
 ```bash
-cd video-embedding/embedding-video/hls-web
-npm install
-npm run dev
+cd short-video-web
+npm install && npm run dev    # http://localhost:5174
 ```
 
-本地分进程启动时，前端默认访问 `http://localhost:5173`，并把 `/api`、`/videos`、`/swagger` 代理到 `http://localhost:8081`。
+4. 联调控制台：
+
+```bash
+cd hls-web
+npm install && npm run dev    # http://localhost:5173
+```
+
+两个前端的 Vite proxy 默认把 `/api`、`/videos` 等请求转发到 `http://localhost:8081`。
 
 ## 常用命令
 
-后端测试：
-
 ```bash
+# 后端测试
+cd embedding-video/video-service && go test ./...
+
+# 前端测试
+cd embedding-video/short-video-web && npm test
+cd embedding-video/hls-web && npm test
+
+# 手动跑 RecBole 训练流水线
+cd embedding-video/recbole-training
+CONFIG_FILE=../video-service/configs/video.yml ./scripts/run_recbole_pipeline.sh
+
+# 死信队列查看与重放
 cd embedding-video/video-service
-go test ./...
-```
-
-前端测试：
-
-```bash
-cd embedding-video/hls-web
-npm test
-```
-
-前端构建：
-
-```bash
-cd embedding-video/hls-web
-npm run build
-```
-
-手动启动双塔训练流水线：
-
-```bash
-cd embedding-video/two-tower-training
-CONFIG_FILE=../video-service/configs/video.yml ./scripts/run_two_tower_pipeline.sh
+go run ./cmd/dlqctl list --queue all --limit 20
 ```
 
 ## 重要文档
 
 - 项目内部总览：[`embedding-video/README.md`](embedding-video/README.md)
-- HTTP 后端说明：[`embedding-video/video-service/README.md`](embedding-video/video-service/README.md)
-- 前端说明：[`embedding-video/hls-web/README.md`](embedding-video/hls-web/README.md)
-- 双塔训练说明：[`embedding-video/two-tower-training/README.md`](embedding-video/two-tower-training/README.md)
-- Swagger YAML：[`embedding-video/video-service/docs/swagger/swagger.yaml`](embedding-video/video-service/docs/swagger/swagger.yaml)
-- Gorse 运行手册：[`embedding-video/video-service/docs/gorse-recommendation-runbook.md`](embedding-video/video-service/docs/gorse-recommendation-runbook.md)
+- Go 后端说明：[`embedding-video/video-service/README.md`](embedding-video/video-service/README.md)
+- 抖音风格客户端：[`embedding-video/short-video-web/README.md`](embedding-video/short-video-web/README.md)
+- 联调控制台：[`embedding-video/hls-web/README.md`](embedding-video/hls-web/README.md)
+- RecBole 训练：[`embedding-video/recbole-training/README.md`](embedding-video/recbole-training/README.md)
+- 服务器部署手册：[`embedding-video/deployment/DEPLOYMENT.md`](embedding-video/deployment/DEPLOYMENT.md)
 
 ## 注意事项
 
-- Go 命令需要在 `embedding-video/video-service/` 下执行，因为 `go.mod` 在这个目录。
-- Docker Compose 命令需要在 `embedding-video/` 下执行，因为 `docker-compose.yml` 在这个目录。
-- `.env` 和 `.env.local` 是本地私有文件，不要提交真实密钥。
-- 向量化 worker 没有 AI API Key 时会限制或跳过相关能力；普通健康检查、上传、基础接口仍可用于联调。
-- `legacy-video/` 是历史工程，新功能和新对接优先使用 `video-service/` 的 HTTP REST API。
+- Go 命令在 `embedding-video/video-service/` 下执行；Compose 命令在 `embedding-video/` 下执行。
+- `.env` 与 `.env.local` 是本地私有文件，禁止提交真实密钥（API Key 只放 git 忽略的本地 `.env.local`）。
+- 向量化依赖百炼标准端点（ASR WS / compatible-mode HTTP）；LLM 逻辑分段耗时较长，`LLMTimeoutMinutes` 默认 15 分钟。
+- `legacy-video/`、`two-tower-training/` 为历史工程，新功能优先使用 `video-service/` REST API 与 RecBole 训练。

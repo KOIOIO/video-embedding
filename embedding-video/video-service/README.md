@@ -6,12 +6,17 @@
 
 当前已实现的核心能力：
 
-- 视频上传
-- HLS 转码与封面处理
+- 用户注册 / 登录（JWT）、资料与头像上传、个人主页访问统计
+- 用户视频发布：上传（含分片断点续传）→ HLS 转码与封面 → 向量化
+- 关注 / 取关、用户搜索、好友关系
+- 私信会话、未读数与已读回执；消息 / 通知红点总数
+- 两级评论体系（Redis 缓冲 + worker 异步落库）、点赞 / 双赞 / 踩、@提及搜索与通知跳转
+- 点赞后主页「喜欢」列表同步；作品 / 喜欢列表 HLS 连续播放
+- 向量化（hierarchical）：ASR → 按内容逻辑分段（LLM）→ 片段摘要 + embedding，播放进度条分段标记（`GET /api/videos/:id/segments`）
 - 视频列表、播放、删除、发布、推荐状态维护
 - 基于题目的视频片段推荐
-- 基于 RecBole embedding 的个性化视频片段推荐
-- 推荐曝光、观看、reaction 行为记录与 RecBole 离线训练数据导出
+- 基于 RecBole embedding + 社交召回的个性化视频片段推荐
+- 推荐曝光、观看、reaction 行为记录与 RecBole 离线训练数据导出（含社交行为）
 - 观看记录上报
 - 题库查询
 - 对象存储中的视频资源代理访问
@@ -141,6 +146,7 @@ flowchart TD
 - `cmd/worker` 是当前默认的 worker 启动入口，用于消费通用视频转码、向量化和知识点视频转码任务队列。
 - 视频文件与 HLS 产物存放在对象存储中，通过 `Storage.MediaRoutePrefix` 配置的路由代理访问，默认兼容 `/videos/*filepath`。
 - `/api/video-segments/random-play` 是当前个性化推荐的主要展现入口；当前两份示例配置均使用 `Recommendation.Engine=recbole`，从 `recsys` 的 active RecBole embedding 做召回。设为 `gorse` 时可改由 Gorse 提供候选，Go 服务仍负责 Redis random-play bucket、可播放过滤、曝光记录和最终兜底。
+- 推荐候选池已纳入社交召回：关注 / 点赞 / 评论 / 观看等社交行为参与用户画像向量与 RecBole 训练数据，热门加权 + 新视频扶持 + 用户发布内容纳入推荐池，冷启动视频获得曝光机会。
 - `/api/recommendations/by-question` 面向题目文本匹配，主要基于题目文本向量与视频片段向量做召回，不依赖 RecBole 用户向量。
 - `recbole_trainer` 是独立训练调度进程，线上主服务容器默认不执行 Python 训练。
 - 推荐链路在外部 AI provider 不可用时会自动进入降级模式，优先返回可用结果而不是直接报错。
@@ -328,6 +334,32 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 |------|------|------|
 | `GET` | `/healthz` | 健康检查 |
 | `GET` | `/api/healthz` | API 健康检查 |
+| `POST` | `/api/auth/register` | 用户注册（自动登录） |
+| `POST` | `/api/auth/login` | 用户 / 管理员登录 |
+| `GET` | `/api/auth/me` | 校验当前会话 |
+| `GET` | `/api/me` | 当前用户信息 |
+| `GET` / `PATCH` | `/api/me/profile` | 查看 / 修改个人资料 |
+| `POST` | `/api/me/avatar` | 上传头像 |
+| `GET` | `/api/me/videos` | 我发布的视频列表 |
+| `GET` | `/api/me/videos/:id/status` | 我发布的视频处理状态 |
+| `GET` | `/api/me/visits` | 我的主页访问统计 |
+| `GET` | `/api/users/search` | 用户搜索（评论 @ 提及，好友优先） |
+| `GET` | `/api/users/:id/profile` | 用户主页信息 |
+| `GET` | `/api/users/:id/videos` | 用户作品列表 |
+| `GET` | `/api/users/:id/liked-videos` | 用户喜欢列表 |
+| `GET` | `/api/users/:id/relation` | 与用户的关注关系 |
+| `POST` | `/api/users/:id/follow` | 关注 / 取关 |
+| `GET` | `/api/users/:id/followers` | 粉丝列表 |
+| `GET` | `/api/users/:id/following` | 关注列表 |
+| `POST` | `/api/users/:id/visit` | 记录主页访问 |
+| `GET` | `/api/messages/conversations` | 私信会话列表 |
+| `GET` | `/api/messages/:userId` | 与某用户的私信消息 |
+| `POST` | `/api/messages/:userId/read` | 标记会话已读 |
+| `GET` | `/api/messages/unread-count` | 私信未读数 |
+| `GET` | `/api/notifications` | 通知列表 |
+| `POST` | `/api/notifications/:id/read` | 单条通知已读 |
+| `POST` | `/api/notifications/read-all` | 全部通知已读 |
+| `GET` | `/api/notifications/unread-count` | 通知未读数 |
 | `GET` | `/api/system/metrics` | 查询系统运行指标 |
 | `GET` | `/api/knowledge-videos/tree` | 查询知识点树及关联视频状态 |
 | `POST` | `/api/admin/knowledge-videos/batches` | 上传 ZIP 与 XLSX，创建知识点视频导入批次 |
@@ -348,6 +380,7 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 | `DELETE` | `/api/videos/:id` | 删除视频 |
 | `POST` | `/api/videos/:id/cover` | 上传封面 |
 | `GET` | `/api/videos/:id/play` | 获取播放地址 |
+| `GET` | `/api/videos/:id/segments` | 获取视频分段标记（时间区间 + 内容摘要，供播放进度条展示） |
 | `GET` | `/api/videos/:id/similar` | 获取相似视频 |
 | `GET` | `/api/videos/:id/view-count` | 获取观看次数 |
 | `POST` | `/api/videos/:id/reactions` | 提交视频反馈 |
@@ -472,6 +505,12 @@ CONFIG_FILE=configs/video.yml go run ./cmd/recboletrainer
 4. `vector.finalize`：标记向量化链路完成。
 
 `full` 和 `sample` 模式仍走原有视频级单体处理路径。`coarse` 和 `refine` 阶段内部继续使用既有 ants pool 并发，避免把 clip、ASR、LLM、embedding 拆成过多 Redis 队列。
+
+### 内容逻辑分段与进度条标记
+
+`hierarchical` 的 refine 阶段由 LLM 基于 coarse ASR 文本生成**内容逻辑分段**（而非固定时长切分）：分段时长不再受旧的固定上限约束，视频讲解某个完整主题（如一个 7 分钟的知识点）会作为一个整体分段保留，不会被生硬切开。上传链路同时已解除视频时长限制。
+
+分段结果落库 `edu_video_segment`（含 `start_time`、`end_time`、`content_summary`、embedding），由 `GET /api/videos/:id/segments` 提供给前端：播放器在进度条上按时间区间标记每个分段，展示内容摘要，点击可跳转对应时间点；点赞 / 推荐等下游消费同一份分段数据。
 
 ## 示例请求
 

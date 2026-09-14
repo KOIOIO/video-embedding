@@ -20,6 +20,7 @@
 - [HTTP 服务说明](../video-service/README.md)
 - [服务器部署手册](../deployment/DEPLOYMENT.md)
 - [RecBole 训练说明](../recbole-training/README.md)
+- [抖音风格客户端](../short-video-web/README.md)
 - [前端联调控制台](../hls-web/README.md)
 - [下游服务就绪检查](../video-service/docs/downstream-service-readiness-review.md)
 - [RecBole 推荐流水线](../video-service/docs/recbole-recommendation-pipeline.md)
